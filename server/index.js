@@ -10,8 +10,7 @@ import { verifyToken } from "./middleware/middleware.js"
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { initializeSockets } from './sockets/socketHandler.js';
-// Dynamically import prisma after env vars are loaded
-const prisma = await import("./config/db.js").then(m => m.default)
+import prisma from "./config/db.js"
 
 const app = express()
 const httpServer = createServer(app)
@@ -91,7 +90,7 @@ app.post("/signin",async(req,res)=>{
       user:{id:user.id,email:user.email,username:user.username}
     })
   } catch(err) {
-    res.status(505).json({error:err.message})
+    res.status(500).json({error:err.message})
   }
 })
 
@@ -110,7 +109,7 @@ app.post("/api/rooms",verifyToken,async(req,res)=>{
     }
     const roomCode = nanoid(8)
     const sessionStartTime = startsAt ? new Date(startsAt) : new Date()
-    const expiresAt = new Date(sessionStartTime.getTime() + durationMinutes * 60000)
+    const expiresAt = new Date(sessionStartTime.getTime() + parsedDuration * 60000)
 
     try{
       const newRoom = await prisma.room.create({
@@ -131,6 +130,30 @@ app.post("/api/rooms",verifyToken,async(req,res)=>{
     }catch(err){
       console.error("❌ Prisma Room Creation Error:", err); // <-- Check this in your terminal
       res.status(500).json({ error: err.message, stack: err });
+    }
+})
+
+// End an active session (closes it in database immediately)
+app.patch("/api/rooms/:roomId/end",verifyToken,async(req,res)=>{
+    const {roomId} = req.params
+    try{
+      const room = await prisma.room.findFirst({
+        where:{roomCode:roomId,hostId:req.user.id}
+      })
+      if(!room){
+        return res.status(404).json({message:"Room not found or unauthorized"})
+      }
+      const updated = await prisma.room.update({
+        where:{id:room.id},
+        data:{
+          isAccepting:false,
+          expiresAt:new Date()
+        }
+      })
+      io.to(roomId).emit("session_ended",{roomCode:roomId})
+      res.json({message:"Session ended successfully",room:updated})
+    } catch(err){
+      res.status(500).json({error: err.message})
     }
 })
 
@@ -158,7 +181,7 @@ app.get("/api/rooms/:roomId/messages",verifyToken,async(req,res)=>{
     const {roomId} = req.params
     try{
       const room = await prisma.room.findFirst({
-        where:{roomCode:roomId},
+        where:{roomCode:roomId,hostId:req.user.id},
         include:{
           messages:{
             orderBy:{createdAt : 'desc'}
@@ -303,99 +326,106 @@ app.post("/api/rooms/public/:roomId/messages",async(req,res)=>{
 })
 
 // Quick browser tester for host
-app.get('/test', (req, res) => {
-  res.send(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Host Live Feed Test</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 24px; max-width: 600px; margin: auto; }
-    #feed { border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-height: 180px; margin-top: 16px; background: #fafafa; }
-    .msg-card { background: white; border: 1px solid #4CAF50; padding: 10px; margin-bottom: 8px; border-radius: 6px; }
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-    .connected { background: #e8f5e9; color: #2e7d32; }
-    .disconnected { background: #ffebee; color: #c62828; }
-  </style>
-</head>
-<body>
-  <h2>Host Live Room Listener</h2>
-  <p>Status: <span id="status" class="badge disconnected">Disconnected</span></p>
+// app.get('/test', (req, res) => {
+//   res.send(`
+// <!DOCTYPE html>
+// <html lang="en">
+// <head>
+//   <meta charset="UTF-8">
+//   <title>Host Live Feed Test</title>
+//   <script src="/socket.io/socket.io.js"></script>
+//   <style>
+//     body { font-family: sans-serif; padding: 24px; max-width: 600px; margin: auto; }
+//     #feed { border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-height: 180px; margin-top: 16px; background: #fafafa; }
+//     .msg-card { background: white; border: 1px solid #4CAF50; padding: 10px; margin-bottom: 8px; border-radius: 6px; }
+//     .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+//     .connected { background: #e8f5e9; color: #2e7d32; }
+//     .disconnected { background: #ffebee; color: #c62828; }
+//   </style>
+// </head>
+// <body>
+//   <h2>Host Live Room Listener</h2>
+//   <p>Status: <span id="status" class="badge disconnected">Disconnected</span></p>
 
-  <label>Host JWT Token:</label><br>
-  <input type="text" id="tokenInput" placeholder="Paste your JWT token here" style="width: 100%; padding: 6px; margin: 4px 0 12px;" /><br>
+//   <label>Host JWT Token:</label><br>
+//   <input type="text" id="tokenInput" placeholder="Paste your JWT token here" style="width: 100%; padding: 6px; margin: 4px 0 12px;" /><br>
 
-  <label>Enter Room Code:</label><br>
-  <input type="text" id="roomInput" placeholder="e.g. REbZiBcW" style="padding: 6px;" />
-  <button onclick="connectAndJoin()" style="padding: 6px 12px; cursor: pointer;">Connect & Join</button>
+//   <label>Enter Room Code:</label><br>
+//   <input type="text" id="roomInput" placeholder="e.g. REbZiBcW" style="padding: 6px;" />
+//   <button onclick="connectAndJoin()" style="padding: 6px 12px; cursor: pointer;">Connect & Join</button>
 
-  <h3>Live Feed:</h3>
-  <div id="feed">
-    <p style="color: #999;" id="placeholder">No messages received yet...</p>
-  </div>
+//   <h3>Live Feed:</h3>
+//   <div id="feed">
+//     <p style="color: #999;" id="placeholder">No messages received yet...</p>
+//   </div>
 
-  <script>
-    let socket = null;
+//   <script>
+//     let socket = null;
 
-    function connectAndJoin() {
-      const token = document.getElementById('tokenInput').value.trim();
-      const roomCode = document.getElementById('roomInput').value.trim();
+//     function connectAndJoin() {
+//       const token = document.getElementById('tokenInput').value.trim();
+//       const roomCode = document.getElementById('roomInput').value.trim();
 
-      if (!token || !roomCode) return alert('Both Token and Room Code are required!');
+//       if (!token || !roomCode) return alert('Both Token and Room Code are required!');
 
-      socket = io({ auth: { token } });
+//       socket = io({ auth: { token } });
 
-      socket.on('connect', () => {
-        document.getElementById('status').className = 'badge connected';
-        document.getElementById('status').innerText = 'Authenticated & Connected';
-        socket.emit('join_room', roomCode);
-      });
+//       socket.on('connect', () => {
+//         document.getElementById('status').className = 'badge connected';
+//         document.getElementById('status').innerText = 'Authenticated & Connected';
+//         socket.emit('join_room', roomCode);
+//       });
 
-      socket.on('connect_error', (err) => {
-        document.getElementById('status').className = 'badge disconnected';
-        document.getElementById('status').innerText = 'Auth Error: ' + err.message;
-      });
+//       socket.on('connect_error', (err) => {
+//         document.getElementById('status').className = 'badge disconnected';
+//         document.getElementById('status').innerText = 'Auth Error: ' + err.message;
+//       });
 
-      socket.on('joined_success', (res) => {
-        alert(res.message);
-      });
+//       socket.on('joined_success', (res) => {
+//         alert(res.message);
+//       });
 
-      socket.on('error_msg', (msg) => {
-        alert(msg);
-      });
+//       socket.on('error_msg', (msg) => {
+//         alert(msg);
+//       });
 
-      socket.on('new_message', (message) => {
-        const placeholder = document.getElementById('placeholder');
-        if (placeholder) placeholder.remove();
+//       socket.on('new_message', (message) => {
+//         const placeholder = document.getElementById('placeholder');
+//         if (placeholder) placeholder.remove();
 
-        const feed = document.getElementById('feed');
-        const card = document.createElement('div');
-        card.className = 'msg-card';
-        card.innerHTML = '<strong>Anonymous:</strong> ' + message.content + '<br><small style="color:#666;">Time: ' + new Date(message.createdAt).toLocaleTimeString() + '</small>';
-        feed.prepend(card);
-      });
-    }
-  </script>
-</body>
-</html>
-  `);
-});
+//         const feed = document.getElementById('feed');
+//         const card = document.createElement('div');
+//         card.className = 'msg-card';
+//         card.innerHTML = '<strong>Anonymous:</strong> ' + message.content + '<br><small style="color:#666;">Time: ' + new Date(message.createdAt).toLocaleTimeString() + '</small>';
+//         feed.prepend(card);
+//       });
+//     }
+//   </script>
+// </body>
+// </html>
+//   `);
+// });
 
-//upvote messages
+//upvote / toggle vote messages
 app.patch("/api/rooms/:roomId/messages/:messageId/upvote",async(req,res)=>{
   const {roomId,messageId} = req.params
+  const {action} = req.body || {}
+  const isDecrement = action === "downvote" || action === "unvote"
   try{
+      const current = await prisma.message.findUnique({ where: { id: messageId } })
+      if (!current) return res.status(404).json({ message: "Message not found" })
+
+      const newUpvotes = isDecrement ? Math.max(0, current.upvotes - 1) : current.upvotes + 1
+
       const updatedMessage = await prisma.message.update({
         where:{id:messageId},
-        data:{upvotes:{increment:1}}
+        data:{upvotes: newUpvotes}
       })
       io.to(roomId).emit("message_upvoted",{
         messageId:updatedMessage.id,
         upvotes:updatedMessage.upvotes
       })
-      res.json({message:"Message upvoted successfully",upvotes:updatedMessage.upvotes})
+      res.json({message:"Vote updated successfully",upvotes:updatedMessage.upvotes})
     }catch(err){
       res.status(500).json({error: err.message})
     }
