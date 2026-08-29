@@ -9,7 +9,7 @@ import {nanoid} from "nanoid"
 import { verifyToken } from "./middleware/middleware.js"
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-
+import { initializeSockets } from './sockets/socketHandler.js';
 // Dynamically import prisma after env vars are loaded
 const prisma = await import("./config/db.js").then(m => m.default)
 
@@ -26,20 +26,8 @@ const io = new Server(httpServer,{
   }
 })
 
-io.on("connection",(socket)=>{
-    console.log(`New socket connection: ${socket.id}`);
-    
-    socket.on("join_room",(roomCode)=>{
-        console.log(`Socket ${socket.id} joining room: ${roomCode}`);
-        socket.join(roomCode)
-        console.log(`Socket ${socket.id} successfully joined room: ${roomCode}`);
-        console.log(`Total sockets in room ${roomCode}:`, socket.adapter.rooms.get(roomCode)?.size || 0);
-    });
-    
-    socket.on('disconnect', () => {
-        console.log(`Socket ${socket.id} disconnected`);
-    })
-})
+initializeSockets(io) // Initialize socket handling with authentication
+
 //Authentication Routes
 
 // Signup Route
@@ -250,8 +238,8 @@ app.get("/api/rooms/public/:roomId",async(req,res)=>{
         return res.status(404).json({message:"Room not found"})
       }
       const now  = new Date()
-      const isNotStarted = now < Date(room.startsAt)
-      const isExpired = now > Date(room.expiresAt)
+      const isNotStarted = now < new Date(room.startsAt)
+      const isExpired = now > new Date(room.expiresAt)
       const canSend = !isNotStarted && !isExpired && room.isAccepting
       res.json({
         title:room.title,
@@ -283,10 +271,10 @@ app.post("/api/rooms/public/:roomId/messages",async(req,res)=>{
         return res.status(404).json({message:"Room not found"})
       }
       const now = new Date()
-      if(now < Date(room.startsAt)){
+      if(now < new Date(room.startsAt)){
         return res.status(400).json({message:"Session has not started yet"})
       }
-      if(now > Date(room.expiresAt)){
+      if(now > new Date(room.expiresAt)){
         return res.status(400).json({message:"Session has expired"})
       }
       if(!room.isAccepting){
@@ -313,85 +301,6 @@ app.post("/api/rooms/public/:roomId/messages",async(req,res)=>{
       res.status(500).json({error: err.message})
     }
 })
-
-// Serve the test HTML directly from Express
-// app.get('/test', (req, res) => {
-//   res.send(`
-// <!DOCTYPE html>
-// <html lang="en">
-// <head>
-//   <meta charset="UTF-8">
-//   <title>Host Live Feed Test</title>
-//   <script src="/socket.io/socket.io.js"></script>
-//   <style>
-//     body { font-family: sans-serif; padding: 24px; max-width: 600px; margin: auto; }
-//     #feed { border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-height: 200px; margin-top: 16px; background: #fafafa; }
-//     .msg-card { background: white; border: 1px solid #4CAF50; padding: 12px; margin-bottom: 8px; border-radius: 6px; }
-//     .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-//     .connected { background: #e8f5e9; color: #2e7d32; }
-//     .disconnected { background: #ffebee; color: #c62828; }
-//   </style>
-// </head>
-// <body>
-//   <h2>Host Live Room Listener</h2>
-//   <p>Status: <span id="status" class="badge disconnected">Disconnected</span></p>
-
-//   <label>Enter Room Code: </label>
-//   <input type="text" id="roomInput" placeholder="e.g. JDAud7xE" style="padding: 6px;" />
-//   <button onclick="joinRoom()" style="padding: 6px 12px; cursor: pointer;">Join Live Session</button>
-
-//   <h3>Live Feed:</h3>
-//   <div id="feed">
-//     <p style="color: #999;" id="placeholder">No messages received yet...</p>
-//   </div>
-
-//   <script>
-//     const socket = io();
-//     let currentRoom = null;
-
-//     socket.on('connect', () => {
-//       console.log('✅ Connected to socket.io with ID:', socket.id);
-//       const statusEl = document.getElementById('status');
-//       statusEl.className = 'badge connected';
-//       statusEl.innerText = 'Connected (Socket ID: ' + socket.id + ')';
-//     });
-
-//     socket.on('disconnect', () => {
-//       console.log('❌ Disconnected from socket.io');
-//       const statusEl = document.getElementById('status');
-//       statusEl.className = 'badge disconnected';
-//       statusEl.innerText = 'Disconnected';
-//     });
-
-//     socket.on('connect_error', (error) => {
-//       console.error('Connection error:', error);
-//     });
-
-//     function joinRoom() {
-//       const code = document.getElementById('roomInput').value.trim();
-//       if (!code) return alert('Enter a room code');
-//       currentRoom = code;
-//       socket.emit('join_room', code);
-//       console.log('📍 Attempting to join room:', code);
-//       document.getElementById('roomInput').disabled = true;
-//     }
-
-//     socket.on('new_message', (message) => {
-//       console.log('📨 New message received:', message);
-//       const placeholder = document.getElementById('placeholder');
-//       if (placeholder) placeholder.remove();
-
-//       const feed = document.getElementById('feed');
-//       const card = document.createElement('div');
-//       card.className = 'msg-card';
-//       card.innerHTML = '<strong>Message:</strong> ' + message.content + '<br><small style="color:#666;">Time: ' + new Date(message.createdAt).toLocaleTimeString() + '</small>';
-//       feed.prepend(card);
-//     });
-//   </script>
-// </body>
-// </html>
-//   `);
-// });
 
 httpServer.listen(process.env.PORT || 3000, () => {
     console.log(`Server is running on port ${process.env.PORT || 3000}`)
