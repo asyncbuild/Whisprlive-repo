@@ -383,6 +383,23 @@ app.get('/test', (req, res) => {
   `);
 });
 
+//upvote messages
+app.patch("/api/rooms/:roomId/messages/:messageId/upvote",async(req,res)=>{
+  const {roomId,messageId} = req.params
+  try{
+      const updatedMessage = await prisma.message.update({
+        where:{id:messageId},
+        data:{upvotes:{increment:1}}
+      })
+      io.to(roomId).emit("message_upvoted",{
+        messageId:updatedMessage.id,
+        upvotes:updatedMessage.upvotes
+      })
+      res.json({message:"Message upvoted successfully",upvotes:updatedMessage.upvotes})
+    }catch(err){
+      res.status(500).json({error: err.message})
+    }
+})
 
 httpServer.listen(process.env.PORT || 3000, () => {
     console.log(`Server is running on port ${process.env.PORT || 3000}`)

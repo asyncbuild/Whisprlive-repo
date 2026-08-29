@@ -36,6 +36,8 @@ model Message {
   roomId    String
   content   String   @db.VarChar(300)
   status    String   @default("accepted") // "accepted", "rejected", "pinned"
+  upvotes   Int      @default(0)
+  isAnswered Boolean  @default(false)
   createdAt DateTime @default(now())
 
   // Relations

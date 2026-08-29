@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Message" ADD COLUMN     "isAnswered" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "upvotes" INTEGER NOT NULL DEFAULT 0;
