@@ -26,7 +26,7 @@ const io = new Server(httpServer,{
   }
 })
 
-initializeSockets(io) // Initialize socket handling with authentication
+initializeSockets(io, prisma) // Pass prisma to socket initialization
 
 //Authentication Routes
 
@@ -301,6 +301,88 @@ app.post("/api/rooms/public/:roomId/messages",async(req,res)=>{
       res.status(500).json({error: err.message})
     }
 })
+
+// Quick browser tester for host
+app.get('/test', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Host Live Feed Test</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 24px; max-width: 600px; margin: auto; }
+    #feed { border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-height: 180px; margin-top: 16px; background: #fafafa; }
+    .msg-card { background: white; border: 1px solid #4CAF50; padding: 10px; margin-bottom: 8px; border-radius: 6px; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .connected { background: #e8f5e9; color: #2e7d32; }
+    .disconnected { background: #ffebee; color: #c62828; }
+  </style>
+</head>
+<body>
+  <h2>Host Live Room Listener</h2>
+  <p>Status: <span id="status" class="badge disconnected">Disconnected</span></p>
+
+  <label>Host JWT Token:</label><br>
+  <input type="text" id="tokenInput" placeholder="Paste your JWT token here" style="width: 100%; padding: 6px; margin: 4px 0 12px;" /><br>
+
+  <label>Enter Room Code:</label><br>
+  <input type="text" id="roomInput" placeholder="e.g. REbZiBcW" style="padding: 6px;" />
+  <button onclick="connectAndJoin()" style="padding: 6px 12px; cursor: pointer;">Connect & Join</button>
+
+  <h3>Live Feed:</h3>
+  <div id="feed">
+    <p style="color: #999;" id="placeholder">No messages received yet...</p>
+  </div>
+
+  <script>
+    let socket = null;
+
+    function connectAndJoin() {
+      const token = document.getElementById('tokenInput').value.trim();
+      const roomCode = document.getElementById('roomInput').value.trim();
+
+      if (!token || !roomCode) return alert('Both Token and Room Code are required!');
+
+      socket = io({ auth: { token } });
+
+      socket.on('connect', () => {
+        document.getElementById('status').className = 'badge connected';
+        document.getElementById('status').innerText = 'Authenticated & Connected';
+        socket.emit('join_room', roomCode);
+      });
+
+      socket.on('connect_error', (err) => {
+        document.getElementById('status').className = 'badge disconnected';
+        document.getElementById('status').innerText = 'Auth Error: ' + err.message;
+      });
+
+      socket.on('joined_success', (res) => {
+        alert(res.message);
+      });
+
+      socket.on('error_msg', (msg) => {
+        alert(msg);
+      });
+
+      socket.on('new_message', (message) => {
+        const placeholder = document.getElementById('placeholder');
+        if (placeholder) placeholder.remove();
+
+        const feed = document.getElementById('feed');
+        const card = document.createElement('div');
+        card.className = 'msg-card';
+        card.innerHTML = '<strong>Anonymous:</strong> ' + message.content + '<br><small style="color:#666;">Time: ' + new Date(message.createdAt).toLocaleTimeString() + '</small>';
+        feed.prepend(card);
+      });
+    }
+  </script>
+</body>
+</html>
+  `);
+});
+
 
 httpServer.listen(process.env.PORT || 3000, () => {
     console.log(`Server is running on port ${process.env.PORT || 3000}`)

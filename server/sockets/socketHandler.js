@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
-import prisma from "../config/db.js";
 
-export function initializeSockets(io) {
+export function initializeSockets(io, prisma) {
     io.use((socket, next) => {
         const token = socket.handshake.auth.token;
         if (!token) {
