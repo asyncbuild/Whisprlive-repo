@@ -191,7 +191,7 @@ app.post("/api/payments/create-checkout-session",verifyToken,async(req,res)=>{
       })
       res.json({url:session.url})
     } catch (error) {
-      console.error("Stripe session creation error:", err);
+      console.error("Stripe session creation error:", error);
       res.status(500).json({error:error.message})
     }
 });
@@ -582,6 +582,31 @@ app.patch("/api/rooms/:roomId/messages/:messageId/upvote",async(req,res)=>{
     }catch(err){
       res.status(500).json({error: err.message})
     }
+})
+
+// Toggle message answered status
+app.patch("/api/rooms/:roomId/messages/:messageId/answered",verifyToken,async(req,res)=>{
+  const {roomId,messageId} = req.params
+  const {isAnswered} = req.body || {}
+  try{
+    const room = await prisma.room.findFirst({
+      where:{roomCode:roomId,hostId:req.user.id}
+    })
+    if(!room){
+      return res.status(404).json({message:"Room not found or unauthorized"})
+    }
+    const updatedMessage = await prisma.message.update({
+      where:{id:messageId},
+      data:{isAnswered: Boolean(isAnswered)}
+    })
+    io.to(roomId).emit("message_answered",{
+      messageId:updatedMessage.id,
+      isAnswered:updatedMessage.isAnswered
+    })
+    res.json({message:"Answered status updated successfully",messageItem:updatedMessage})
+  }catch(err){
+    res.status(500).json({error: err.message})
+  }
 })
 
 httpServer.listen(process.env.PORT || 3000, () => {

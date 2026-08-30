@@ -12,4 +12,19 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response &&
+      (error.response.status === 401 ||
+        (error.response.status === 403 && error.response.data?.error?.includes('Token')))
+    ) {
+      localStorage.removeItem('pulse_token');
+      localStorage.removeItem('pulse_user');
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default API;

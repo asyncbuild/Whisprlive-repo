@@ -8,9 +8,12 @@ import Brand from "../components/Brand";
 import LiveMockCard from "../components/LiveMockCard";
 import { useAuth } from "../context/AuthContext";
 
+import { useToast } from "../context/ToastContext";
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
+  const { toast } = useToast();
   const isLoggedIn = Boolean(token);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -28,8 +31,9 @@ export default function LandingPage() {
       return;
     }
 
-    if (!token) {
-      alert('Please sign in or create an account first.');
+    const currentToken = localStorage.getItem('pulse_token');
+    if (!currentToken) {
+      toast.info('Please sign in or create an account first.');
       navigate("/signin");
       return;
     }
@@ -41,7 +45,15 @@ export default function LandingPage() {
         window.location.href = res.data.url;
       }
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to start payment session.');
+      const errMsg = err.response?.data?.error || 'Failed to start payment session.';
+      if (err.response?.status === 401 || err.response?.status === 403 || errMsg.includes('Token')) {
+        toast.error('Your session has expired or is invalid. Please sign in again.');
+        localStorage.removeItem('pulse_token');
+        localStorage.removeItem('pulse_user');
+        navigate("/signin");
+      } else {
+        toast.error(errMsg);
+      }
       setLoadingPlan(null);
     }
   };

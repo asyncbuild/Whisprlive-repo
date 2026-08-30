@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 export function verifyToken(req,res,next){
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(" ")[1];
-    if(!token){
+    if(!token || token === "undefined" || token === "null" || token === "[object Object]"){
         return res.status(401).json({ error: 'Access denied. No token provided.' });
     }
     try {
@@ -11,6 +11,6 @@ export function verifyToken(req,res,next){
         req.user = decoded;
         next();
     } catch (err) {
-        return res.status(403).json({ error: 'Token is not valid!' });
+        return res.status(401).json({ error: 'Token is not valid or expired!' });
     }
 }

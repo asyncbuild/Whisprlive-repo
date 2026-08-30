@@ -8,10 +8,18 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem('pulse_user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [token, setToken] = useState(() => localStorage.getItem('pulse_token') || null);
+  const [token, setToken] = useState(() => {
+    const saved = localStorage.getItem('pulse_token');
+    if (!saved || saved === '[object Object]' || saved === 'undefined' || saved === 'null') {
+      localStorage.removeItem('pulse_token');
+      return null;
+    }
+    return saved;
+  });
 
   const refreshUser = async () => {
-    if (!token) return;
+    const currentToken = localStorage.getItem('pulse_token');
+    if (!currentToken || currentToken === '[object Object]') return;
     try {
       const res = await API.get('/api/user/me');
       if (res.data?.user) {
@@ -24,10 +32,15 @@ export function AuthProvider({ children }) {
   };
 
   const login = (userData, authToken) => {
-    localStorage.setItem('pulse_token', authToken);
-    localStorage.setItem('pulse_user', JSON.stringify(userData));
-    setToken(authToken);
-    setUser(userData);
+    const validToken = typeof authToken === 'string' ? authToken : null;
+    if (validToken) {
+      localStorage.setItem('pulse_token', validToken);
+      setToken(validToken);
+    }
+    if (userData) {
+      localStorage.setItem('pulse_user', JSON.stringify(userData));
+      setUser(userData);
+    }
   };
 
   const logout = () => {

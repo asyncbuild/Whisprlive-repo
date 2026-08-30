@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import DashboardPage from './pages/DashboardPage';
@@ -15,30 +16,32 @@ function ProtectedRoute({ children }) {
 export default function App() {
   return (
     <AuthProvider>
-      <div className="pulse-root">
-        <Router>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/signup" element={<AuthPage mode="signup" />} />
-            <Route path="/signin" element={<AuthPage mode="signin" />} />
-            
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              }
-            />
+      <ToastProvider>
+        <div className="pulse-root">
+          <Router>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/signup" element={<AuthPage mode="signup" />} />
+              <Route path="/signin" element={<AuthPage mode="signin" />} />
+              
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Dynamic route for the public audience link */}
-            <Route path="/ask/:roomCode" element={<PublicAskPage />} />
+              {/* Dynamic route for the public audience link */}
+              <Route path="/ask/:roomCode" element={<PublicAskPage />} />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Router>
-      </div>
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Router>
+        </div>
+      </ToastProvider>
     </AuthProvider>
   );
 }

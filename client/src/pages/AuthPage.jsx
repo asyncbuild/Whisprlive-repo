@@ -5,10 +5,14 @@ import Brand from '../components/Brand';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+import { useToast } from '../context/ToastContext';
+
 export default function AuthPage({ mode }) {
   const navigate = useNavigate();
   const isSignup = mode === 'signup';
   const { user, token, login } = useAuth();
+  const { toast } = useToast();
+
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -43,16 +47,14 @@ export default function AuthPage({ mode }) {
           email: formData.email.trim(),
           password: formData.password
         });
-        alert('Account created successfully! Please sign in.');
+        toast.success('Account created successfully! Please sign in.');
         navigate('/signin');
       } else {
         const res = await API.post('/signin', {
           email: formData.email.trim(),
           password: formData.password
         });
-        localStorage.setItem('pulse_token', res.data.token);
-        localStorage.setItem('pulse_user', JSON.stringify(res.data.user));
-        if (login) login(res.data.token, res.data.user);
+        if (login) login(res.data.user, res.data.token);
         navigate('/dashboard');
       }
     } catch (err) {

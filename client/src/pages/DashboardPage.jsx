@@ -10,6 +10,7 @@ import API from "../api/axios";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 
 function formatClock(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -37,7 +38,8 @@ function formatFullDateTime(ts) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const { toast } = useToast();
   const [tab, setTab] = useState("new"); // "new" | "active" | "past"
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(15);
@@ -63,8 +65,36 @@ export default function DashboardPage() {
 
   // Modal states
   const [showQrModal, setShowQrModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null); // { roomCode, title }
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState(null);
+
+  // Upvoted messages tracking (prevents duplicate votes)
+  const handleUpgradeCheckout = async (planType) => {
+    const currentToken = localStorage.getItem('pulse_token');
+    if (!currentToken) {
+      alert('Your session has expired. Please sign in again.');
+      navigate("/signin");
+      return;
+    }
+    setUpgradingPlan(planType);
+    try {
+      const res = await API.post('/api/payments/create-checkout-session', { planType });
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (err) {
+      const errMsg = err.response?.data?.error || 'Failed to start payment session.';
+      if (err.response?.status === 401 || err.response?.status === 403 || errMsg.includes('Token')) {
+        toast.error('Your session has expired or is invalid. Please sign in again.');
+        localStorage.removeItem('pulse_token');
+        localStorage.removeItem('pulse_user');
+        navigate("/signin");
+      } else {
+        toast.error(errMsg);
+      }
+      setUpgradingPlan(null);
+    }
+  };
 
   // Upvoted messages tracking (prevents duplicate votes)
   const [votedIds, setVotedIds] = useState(() => {
@@ -84,14 +114,14 @@ export default function DashboardPage() {
     }
   })();
   const username = currentUser?.username || currentUser?.email || "Host";
-  // Handle Stripe Post-Payment Success
+  // Handle Stripe Post-Payment Success and initial user sync
   useEffect(() => {
+    if (refreshUser) refreshUser();
     const paymentStatus = searchParams.get("payment");
     const newPlan = searchParams.get("plan");
 
     if (paymentStatus === "success") {
-      if (refreshUser) refreshUser();
-      alert(`🎉 Payment successful! Your account has been upgraded to the ${newPlan || "HOST"} plan.`);
+      toast.success(`🎉 Payment successful! Your account has been upgraded to the ${newPlan || "HOST"} plan.`);
       // Clean query parameters from URL
       setSearchParams({});
     }
@@ -189,7 +219,7 @@ export default function DashboardPage() {
 
       setTab("active"); // Automatically switch to the Active session tab
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.message || "Failed to create room");
+      toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to create room");
     } finally {
       setCreatingRoom(false);
     }
@@ -223,6 +253,10 @@ export default function DashboardPage() {
 
     socket.on("message_upvoted", ({ messageId, upvotes }) => {
       setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, votes: upvotes } : m)));
+    });
+
+    socket.on("message_answered", ({ messageId, isAnswered }) => {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, answered: isAnswered } : m)));
     });
 
     return () => socket.disconnect();
@@ -275,26 +309,6 @@ export default function DashboardPage() {
     }
   }, [tab]);
 
-  // Trigger delete modal
-  const openDeleteModal = (roomCode, sessionTitle) => {
-    setDeleteTarget({ roomCode, title: sessionTitle || "Untitled Session" });
-  };
-
-  // Confirm delete past session
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    setIsDeleting(true);
-    try {
-      await API.delete(`/api/rooms/${deleteTarget.roomCode}`);
-      setPastSessions((prev) => prev.filter((p) => (p.roomCode || p.id) !== deleteTarget.roomCode));
-      setDeleteTarget(null);
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete session");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   // Export session messages
   const exportSession = async (roomCode) => {
     setExportingCode(roomCode);
@@ -308,7 +322,17 @@ export default function DashboardPage() {
       link.click();
       link.remove();
     } catch (err) {
-      alert("Failed to export session");
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          toast.error(parsed.error || parsed.message || "Failed to export session");
+        } catch (e) {
+          toast.error("Failed to export session");
+        }
+      } else {
+        toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to export session");
+      }
     } finally {
       setExportingCode(null);
     }
@@ -351,8 +375,21 @@ export default function DashboardPage() {
     setTimeout(() => setCopied(false), 1600);
   };
 
-  const toggleAnswered = (id) => {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, answered: !m.answered } : m)));
+  const toggleAnswered = async (id) => {
+    const targetMsg = messages.find((m) => m.id === id);
+    const nextStatus = targetMsg ? !targetMsg.answered : true;
+
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, answered: nextStatus } : m)));
+
+    if (session?.roomCode) {
+      try {
+        await API.patch(`/api/rooms/${session.roomCode}/messages/${id}/answered`, {
+          isAnswered: nextStatus
+        });
+      } catch (err) {
+        console.error("Failed to sync answered status:", err);
+      }
+    }
   };
 
   const upvote = async (id) => {
@@ -443,7 +480,7 @@ export default function DashboardPage() {
                 <button
                   className="btn btn-primary btn-sm"
                   style={{ padding: "5px 12px", fontSize: 12 }}
-                  onClick={() => navigate("/#pricing")}
+                  onClick={() => setShowUpgradeModal(true)}
                 >
                   <Sparkles size={12} /> Upgrade
                 </button>
@@ -500,15 +537,19 @@ export default function DashboardPage() {
                 <div className="duration-field">
                   <label>Duration</label>
                   <div className="duration-pills">
-                    {[5, 15, 30].map((d) => (
-                      <button
-                        key={d}
-                        className={`duration-pill ${duration === d ? "active" : ""}`}
-                        onClick={() => setDuration(d)}
-                      >
-                        {d} min
-                      </button>
-                    ))}
+                    {(() => {
+                      const plan = currentUser?.plan || "SOLO";
+                      const availableDurations = plan === "STUDIO" ? [5, 15, 30, 60, 120] : plan === "HOST" ? [5, 15, 30, 60] : [5, 15];
+                      return availableDurations.map((d) => (
+                        <button
+                          key={d}
+                          className={`duration-pill ${duration === d ? "active" : ""}`}
+                          onClick={() => setDuration(d)}
+                        >
+                          {d} min
+                        </button>
+                      ));
+                    })()}
                   </div>
                 </div>
                 <button
@@ -773,9 +814,6 @@ export default function DashboardPage() {
                       >
                         {isExporting ? <Loader2 size={13} className="spin" /> : <Download size={13} />} {isExporting ? "Exporting..." : "Export"}
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => openDeleteModal(code, titleText)}>
-                        <Trash2 size={13} /> Delete
-                      </button>
                     </div>
                   </div>
                 );
@@ -821,34 +859,61 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div className="modal-overlay" onClick={() => !isDeleting && setDeleteTarget(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="delete-modal-body">
-              <div className="delete-modal-icon">
-                <AlertTriangle size={24} />
-              </div>
-              <h3>Delete this session?</h3>
-              <p style={{ color: "var(--text-dim)", fontSize: 14, marginTop: 8, lineHeight: 1.6 }}>
-                Are you sure you want to delete <strong>"{deleteTarget.title}"</strong> (Code: <code>{deleteTarget.roomCode}</code>)?
-                All recorded questions and responses will be permanently removed.
+      {/* Upgrade Plan Modal */}
+      {showUpgradeModal && (
+        <div className="modal-overlay" onClick={() => setShowUpgradeModal(false)}>
+          <div className="modal-content" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3><Sparkles size={18} style={{ color: "var(--accent)" }} /> Upgrade Your Account</h3>
+              <button className="modal-close-btn" onClick={() => setShowUpgradeModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ padding: "20px 0 10px" }}>
+              <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 20 }}>
+                Unlock longer room timers, higher participant limits, and message exports.
               </p>
-              <div className="modal-actions" style={{ justifyContent: "center" }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setDeleteTarget(null)}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="btn btn-danger"
-                  onClick={confirmDelete}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? "Deleting..." : "Delete Session"}
-                </button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Host Plan</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0", color: "var(--accent)" }}>$18<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
+                    <ul style={{ fontSize: 13, color: "var(--text-dim)", paddingLeft: 16, margin: "12px 0", lineHeight: 1.6 }}>
+                      <li>Unlimited live sessions</li>
+                      <li>Up to 1,000 guests / room</li>
+                      <li>Custom timers up to 60 min</li>
+                      <li>Export responses</li>
+                    </ul>
+                  </div>
+                  <button
+                    className="btn btn-primary btn-block"
+                    style={{ marginTop: 12 }}
+                    disabled={upgradingPlan === "HOST"}
+                    onClick={() => handleUpgradeCheckout("HOST")}
+                  >
+                    {upgradingPlan === "HOST" ? "Redirecting..." : "Choose Host ($18)"}
+                  </button>
+                </div>
+
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Studio Plan</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0" }}>$49<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
+                    <ul style={{ fontSize: 13, color: "var(--text-dim)", paddingLeft: 16, margin: "12px 0", lineHeight: 1.6 }}>
+                      <li>Everything in Host</li>
+                      <li>5 seats & shared history</li>
+                      <li>Timers up to 120 min</li>
+                    </ul>
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-block"
+                    style={{ marginTop: 12 }}
+                    disabled={upgradingPlan === "STUDIO"}
+                    onClick={() => handleUpgradeCheckout("STUDIO")}
+                  >
+                    {upgradingPlan === "STUDIO" ? "Redirecting..." : "Choose Studio ($49)"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

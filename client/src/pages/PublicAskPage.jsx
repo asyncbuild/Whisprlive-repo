@@ -17,9 +17,12 @@ function formatTargetTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+import { useToast } from "../context/ToastContext";
+
 export default function PublicAskPage() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [roomInfo, setRoomInfo] = useState(null);
   const [text, setText] = useState("");
@@ -122,7 +125,7 @@ export default function PublicAskPage() {
         setUntilEnd(0);
         setRoomInfo((prev) => (prev ? { ...prev, status: "Expired", canSend: false, isAccepting: false } : prev));
       } else {
-        alert(msg);
+        toast.error(msg);
       }
     } finally {
       setIsSubmitting(false);
