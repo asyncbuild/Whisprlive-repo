@@ -3,21 +3,47 @@ import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X
 } from "lucide-react";
+import API from "../api/axios";
 import Brand from "../components/Brand";
 import LiveMockCard from "../components/LiveMockCard";
 import { useAuth } from "../context/AuthContext";
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const isLoggedIn = Boolean(token);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState(null);
   const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null) };
 
   const scrollTo = (key) => {
     setMenuOpen(false);
     refs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleCheckout = async (planType) => {
+    if (planType === 'SOLO') {
+      navigate(isLoggedIn ? "/dashboard" : "/signup");
+      return;
+    }
+
+    if (!token) {
+      alert('Please sign in or create an account first.');
+      navigate("/signin");
+      return;
+    }
+
+    setLoadingPlan(planType);
+    try {
+      const res = await API.post('/api/payments/create-checkout-session', { planType });
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to start payment session.');
+      setLoadingPlan(null);
+    }
   };
 
   return (
@@ -144,13 +170,19 @@ export default function LandingPage() {
                 </ul>
                 <button
                   className="btn btn-ghost btn-block"
-                  onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                  disabled={user?.plan === 'SOLO'}
+                  onClick={() => handleCheckout('SOLO')}
                 >
-                  {isLoggedIn ? "Go to Dashboard" : "Choose Solo"}
+                  {user?.plan === 'SOLO' ? 'Current Plan' : 'Choose Solo'}
                 </button>
               </div>
+
               <div className="price-card featured">
-                <span className="price-tag">Most hosts pick this</span>
+                {user?.plan === 'HOST' ? (
+                  <span className="price-tag" style={{ background: 'var(--success)' }}>Active Plan</span>
+                ) : (
+                  <span className="price-tag">Most hosts pick this</span>
+                )}
                 <div className="price-plan">Host</div>
                 <div className="price-amount">$18<span> /month</span></div>
                 <ul className="price-list">
@@ -161,12 +193,17 @@ export default function LandingPage() {
                 </ul>
                 <button
                   className="btn btn-primary btn-block"
-                  onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                  disabled={user?.plan === 'HOST' || loadingPlan === 'HOST'}
+                  onClick={() => handleCheckout('HOST')}
                 >
-                  {isLoggedIn ? "Go to Dashboard" : "Choose Host"}
+                  {loadingPlan === 'HOST' ? 'Redirecting...' : user?.plan === 'HOST' ? 'Current Plan' : 'Choose Host'}
                 </button>
               </div>
+
               <div className="price-card">
+                {user?.plan === 'STUDIO' && (
+                  <span className="price-tag" style={{ background: 'var(--success)' }}>Active Plan</span>
+                )}
                 <div className="price-plan">Studio</div>
                 <div className="price-amount">$49<span> /month</span></div>
                 <ul className="price-list">
@@ -176,9 +213,10 @@ export default function LandingPage() {
                 </ul>
                 <button
                   className="btn btn-ghost btn-block"
-                  onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                  disabled={user?.plan === 'STUDIO' || loadingPlan === 'STUDIO'}
+                  onClick={() => handleCheckout('STUDIO')}
                 >
-                  {isLoggedIn ? "Go to Dashboard" : "Choose Studio"}
+                  {loadingPlan === 'STUDIO' ? 'Redirecting...' : user?.plan === 'STUDIO' ? 'Current Plan' : 'Choose Studio'}
                 </button>
               </div>
             </div>

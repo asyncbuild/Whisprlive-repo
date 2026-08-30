@@ -1,22 +1,32 @@
-import React, { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import API from '../api/axios';
 
-const AuthContext = createContext(null);
+const AuthContext = createContext();
 
-export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem('pulse_token'));
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('pulse_user');
-    try {
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch (e) {
-      return null;
-    }
+    const saved = localStorage.getItem('pulse_user');
+    return saved ? JSON.parse(saved) : null;
   });
+  const [token, setToken] = useState(() => localStorage.getItem('pulse_token') || null);
 
-  const login = (newToken, userData) => {
-    localStorage.setItem('pulse_token', newToken);
+  const refreshUser = async () => {
+    if (!token) return;
+    try {
+      const res = await API.get('/api/user/me');
+      if (res.data?.user) {
+        localStorage.setItem('pulse_user', JSON.stringify(res.data.user));
+        setUser(res.data.user);
+      }
+    } catch (err) {
+      console.error('Failed to refresh user', err);
+    }
+  };
+
+  const login = (userData, authToken) => {
+    localStorage.setItem('pulse_token', authToken);
     localStorage.setItem('pulse_user', JSON.stringify(userData));
-    setToken(newToken);
+    setToken(authToken);
     setUser(userData);
   };
 
@@ -28,18 +38,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={{ user, token, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    return { user: null, token: null, login: () => {}, logout: () => {} };
-  }
-  return context;
-};
-
-export default AuthContext;
+export const useAuth = () => useContext(AuthContext);

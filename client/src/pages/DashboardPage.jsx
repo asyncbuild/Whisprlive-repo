@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar
+  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar,Sparkles, Crown
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [sortMode, setSortMode] = useState("new"); // new | top
   const [startMode, setStartMode] = useState("now"); // now | schedule
   const [scheduleTime, setScheduleTime] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Loading states
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -83,7 +84,18 @@ export default function DashboardPage() {
     }
   })();
   const username = currentUser?.username || currentUser?.email || "Host";
+  // Handle Stripe Post-Payment Success
+  useEffect(() => {
+    const paymentStatus = searchParams.get("payment");
+    const newPlan = searchParams.get("plan");
 
+    if (paymentStatus === "success") {
+      if (refreshUser) refreshUser();
+      alert(`🎉 Payment successful! Your account has been upgraded to the ${newPlan || "HOST"} plan.`);
+      // Clean query parameters from URL
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams, refreshUser]);
   // 1. Restore active session from localStorage on initial page load / refresh
   useEffect(() => {
     try {
@@ -403,13 +415,49 @@ export default function DashboardPage() {
       <div className="dash-top">
         <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <Brand onClick={() => navigate("/")} />
-          <div className="dash-user">
-            <div className="user-pill">
-              <span className="avatar"><User size={13} /></span>
-              {username}
+            <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* Active Plan Badge */}
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "4px 10px",
+                  borderRadius: "999px",
+                  background: (currentUser?.plan === "STUDIO") ? "var(--accent-soft)" : (currentUser?.plan === "HOST") ? "var(--live-soft)" : "var(--surface-2)",
+                  color: (currentUser?.plan === "STUDIO") ? "var(--accent)" : (currentUser?.plan === "HOST") ? "var(--live)" : "var(--text-dim)",
+                  border: "1px solid var(--border)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.03em"
+                }}
+              >
+                {currentUser?.plan === "STUDIO" && <Crown size={12} />}
+                {currentUser?.plan === "HOST" && <Sparkles size={12} />}
+                {currentUser?.plan || "SOLO"} PLAN
+              </span>
+
+              {/* Upgrade Button (visible only if free tier) */}
+              {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ padding: "5px 12px", fontSize: 12 }}
+                  onClick={() => navigate("/#pricing")}
+                >
+                  <Sparkles size={12} /> Upgrade
+                </button>
+              )}
+
+              <div className="user-pill">
+                <span className="avatar"><User size={13} /></span>
+                {username}
+              </div>
+
+              <button className="icon-btn" onClick={handleLogout} title="Sign out">
+                <LogOut size={15} />
+              </button>
             </div>
-            <button className="icon-btn" onClick={handleLogout} title="Sign out"><LogOut size={15} /></button>
-          </div>
         </div>
       </div>
 

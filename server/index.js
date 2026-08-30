@@ -11,9 +11,59 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { initializeSockets } from './sockets/socketHandler.js';
 import prisma from "./config/db.js"
+import {PLAN_LIMITS} from "./config/plans.js"
+import Stripe from "stripe"
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express()
 const httpServer = createServer(app)
+
+const STRIPE_PRICES = {
+  HOST:{
+    amount:1800,
+    name:"WhisprLive Host Plan",
+    description:"Unlimited sessions, 1,000 guests, 60-min timers, and exports"
+  },
+  STUDIO: {
+    amount: 4900,
+    name: "WhisprLive Studio Plan",
+    description: "Everything in Host + 5 seats and 120-min timers",
+  },
+}
+
+app.post("/api/payments/webhook",express.raw({type:"application/json"}),async(req,res)=>{
+    const sig = req.headers["stripe-signature"]
+    let event
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      )
+    } catch (err) {
+      console.error(`⚠️ Webhook signature verification failed:`, err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+    if(event.type === 'checkout.session.completed'){
+      const session  = event.data.object;
+      const userId   = session.metadata?.userId;
+      const planType = session.metadata?.planType;
+      if(userId && planType){
+        try {
+          await prisma.user.update({
+            where:{id:userId},
+            data:{plan: planType}
+          })
+          console.log(`Plan upgraded successfully: ${planType} for user ${userId}`)
+        } catch (error) {
+          console.error("❌ Error updating user plan:", error)
+          return res.status(500).json({error:error.message,stack:error})
+        }
+      }
+    }
+    res.json({received:true})
+})
 
 app.use(cors())
 app.use(express.json())
@@ -94,6 +144,58 @@ app.post("/signin",async(req,res)=>{
   }
 })
 
+//Fetch current user details and plans
+app.get("/api/user/me",verifyToken,async(req,res)=>{
+  try{
+    const user = await prisma.user.findUnique({
+      where:{id:req.user.id},
+      select:{id:true,email:true,username:true,plan:true}
+    })
+    res.json({user})
+  } catch(err){
+    res.status(500).json({error:err.message})
+  }
+})
+
+//Stripe Checkout Route
+app.post("/api/payments/create-checkout-session",verifyToken,async(req,res)=>{
+  const {planType} = req.body;
+  const planInfo = STRIPE_PRICES[planType];
+    if(!planType || !planInfo){
+      return res.status(400).json({error:"Invalid plan type"})
+    }
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types:["card"],
+        line_items:[
+          {
+            price_data:{
+              currency:"usd",
+              product_data:{
+                name:planInfo.name,
+                description:planInfo.description
+              },
+              unit_amount:planInfo.amount,
+            },
+            quantity:1
+          }
+        ],
+        mode:"payment",
+        customer_email:req.user.email,
+        metadata:{
+          userId: req.user.id,
+          planType:planType
+        },
+        success_url: `${process.env.CLIENT_URL || "http://localhost:5173"}/dashboard?payment=success&plan=${planType}`,
+        cancel_url: `${process.env.CLIENT_URL || "http://localhost:5173"}/#pricing`,
+      })
+      res.json({url:session.url})
+    } catch (error) {
+      console.error("Stripe session creation error:", err);
+      res.status(500).json({error:error.message})
+    }
+});
+
 // Room & Session Routes
 // Create new session Route
 app.post("/api/rooms",verifyToken,async(req,res)=>{
@@ -107,11 +209,43 @@ app.post("/api/rooms",verifyToken,async(req,res)=>{
           {message:"Title is required"}
         )
     }
+    try{
+      // 1. fetch user and their plan
+      const user = await prisma.user.findUnique({
+        where:{id:req.user.id},
+        select:{plan:true}
+      })
+      const userPlan = user?.plan || "SOLO" // Default to SOLO if plan is missing
+      const limits = PLAN_LIMITS[userPlan]
+      // 2. check duration limit
+      if(parsedDuration > limits.maxDurationMinutes){
+        return res.status(403).json({
+          error: `Your ${userPlan} plan allows sessions up to ${limits.maxDurationMinutes} minutes only. Upgrade to unlock longer sessions.`
+        });
+      }
+      // 3. check monthly session limit
+      if(limits.monthlySessions !== Infinity){
+        const now = new Date()
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        
+        const activeCount = await prisma.room.count({
+          where: {
+            hostId: req.user.id,
+            createdAt: { gte: startOfMonth }
+          }
+        });
+        
+        if (activeCount >= limits.monthlySessions) {
+          return res.status(403).json({
+            error: `You have reached the maximum number of sessions allowed for your ${userPlan} plan this month. Upgrade to create more.`
+          });
+        }
+      }
+      // 4. Generate unique room code
     const roomCode = nanoid(8)
     const sessionStartTime = startsAt ? new Date(startsAt) : new Date()
     const expiresAt = new Date(sessionStartTime.getTime() + parsedDuration * 60000)
 
-    try{
       const newRoom = await prisma.room.create({
         data:{
           hostId:req.user.id,
@@ -220,6 +354,16 @@ app.delete("/api/rooms/:roomId",verifyToken,async(req,res)=>{
 app.get("/api/rooms/:roomId/export",verifyToken,async(req,res)=>{
     const {roomId} = req.params
     try{
+      const user = await prisma.user.findUnique({
+        where:{id:req.user.id},
+        select:{plan:true}
+      })
+      const limits = PLAN_LIMITS[user?.plan || "SOLO"]
+      if(!limits.canExport){
+        return res.status(403).json({
+          error: "Exporting responses is a premium feature. Please upgrade to the Host plan."
+        });
+      }
       const room = await prisma.room.findFirst({
         where:{roomCode:roomId,hostId:req.user.id},
         include:{
@@ -288,10 +432,19 @@ app.post("/api/rooms/public/:roomId/messages",async(req,res)=>{
     }
     try{
       const room = await prisma.room.findUnique({
-        where:{roomCode:roomId}
+        where:{roomCode:roomId},
+        include:{
+          host:{select:{plan:true}},
+          _count:{select:{messages:true}}
+        }
       })
       if(!room){
         return res.status(404).json({message:"Room not found"})
+      }
+      //check plan limit
+      const limits = PLAN_LIMITS[room.host.plan || 'SOLO']
+      if(room._count.messages >= limits.maxGuests){
+        return res.status(403).json({message: "This session has reached its participant capacity."})
       }
       const now = new Date()
       if(now < new Date(room.startsAt)){

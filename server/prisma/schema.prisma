@@ -11,6 +11,7 @@ model User {
   username     String    
   email        String    @unique
   passwordHash String
+  plan         String   @default("SOLO") // SOLO, HOST, STUDIO
   createdAt    DateTime  @default(now())
   rooms        Room[]
 }
