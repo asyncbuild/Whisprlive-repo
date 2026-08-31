@@ -15,6 +15,7 @@ export default function LandingPage() {
   const { user, token } = useAuth();
   const { toast } = useToast();
   const isLoggedIn = Boolean(token);
+  const currentPlan = user?.plan || "SOLO";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState(null);
@@ -172,63 +173,68 @@ export default function LandingPage() {
               <h2>Start free. Upgrade when the rooms get bigger.</h2>
             </div>
             <div className="pricing-grid">
+              {/* Solo Plan */}
               <div className="price-card">
                 <div className="price-plan">Solo</div>
-                <div className="price-amount">$0<span> /month</span></div>
+                <div className="price-amount">₹0<span> /month</span></div>
                 <ul className="price-list">
-                  <li><Check size={15} />3 live sessions / month</li>
-                  <li><Check size={15} />Up to 50 guests per room</li>
-                  <li><Check size={15} />5 or 15-minute timers</li>
+                  <li><Check size={15} /> 3 live sessions / month</li>
+                  <li><Check size={15} /> Up to 50 guests per room</li>
+                  <li><Check size={15} /> 5 or 15-minute timers</li>
                 </ul>
                 <button
                   className="btn btn-ghost btn-block"
-                  disabled={user?.plan === 'SOLO'}
-                  onClick={() => handleCheckout('SOLO')}
+                  disabled={currentPlan === "SOLO"}
+                  onClick={() => handleCheckout("SOLO")}
                 >
-                  {user?.plan === 'SOLO' ? 'Current Plan' : 'Choose Solo'}
+                  {currentPlan === "SOLO" ? "Current Plan" : "Choose Solo"}
                 </button>
               </div>
 
+              {/* Host Plan */}
               <div className="price-card featured">
-                {user?.plan === 'HOST' ? (
-                  <span className="price-tag" style={{ background: 'var(--success)' }}>Active Plan</span>
+                {currentPlan === "HOST" ? (
+                  <span className="price-tag" style={{ background: "var(--success)" }}>Active Plan</span>
                 ) : (
                   <span className="price-tag">Most hosts pick this</span>
                 )}
                 <div className="price-plan">Host</div>
-                <div className="price-amount">$18<span> /month</span></div>
+                <div className="price-amount">₹1,499<span> /month</span></div>
                 <ul className="price-list">
-                  <li><Check size={15} />Unlimited sessions</li>
-                  <li><Check size={15} />Up to 1,000 guests per room</li>
-                  <li><Check size={15} />Custom timers up to 60 min</li>
-                  <li><Check size={15} />Export every response</li>
+                  <li><Check size={15} /> Unlimited sessions</li>
+                  <li><Check size={15} /> Up to 1,000 guests per room</li>
+                  <li><Check size={15} /> Custom timers up to 60 min</li>
+                  <li><Check size={15} /> Export every response</li>
+                  <li><Check size={15} /> UPI & International Cards</li>
                 </ul>
                 <button
                   className="btn btn-primary btn-block"
-                  disabled={user?.plan === 'HOST' || loadingPlan === 'HOST'}
-                  onClick={() => handleCheckout('HOST')}
+                  disabled={currentPlan === "HOST" || loadingPlan === "HOST"}
+                  onClick={() => handleCheckout("HOST")}
                 >
-                  {loadingPlan === 'HOST' ? 'Redirecting...' : user?.plan === 'HOST' ? 'Current Plan' : 'Choose Host'}
+                  {loadingPlan === "HOST" ? "Redirecting..." : currentPlan === "HOST" ? "Current Plan" : "Choose Host"}
                 </button>
               </div>
 
+              {/* Studio Plan */}
               <div className="price-card">
-                {user?.plan === 'STUDIO' && (
-                  <span className="price-tag" style={{ background: 'var(--success)' }}>Active Plan</span>
+                {currentPlan === "STUDIO" && (
+                  <span className="price-tag" style={{ background: "var(--success)" }}>Active Plan</span>
                 )}
                 <div className="price-plan">Studio</div>
-                <div className="price-amount">$49<span> /month</span></div>
+                <div className="price-amount">₹3,999<span> /month</span></div>
                 <ul className="price-list">
-                  <li><Check size={15} />Everything in Host</li>
-                  <li><Check size={15} />5 seats, shared session history</li>
-                  <li><Check size={15} />Custom domain for links</li>
+                  <li><Check size={15} /> Everything in Host</li>
+                  <li><Check size={15} /> 5 seats, shared session history</li>
+                  <li><Check size={15} /> Custom timers up to 120 min</li>
+                  <li><Check size={15} /> UPI & International Cards</li>
                 </ul>
                 <button
                   className="btn btn-ghost btn-block"
-                  disabled={user?.plan === 'STUDIO' || loadingPlan === 'STUDIO'}
-                  onClick={() => handleCheckout('STUDIO')}
+                  disabled={currentPlan === "STUDIO" || loadingPlan === "STUDIO"}
+                  onClick={() => handleCheckout("STUDIO")}
                 >
-                  {loadingPlan === 'STUDIO' ? 'Redirecting...' : user?.plan === 'STUDIO' ? 'Current Plan' : 'Choose Studio'}
+                  {loadingPlan === "STUDIO" ? "Redirecting..." : currentPlan === "STUDIO" ? "Current Plan" : "Choose Studio"}
                 </button>
               </div>
             </div>

@@ -21,12 +21,14 @@ const httpServer = createServer(app)
 
 const STRIPE_PRICES = {
   HOST:{
-    amount:1800,
+    amount:149900,
+    currency: "inr",
     name:"WhisprLive Host Plan",
     description:"Unlimited sessions, 1,000 guests, 60-min timers, and exports"
   },
   STUDIO: {
-    amount: 4900,
+    amount: 399900,
+    currency: "inr",
     name: "WhisprLive Studio Plan",
     description: "Everything in Host + 5 seats and 120-min timers",
   },
@@ -51,13 +53,19 @@ app.post("/api/payments/webhook",express.raw({type:"application/json"}),async(re
       const planType = session.metadata?.planType;
       if(userId && planType){
         try {
-          await prisma.user.update({
-            where:{id:userId},
-            data:{plan: planType}
-          })
-          console.log(`Plan upgraded successfully: ${planType} for user ${userId}`)
+          const existingUser = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { plan: true },
+          });
+          if (existingUser && existingUser.plan !== planType) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { plan: planType },
+            });
+            console.log(`[Production] Plan upgraded to ${planType} for user: ${userId}`);
+          }
         } catch (error) {
-          console.error("❌ Error updating user plan:", error)
+          console.error("Error updating user plan:", error)
           return res.status(500).json({error:error.message,stack:error})
         }
       }
@@ -166,11 +174,11 @@ app.post("/api/payments/create-checkout-session",verifyToken,async(req,res)=>{
     }
     try {
       const session = await stripe.checkout.sessions.create({
-        payment_method_types:["card"],
+        payment_method_types:["card","upi"],
         line_items:[
           {
             price_data:{
-              currency:"usd",
+              currency:planInfo.currency,
               product_data:{
                 name:planInfo.name,
                 description:planInfo.description

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar,Sparkles, Crown
+  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -114,6 +114,7 @@ export default function DashboardPage() {
     }
   })();
   const username = currentUser?.username || currentUser?.email || "Host";
+  const isSolo = !currentUser?.plan || currentUser?.plan === "SOLO";
   // Handle Stripe Post-Payment Success and initial user sync
   useEffect(() => {
     if (refreshUser) refreshUser();
@@ -311,6 +312,11 @@ export default function DashboardPage() {
 
   // Export session messages
   const exportSession = async (roomCode) => {
+    if (isSolo) {
+      toast.info("Exporting responses is a premium feature. Upgrade to Host plan to unlock exports!");
+      setShowUpgradeModal(true);
+      return;
+    }
     setExportingCode(roomCode);
     try {
       const res = await API.get(`/api/rooms/${roomCode}/export`, { responseType: "blob" });
@@ -811,8 +817,16 @@ export default function DashboardPage() {
                         className="btn btn-ghost btn-sm"
                         onClick={() => exportSession(code)}
                         disabled={isExporting}
+                        title={isSolo ? "Unlock export with Host plan" : "Export session messages"}
                       >
-                        {isExporting ? <Loader2 size={13} className="spin" /> : <Download size={13} />} {isExporting ? "Exporting..." : "Export"}
+                        {isExporting ? (
+                          <Loader2 size={13} className="spin" />
+                        ) : isSolo ? (
+                          <Lock size={13} style={{ color: "var(--accent)" }} />
+                        ) : (
+                          <Download size={13} />
+                        )}
+                        {isExporting ? "Exporting..." : "Export"}
                       </button>
                     </div>
                   </div>
@@ -877,12 +891,13 @@ export default function DashboardPage() {
                 <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Host Plan</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0", color: "var(--accent)" }}>$18<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
+                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0", color: "var(--accent)" }}>₹1,499<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
                     <ul style={{ fontSize: 13, color: "var(--text-dim)", paddingLeft: 16, margin: "12px 0", lineHeight: 1.6 }}>
                       <li>Unlimited live sessions</li>
                       <li>Up to 1,000 guests / room</li>
                       <li>Custom timers up to 60 min</li>
                       <li>Export responses</li>
+                      <li>UPI & Cards support</li>
                     </ul>
                   </div>
                   <button
@@ -891,18 +906,19 @@ export default function DashboardPage() {
                     disabled={upgradingPlan === "HOST"}
                     onClick={() => handleUpgradeCheckout("HOST")}
                   >
-                    {upgradingPlan === "HOST" ? "Redirecting..." : "Choose Host ($18)"}
+                    {upgradingPlan === "HOST" ? "Redirecting..." : "Choose Host (₹1,499)"}
                   </button>
                 </div>
 
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Studio Plan</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0" }}>$49<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
+                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0" }}>₹3,999<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
                     <ul style={{ fontSize: 13, color: "var(--text-dim)", paddingLeft: 16, margin: "12px 0", lineHeight: 1.6 }}>
                       <li>Everything in Host</li>
                       <li>5 seats & shared history</li>
                       <li>Timers up to 120 min</li>
+                      <li>UPI & Cards support</li>
                     </ul>
                   </div>
                   <button
@@ -911,7 +927,7 @@ export default function DashboardPage() {
                     disabled={upgradingPlan === "STUDIO"}
                     onClick={() => handleUpgradeCheckout("STUDIO")}
                   >
-                    {upgradingPlan === "STUDIO" ? "Redirecting..." : "Choose Studio ($49)"}
+                    {upgradingPlan === "STUDIO" ? "Redirecting..." : "Choose Studio (₹3,999)"}
                   </button>
                 </div>
               </div>
