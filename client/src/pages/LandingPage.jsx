@@ -173,69 +173,77 @@ export default function LandingPage() {
               <h2>Start free. Upgrade when the rooms get bigger.</h2>
             </div>
             <div className="pricing-grid">
-              {/* Solo Plan */}
-              <div className="price-card">
-                <div className="price-plan">Solo</div>
-                <div className="price-amount">₹0<span> /month</span></div>
-                <ul className="price-list">
-                  <li><Check size={15} /> 3 live sessions / month</li>
-                  <li><Check size={15} /> Up to 50 guests per room</li>
-                  <li><Check size={15} /> 5 or 15-minute timers</li>
-                </ul>
-                <button
-                  className="btn btn-ghost btn-block"
-                  disabled={currentPlan === "SOLO"}
-                  onClick={() => handleCheckout("SOLO")}
-                >
-                  {currentPlan === "SOLO" ? "Current Plan" : "Choose Solo"}
+              {/* Solo Free */}
+              <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div>
+                  <div className="price-plan">Solo Free</div>
+                  <div className="price-amount">₹0</div>
+                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
+                  <ul className="price-list" style={{ marginTop: "20px" }}>
+                    <li><Check size={15} /> 3 rooms / month</li>
+                    <li><Check size={15} /> Up to 50 guests</li>
+                    <li><Check size={15} /> 15-min timers</li>
+                  </ul>
+                </div>
+                <button className="btn btn-ghost btn-block" disabled style={{ marginTop: "24px" }}>
+                  Current Free Tier
                 </button>
               </div>
 
-              {/* Host Plan */}
-              <div className="price-card featured">
-                {currentPlan === "HOST" ? (
-                  <span className="price-tag" style={{ background: "var(--success)" }}>Active Plan</span>
-                ) : (
-                  <span className="price-tag">Most hosts pick this</span>
-                )}
-                <div className="price-plan">Host</div>
-                <div className="price-amount">₹1,499<span> /month</span></div>
-                <ul className="price-list">
-                  <li><Check size={15} /> Unlimited sessions</li>
-                  <li><Check size={15} /> Up to 1,000 guests per room</li>
-                  <li><Check size={15} /> Custom timers up to 60 min</li>
-                  <li><Check size={15} /> Export every response</li>
-                  <li><Check size={15} /> UPI & International Cards</li>
-                </ul>
+              {/* 24h Room Pass */}
+              <div className="price-card featured" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <span className="price-tag">Popular for Events</span>
+                <div>
+                  <div className="price-plan" style={{ color: "var(--accent)", fontWeight: 700 }}>24h Room Pass</div>
+                  <div className="price-amount">₹399</div>
+                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>One-time pass per event</p>
+                  <ul className="price-list" style={{ marginTop: "20px" }}>
+                    <li><Check size={15} /> 1 dedicated room (24 hours)</li>
+                    <li><Check size={15} /> Up to 500 guests</li>
+                    <li><Check size={15} /> Export messages (.txt)</li>
+                    <li><Check size={15} /> UPI &amp; Global Cards</li>
+                  </ul>
+                </div>
                 <button
                   className="btn btn-primary btn-block"
-                  disabled={currentPlan === "HOST" || loadingPlan === "HOST"}
-                  onClick={() => handleCheckout("HOST")}
+                  style={{ marginTop: "24px" }}
+                  disabled={loadingPlan === "ROOM_PASS"}
+                  onClick={() => handleCheckout("ROOM_PASS")}
                 >
-                  {loadingPlan === "HOST" ? "Redirecting..." : currentPlan === "HOST" ? "Current Plan" : "Choose Host"}
+                  {loadingPlan === "ROOM_PASS" ? "Redirecting..." : "Buy Room Pass (₹399)"}
                 </button>
               </div>
 
-              {/* Studio Plan */}
-              <div className="price-card">
-                {currentPlan === "STUDIO" && (
-                  <span className="price-tag" style={{ background: "var(--success)" }}>Active Plan</span>
-                )}
-                <div className="price-plan">Studio</div>
-                <div className="price-amount">₹3,999<span> /month</span></div>
-                <ul className="price-list">
-                  <li><Check size={15} /> Everything in Host</li>
-                  <li><Check size={15} /> 5 seats, shared session history</li>
-                  <li><Check size={15} /> Custom timers up to 120 min</li>
-                  <li><Check size={15} /> UPI & International Cards</li>
-                </ul>
-                <button
-                  className="btn btn-ghost btn-block"
-                  disabled={currentPlan === "STUDIO" || loadingPlan === "STUDIO"}
-                  onClick={() => handleCheckout("STUDIO")}
-                >
-                  {loadingPlan === "STUDIO" ? "Redirecting..." : currentPlan === "STUDIO" ? "Current Plan" : "Choose Studio"}
-                </button>
+              {/* Pro Creator (Coming Soon) */}
+              <div className="price-card" style={{ opacity: 0.75, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div>
+                  <div className="price-plan">Pro Creator</div>
+                  <div className="price-amount">₹799<span style={{ fontSize: "14px" }}> /mo</span></div>
+                  <ul className="price-list" style={{ marginTop: "20px" }}>
+                    <li>• Unlimited rooms</li>
+                    <li>• Up to 1,000 guests</li>
+                    <li>• Custom branding</li>
+                  </ul>
+                </div>
+                <div style={{ textAlign: "center", fontSize: "12px", fontWeight: 600, color: "var(--text-faint)", padding: "10px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: "24px" }}>
+                  Coming Soon
+                </div>
+              </div>
+
+              {/* Conference (Coming Soon) */}
+              <div className="price-card" style={{ opacity: 0.75, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div>
+                  <div className="price-plan">Conference</div>
+                  <div className="price-amount">₹1,499<span style={{ fontSize: "14px" }}> /event</span></div>
+                  <ul className="price-list" style={{ marginTop: "20px" }}>
+                    <li>• Up to 2,500 guests</li>
+                    <li>• 48-hour room duration</li>
+                    <li>• Live analytics dashboard</li>
+                  </ul>
+                </div>
+                <div style={{ textAlign: "center", fontSize: "12px", fontWeight: 600, color: "var(--text-faint)", padding: "10px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: "24px" }}>
+                  Coming Soon
+                </div>
               </div>
             </div>
           </div>

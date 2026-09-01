@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock
+  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const [sortMode, setSortMode] = useState("new"); // new | top
   const [startMode, setStartMode] = useState("now"); // now | schedule
   const [scheduleTime, setScheduleTime] = useState("");
+  const [usePass, setUsePass] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Loading states
@@ -69,10 +70,15 @@ export default function DashboardPage() {
   const [upgradingPlan, setUpgradingPlan] = useState(null);
 
   // Upvoted messages tracking (prevents duplicate votes)
+  const openUpgradeModal = () => {
+    setUpgradingPlan(null);
+    setShowUpgradeModal(true);
+  };
+
   const handleUpgradeCheckout = async (planType) => {
     const currentToken = localStorage.getItem('pulse_token');
     if (!currentToken) {
-      alert('Your session has expired. Please sign in again.');
+      toast.error('Your session has expired. Please sign in again.');
       navigate("/signin");
       return;
     }
@@ -81,9 +87,12 @@ export default function DashboardPage() {
       const res = await API.post('/api/payments/create-checkout-session', { planType });
       if (res.data?.url) {
         window.location.href = res.data.url;
+      } else {
+        setUpgradingPlan(null);
       }
     } catch (err) {
-      const errMsg = err.response?.data?.error || 'Failed to start payment session.';
+      setUpgradingPlan(null);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to start payment session.';
       if (err.response?.status === 401 || err.response?.status === 403 || errMsg.includes('Token')) {
         toast.error('Your session has expired or is invalid. Please sign in again.');
         localStorage.removeItem('pulse_token');
@@ -92,7 +101,6 @@ export default function DashboardPage() {
       } else {
         toast.error(errMsg);
       }
-      setUpgradingPlan(null);
     }
   };
 
@@ -192,7 +200,8 @@ export default function DashboardPage() {
       const payload = {
         title: title.trim(),
         durationMinutes: duration,
-        startsAt: startsAtIso
+        startsAt: startsAtIso,
+        usePass
       };
       const res = await API.post("/api/rooms", payload);
       const roomCode = res.data.room;
@@ -218,6 +227,10 @@ export default function DashboardPage() {
       setUntilStart(Math.max(0, Math.floor((startTime.getTime() - now) / 1000)));
       setSecondsLeft(duration * 60);
 
+      if (res.data?.isPassUsed) {
+        toast.info("1 Room Pass credit used for this session!");
+        if (refreshUser) refreshUser();
+      }
       setTab("active"); // Automatically switch to the Active session tab
     } catch (err) {
       toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to create room");
@@ -314,7 +327,7 @@ export default function DashboardPage() {
   const exportSession = async (roomCode) => {
     if (isSolo) {
       toast.info("Exporting responses is a premium feature. Upgrade to Host plan to unlock exports!");
-      setShowUpgradeModal(true);
+      openUpgradeModal();
       return;
     }
     setExportingCode(roomCode);
@@ -481,12 +494,33 @@ export default function DashboardPage() {
                 {currentUser?.plan || "SOLO"} PLAN
               </span>
 
+              {currentUser?.roomPasses > 0 && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "4px 10px",
+                    borderRadius: "999px",
+                    background: "rgba(99, 102, 241, 0.15)",
+                    color: "var(--accent)",
+                    border: "1px solid var(--accent)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.03em"
+                  }}
+                >
+                  <Ticket size={12} /> {currentUser.roomPasses} Room Pass{currentUser.roomPasses > 1 ? "es" : ""}
+                </span>
+              )}
+
               {/* Upgrade Button (visible only if free tier) */}
               {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
                 <button
                   className="btn btn-primary btn-sm"
                   style={{ padding: "5px 12px", fontSize: 12 }}
-                  onClick={() => setShowUpgradeModal(true)}
+                  onClick={openUpgradeModal}
                 >
                   <Sparkles size={12} /> Upgrade
                 </button>
@@ -887,48 +921,60 @@ export default function DashboardPage() {
               <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 20 }}>
                 Unlock longer room timers, higher participant limits, and message exports.
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                {/* 24h Room Pass */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Host Plan</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0", color: "var(--accent)" }}>₹1,499<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
-                    <ul style={{ fontSize: 13, color: "var(--text-dim)", paddingLeft: 16, margin: "12px 0", lineHeight: 1.6 }}>
-                      <li>Unlimited live sessions</li>
-                      <li>Up to 1,000 guests / room</li>
-                      <li>Custom timers up to 60 min</li>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: "var(--accent)", color: "#fff", padding: "2px 8px", borderRadius: 999 }}>Popular for Events</span>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginTop: 8 }}>24h Room Pass</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--accent)" }}>₹399<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /pass</span></div>
+                    <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
+                      <li>1 room for 24 hours</li>
+                      <li>Up to 500 guests</li>
                       <li>Export responses</li>
-                      <li>UPI & Cards support</li>
+                      <li>UPI &amp; Global Cards</li>
                     </ul>
                   </div>
                   <button
                     className="btn btn-primary btn-block"
-                    style={{ marginTop: 12 }}
-                    disabled={upgradingPlan === "HOST"}
-                    onClick={() => handleUpgradeCheckout("HOST")}
+                    style={{ marginTop: 10, fontSize: 13 }}
+                    disabled={upgradingPlan === "ROOM_PASS"}
+                    onClick={() => handleUpgradeCheckout("ROOM_PASS")}
                   >
-                    {upgradingPlan === "HOST" ? "Redirecting..." : "Choose Host (₹1,499)"}
+                    {upgradingPlan === "ROOM_PASS" ? "Redirecting..." : "Buy Pass (₹399)"}
                   </button>
                 </div>
 
-                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                {/* Pro Creator (Coming Soon) */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: 0.75 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Studio Plan</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, margin: "8px 0" }}>₹3,999<span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
-                    <ul style={{ fontSize: 13, color: "var(--text-dim)", paddingLeft: 16, margin: "12px 0", lineHeight: 1.6 }}>
-                      <li>Everything in Host</li>
-                      <li>5 seats & shared history</li>
-                      <li>Timers up to 120 min</li>
-                      <li>UPI & Cards support</li>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Pro Creator</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--text-dim)" }}>₹799<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
+                    <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
+                      <li>Unlimited rooms</li>
+                      <li>Up to 1,000 guests</li>
+                      <li>Custom branding</li>
                     </ul>
                   </div>
-                  <button
-                    className="btn btn-ghost btn-block"
-                    style={{ marginTop: 12 }}
-                    disabled={upgradingPlan === "STUDIO"}
-                    onClick={() => handleUpgradeCheckout("STUDIO")}
-                  >
-                    {upgradingPlan === "STUDIO" ? "Redirecting..." : "Choose Studio (₹3,999)"}
-                  </button>
+                  <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--text-faint)", padding: "8px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: 10 }}>
+                    Coming Soon
+                  </div>
+                </div>
+
+                {/* Conference (Coming Soon) */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: 0.75 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Conference</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--text-dim)" }}>₹1,499<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /event</span></div>
+                    <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
+                      <li>Up to 2,500 guests</li>
+                      <li>48-hour room duration</li>
+                      <li>Live analytics dashboard</li>
+                    </ul>
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--text-faint)", padding: "8px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: 10 }}>
+                    Coming Soon
+                  </div>
                 </div>
               </div>
             </div>

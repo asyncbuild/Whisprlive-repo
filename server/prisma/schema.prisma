@@ -12,6 +12,7 @@ model User {
   email        String    @unique
   passwordHash String
   plan         String   @default("SOLO") // SOLO, HOST, STUDIO
+  roomPasses   Int      @default(0)
   createdAt    DateTime  @default(now())
   rooms        Room[]
 }
@@ -25,6 +26,7 @@ model Room {
   startsAt        DateTime @default(now())
   expiresAt       DateTime
   isAccepting     Boolean   @default(true)
+  isPassUsed      Boolean   @default(false)
   createdAt       DateTime  @default(now())
 
   // Relations

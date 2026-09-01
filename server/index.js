@@ -22,11 +22,17 @@ const app = express()
 const httpServer = createServer(app)
 
 const STRIPE_PRICES = {
-  HOST:{
-    amount:149900,
+  ROOM_PASS: {
+    amount: 39900, // ₹399.00 (in paise)
     currency: "inr",
-    name:"WhisprLive Host Plan",
-    description:"Unlimited sessions, 1,000 guests, 60-min timers, and exports"
+    name: "WhisprLive 24-Hour Room Pass",
+    description: "1 Pro Room with 24-hour access, up to 500 guests, and exports",
+  },
+  HOST: {
+    amount: 149900,
+    currency: "inr",
+    name: "WhisprLive Host Plan",
+    description: "Unlimited sessions, 1,000 guests, 60-min timers, and exports"
   },
   STUDIO: {
     amount: 399900,
@@ -34,7 +40,7 @@ const STRIPE_PRICES = {
     name: "WhisprLive Studio Plan",
     description: "Everything in Host + 5 seats and 120-min timers",
   },
-}
+};
 
 app.post("/api/payments/webhook",express.raw({type:"application/json"}),async(req,res)=>{
     const sig = req.headers["stripe-signature"]
@@ -49,11 +55,25 @@ app.post("/api/payments/webhook",express.raw({type:"application/json"}),async(re
       console.error(`⚠️ Webhook signature verification failed:`, err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
-    if(event.type === 'checkout.session.completed'){
-      const session  = event.data.object;
-      const userId   = session.metadata?.userId;
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const userId = session.metadata?.userId;
       const planType = session.metadata?.planType;
-      if(userId && planType){
+
+      if (userId && planType === "ROOM_PASS") {
+        try {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              roomPasses: { increment: 1 },
+            },
+          });
+          console.log(`✅ Added 1 Room Pass credit for user ${userId}`);
+        } catch (error) {
+          console.error("❌ Error adding room pass credit:", error);
+          return res.status(500).json({ error: error.message });
+        }
+      } else if (userId && planType) {
         try {
           const existingUser = await prisma.user.findUnique({
             where: { id: userId },
@@ -67,8 +87,8 @@ app.post("/api/payments/webhook",express.raw({type:"application/json"}),async(re
             console.log(`[Production] Plan upgraded to ${planType} for user: ${userId}`);
           }
         } catch (error) {
-          console.error("Error updating user plan:", error)
-          return res.status(500).json({error:error.message,stack:error})
+          console.error("Error updating user plan:", error);
+          return res.status(500).json({ error: error.message, stack: error });
         }
       }
     }
@@ -218,9 +238,9 @@ app.post("/api/auth/google",async(req,res)=>{
 app.get("/api/user/me",verifyToken,async(req,res)=>{
   try{
     const user = await prisma.user.findUnique({
-      where:{id:req.user.id},
-      select:{id:true,email:true,username:true,plan:true}
-    })
+      where: { id: req.user.id },
+      select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+    });
     res.json({user})
   } catch(err){
     res.status(500).json({error:err.message})
@@ -268,74 +288,96 @@ app.post("/api/payments/create-checkout-session",verifyToken,async(req,res)=>{
 
 // Room & Session Routes
 // Create new session Route
-app.post("/api/rooms",verifyToken,async(req,res)=>{
-    const {title,durationMinutes,startsAt} = req.body
-    const parsedDuration = parseInt(durationMinutes, 10);
-    if (isNaN(parsedDuration) || parsedDuration <= 0) {
-      return res.status(400).json({ error: 'Valid duration in minutes is required.' });
-    }
-    if(!title){
-        return res.status(400).json(
-          {message:"Title is required"}
-        )
-    }
-    try{
-      // 1. fetch user and their plan
-      const user = await prisma.user.findUnique({
-        where:{id:req.user.id},
-        select:{plan:true}
-      })
-      const userPlan = user?.plan || "SOLO" // Default to SOLO if plan is missing
-      const limits = PLAN_LIMITS[userPlan]
-      // 2. check duration limit
-      if(parsedDuration > limits.maxDurationMinutes){
-        return res.status(403).json({
-          error: `Your ${userPlan} plan allows sessions up to ${limits.maxDurationMinutes} minutes only. Upgrade to unlock longer sessions.`
-        });
-      }
-      // 3. check monthly session limit
-      if(limits.monthlySessions !== Infinity){
-        const now = new Date()
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        
-        const activeCount = await prisma.room.count({
-          where: {
-            hostId: req.user.id,
-            createdAt: { gte: startOfMonth }
-          }
-        });
-        
-        if (activeCount >= limits.monthlySessions) {
-          return res.status(403).json({
-            error: `You have reached the maximum number of sessions allowed for your ${userPlan} plan this month. Upgrade to create more.`
-          });
-        }
-      }
-      // 4. Generate unique room code
-    const roomCode = nanoid(8)
-    const sessionStartTime = startsAt ? new Date(startsAt) : new Date()
-    const expiresAt = new Date(sessionStartTime.getTime() + parsedDuration * 60000)
+app.post("/api/rooms", verifyToken, async (req, res) => {
+  const { title, durationMinutes, startsAt, usePass } = req.body;
+  const parsedDuration = parseInt(durationMinutes, 10);
 
-      const newRoom = await prisma.room.create({
-        data:{
-          hostId:req.user.id,
-          roomCode,
-          title: title || 'Ask me anything....',
-          durationMinutes : parseInt(durationMinutes,10),
-          startsAt:sessionStartTime,
-          expiresAt
-        }
-      })
-      res.status(201).json({
-        message:"Session created Successfully",
-        room:roomCode,
-        shareableUrl:`/ask/${newRoom.roomCode}`
-      })
-    }catch(err){
-      console.error("❌ Prisma Room Creation Error:", err); // <-- Check this in your terminal
-      res.status(500).json({ error: err.message, stack: err });
+  if (isNaN(parsedDuration) || parsedDuration <= 0) {
+    return res.status(400).json({ error: "Valid duration in minutes is required." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "Title is required" });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { plan: true, roomPasses: true },
+    });
+
+    const userPlan = user?.plan || "SOLO";
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Count standard (non-pass) rooms created this month
+    const standardCount = await prisma.room.count({
+      where: {
+        hostId: req.user.id,
+        isPassUsed: false,
+        createdAt: { gte: startOfMonth },
+      },
+    });
+
+    // Automatically apply Room Pass if requested, or if duration > 15 min, or if 3 free rooms reached
+    let isUsingPass = false;
+    if (user.roomPasses > 0) {
+      if (usePass || (userPlan === "SOLO" && (parsedDuration > 15 || standardCount >= 3))) {
+        isUsingPass = true;
+      }
     }
-})
+
+    const activeTier = isUsingPass ? "ROOM_PASS" : userPlan;
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+    // Monthly cap check for standard Free rooms
+    if (!isUsingPass && limits.monthlySessions !== Infinity && standardCount >= limits.monthlySessions) {
+      return res.status(403).json({
+        error: "You have used your 3 free monthly rooms. Purchase a Room Pass to create another.",
+      });
+    }
+
+    // Duration validation
+    if (parsedDuration > limits.maxDurationMinutes) {
+      return res.status(403).json({
+        error: `Your ${activeTier === "SOLO" ? "Free" : activeTier} plan allows sessions up to ${limits.maxDurationMinutes} minutes only. Purchase a Room Pass to unlock up to 24 hours.`,
+      });
+    }
+
+    // Deduct pass if used
+    if (isUsingPass) {
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { roomPasses: { decrement: 1 } },
+      });
+    }
+
+    const roomCode = nanoid(8);
+    const sessionStartTime = startsAt ? new Date(startsAt) : new Date();
+    const expiresAt = new Date(sessionStartTime.getTime() + parsedDuration * 60000);
+
+    const newRoom = await prisma.room.create({
+      data: {
+        hostId: req.user.id,
+        roomCode,
+        title: title || "Ask me anything...",
+        durationMinutes: parsedDuration,
+        startsAt: sessionStartTime,
+        expiresAt,
+        isPassUsed: isUsingPass,
+      },
+    });
+
+    res.status(201).json({
+      message: "Session created successfully",
+      room: roomCode,
+      shareableUrl: `/ask/${newRoom.roomCode}`,
+      isPassUsed: isUsingPass,
+    });
+  } catch (err) {
+    console.error("❌ Prisma Room Creation Error:", err);
+    res.status(500).json({ error: err.message, stack: err });
+  }
+});
 
 // End an active session (closes it in database immediately)
 app.patch("/api/rooms/:roomId/end",verifyToken,async(req,res)=>{
@@ -420,7 +462,7 @@ app.delete("/api/rooms/:roomId",verifyToken,async(req,res)=>{
     }
 })
 
-// Export messages as a plain test file
+// Export messages as a plain text file
 app.get("/api/rooms/:roomId/export",verifyToken,async(req,res)=>{
     const {roomId} = req.params
     try{
@@ -428,12 +470,6 @@ app.get("/api/rooms/:roomId/export",verifyToken,async(req,res)=>{
         where:{id:req.user.id},
         select:{plan:true}
       })
-      const limits = PLAN_LIMITS[user?.plan || "SOLO"]
-      if(!limits.canExport){
-        return res.status(403).json({
-          error: "Exporting responses is a premium feature. Please upgrade to the Host plan."
-        });
-      }
       const room = await prisma.room.findFirst({
         where:{roomCode:roomId,hostId:req.user.id},
         include:{
@@ -445,6 +481,12 @@ app.get("/api/rooms/:roomId/export",verifyToken,async(req,res)=>{
       if(!room){
         return res.status(404).json({message:"Room not found or unauthorized"})
       }
+      const limits = PLAN_LIMITS[user?.plan || "SOLO"]
+      if(!limits.canExport && !room.isPassUsed){
+        return res.status(403).json({
+          error: "Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass."
+        });
+      }
       const exportText = room.messages.map((m, idx) => `[${idx + 1}] (${new Date(m.createdAt).toLocaleString()}): ${m.content}`)
       .join('\n\n');
       res.setHeader('Content-Type','text/plain')
@@ -453,7 +495,6 @@ app.get("/api/rooms/:roomId/export",verifyToken,async(req,res)=>{
     }catch(err){
       res.status(500).json({error: err.message})
     }
-
 })
 
 //public routes
@@ -512,7 +553,8 @@ app.post("/api/rooms/public/:roomId/messages",async(req,res)=>{
         return res.status(404).json({message:"Room not found"})
       }
       //check plan limit
-      const limits = PLAN_LIMITS[room.host.plan || 'SOLO']
+      const activeTier = room.isPassUsed ? 'ROOM_PASS' : (room.host.plan || 'SOLO');
+      const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
       if(room._count.messages >= limits.maxGuests){
         return res.status(403).json({message: "This session has reached its participant capacity."})
       }
