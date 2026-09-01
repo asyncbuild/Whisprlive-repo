@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 
 import { useToast } from '../context/ToastContext';
 
+import AuthGoogleButton from '../components/AuthGoogleButton';
+
 export default function AuthPage({ mode }) {
   const navigate = useNavigate();
   const isSignup = mode === 'signup';
@@ -91,6 +93,12 @@ export default function AuthPage({ mode }) {
           </div>
         )}
 
+        {/* =========================================================================
+            STANDARD EMAIL/PASSWORD AUTHENTICATION FORM (TEMPORARILY COMMENTED OUT)
+            Currently using Google OAuth as primary authentication.
+            To restore email/password signin and signup, uncomment the form below.
+           ========================================================================= */}
+        {/*
         <form onSubmit={handleSubmit}>
           {isSignup && (
             <div className="field">
@@ -144,8 +152,11 @@ export default function AuthPage({ mode }) {
             )}
           </button>
         </form>
+        */}
 
-        <div className="auth-foot" style={{ marginTop: 24 }}>
+        <AuthGoogleButton />
+
+        <div className="auth-foot" style={{ marginTop: 16 }}>
           {isSignup ? (
             <>Already have an account? <Link to="/signin">Sign in</Link></>
           ) : (

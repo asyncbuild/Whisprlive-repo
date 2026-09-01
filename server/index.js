@@ -13,7 +13,9 @@ import { initializeSockets } from './sockets/socketHandler.js';
 import prisma from "./config/db.js"
 import {PLAN_LIMITS} from "./config/plans.js"
 import Stripe from "stripe"
+import { OAuth2Client } from "google-auth-library"
 
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express()
@@ -149,6 +151,66 @@ app.post("/signin",async(req,res)=>{
     })
   } catch(err) {
     res.status(500).json({error:err.message})
+  }
+})
+
+//Google Signin/signup route
+app.post("/api/auth/google",async(req,res)=>{
+  const {credential} = req.body;
+  if(!credential){
+    return res.status(400).json({
+      message:"Google credential is required"
+    })
+  }
+  try {
+    //verify google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken:credential,
+      audience:process.env.GOOGLE_CLIENT_ID
+    })
+    const payload = ticket.getPayload();
+    const {email,name,sub:googleId} = payload;
+    if(!email){
+      return res.status(400).json({
+        message:"Google signin failed : Email is required"
+      })
+    }
+    // check if user already exists
+    let user = await prisma.user.findUnique({
+      where:{email}
+    })
+    if(!user){
+      user = await prisma.user.create({
+        data:{
+          email,
+          username : name || email.split("@")[0],
+          passwordHash: `GOOGLE_AUTH_${googleId}`,
+          plan:"SOLO"
+        },
+        select : {id:true, email:true, username:true,plan:true},
+      })
+    }
+    //generate app jwt token
+    const token = jwt.sign(
+      {id: user.id, email:user.email, username:user.username},
+      process.env.JWT_SECRET,
+      {expiresIn:"3h"}
+    )
+    res.json({
+      message:"Google Sign-in Successful",
+      token,
+      user:{
+        id:user.id,
+        email: user.email,
+        username: user.username,
+        plan: user.plan || 'SOLO',
+      }
+    })
+  } catch (error) {
+    console.error("Google Signin error:",error)
+    res.status(500).json({
+      message: "Invalid Google token" 
+    })
   }
 })
 

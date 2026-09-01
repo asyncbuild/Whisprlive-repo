@@ -1760,3 +1760,45 @@ body {
   margin-bottom: 16px;
   animation: rise .3s ease both;
 }
+
+/* Google Auth Glassmorphism Card */
+.google-auth-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 18px;
+  margin: 18px 0;
+  transition: all 0.22s ease;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15);
+}
+
+.google-auth-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 16px 40px -12px rgba(99, 102, 241, 0.18);
+  transform: translateY(-2px);
+}
+
+.google-auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+  letter-spacing: 0.02em;
+}
+
+.google-btn-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 320px;
+}
