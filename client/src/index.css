@@ -298,16 +298,20 @@ body {
   .nav-links {
     display: none;
   }
+
   .nav-menu-btn {
     display: inline-flex;
   }
 }
 
 @keyframes breathe {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: .55;
     transform: scale(1.35);
@@ -588,6 +592,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1520,6 +1525,7 @@ body {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -1636,6 +1642,7 @@ body {
     opacity: 0;
     transform: translateY(-12px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -1646,6 +1653,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -1656,6 +1664,7 @@ body {
     opacity: 0;
     transform: scale(.94) translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);

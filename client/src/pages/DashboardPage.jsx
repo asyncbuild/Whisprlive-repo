@@ -168,7 +168,7 @@ export default function DashboardPage() {
                 setMessages(msgs);
               }
             })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => {
               setMessagesLoading(false);
             });
@@ -417,7 +417,7 @@ export default function DashboardPage() {
     setVotedIds(nextVoted);
     try {
       localStorage.setItem("pulse_voted_messages", JSON.stringify(nextVoted));
-    } catch (e) {}
+    } catch (e) { }
 
     const delta = isVoted ? -1 : 1;
     setMessages((prev) =>
@@ -471,17 +471,39 @@ export default function DashboardPage() {
       <div className="dash-top">
         <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <Brand onClick={() => navigate("/")} />
-            <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {/* Active Plan Badge */}
+          <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* Active Plan Badge */}
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "4px 10px",
+                borderRadius: "999px",
+                background: (currentUser?.plan === "STUDIO") ? "var(--accent-soft)" : (currentUser?.plan === "HOST") ? "var(--live-soft)" : "var(--surface-2)",
+                color: (currentUser?.plan === "STUDIO") ? "var(--accent)" : (currentUser?.plan === "HOST") ? "var(--live)" : "var(--text-dim)",
+                border: "1px solid var(--border)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                textTransform: "uppercase",
+                letterSpacing: "0.03em"
+              }}
+            >
+              {currentUser?.plan === "STUDIO" && <Crown size={12} />}
+              {currentUser?.plan === "HOST" && <Sparkles size={12} />}
+              {currentUser?.plan || "SOLO"} PLAN
+            </span>
+
+            {currentUser?.roomPasses > 0 && (
               <span
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
                   padding: "4px 10px",
                   borderRadius: "999px",
-                  background: (currentUser?.plan === "STUDIO") ? "var(--accent-soft)" : (currentUser?.plan === "HOST") ? "var(--live-soft)" : "var(--surface-2)",
-                  color: (currentUser?.plan === "STUDIO") ? "var(--accent)" : (currentUser?.plan === "HOST") ? "var(--live)" : "var(--text-dim)",
-                  border: "1px solid var(--border)",
+                  background: "rgba(99, 102, 241, 0.15)",
+                  color: "var(--accent)",
+                  border: "1px solid var(--accent)",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 5,
@@ -489,52 +511,30 @@ export default function DashboardPage() {
                   letterSpacing: "0.03em"
                 }}
               >
-                {currentUser?.plan === "STUDIO" && <Crown size={12} />}
-                {currentUser?.plan === "HOST" && <Sparkles size={12} />}
-                {currentUser?.plan || "SOLO"} PLAN
+                <Ticket size={12} /> {currentUser.roomPasses} Room Pass{currentUser.roomPasses > 1 ? "es" : ""}
               </span>
+            )}
 
-              {currentUser?.roomPasses > 0 && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: "4px 10px",
-                    borderRadius: "999px",
-                    background: "rgba(99, 102, 241, 0.15)",
-                    color: "var(--accent)",
-                    border: "1px solid var(--accent)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.03em"
-                  }}
-                >
-                  <Ticket size={12} /> {currentUser.roomPasses} Room Pass{currentUser.roomPasses > 1 ? "es" : ""}
-                </span>
-              )}
-
-              {/* Upgrade Button (visible only if free tier) */}
-              {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ padding: "5px 12px", fontSize: 12 }}
-                  onClick={openUpgradeModal}
-                >
-                  <Sparkles size={12} /> Upgrade
-                </button>
-              )}
-
-              <div className="user-pill">
-                <span className="avatar"><User size={13} /></span>
-                {username}
-              </div>
-
-              <button className="icon-btn" onClick={handleLogout} title="Sign out">
-                <LogOut size={15} />
+            {/* Upgrade Button (visible only if free tier) */}
+            {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ padding: "5px 12px", fontSize: 12 }}
+                onClick={openUpgradeModal}
+              >
+                <Sparkles size={12} /> Upgrade
               </button>
+            )}
+
+            <div className="user-pill">
+              <span className="avatar"><User size={13} /></span>
+              {username}
             </div>
+
+            <button className="icon-btn" onClick={handleLogout} title="Sign out">
+              <LogOut size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
