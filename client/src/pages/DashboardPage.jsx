@@ -75,7 +75,7 @@ export default function DashboardPage() {
     setShowUpgradeModal(true);
   };
 
-  const handleUpgradeCheckout = async (planType) => {
+  const handleUpgradeCheckout = async (planType = "ROOM_PASS") => {
     const currentToken = localStorage.getItem('pulse_token');
     if (!currentToken) {
       toast.error('Your session has expired. Please sign in again.');
@@ -84,23 +84,58 @@ export default function DashboardPage() {
     }
     setUpgradingPlan(planType);
     try {
-      const res = await API.post('/api/payments/create-checkout-session', { planType });
-      if (res.data?.url) {
-        window.location.href = res.data.url;
-      } else {
-        setUpgradingPlan(null);
-      }
+      const res = await API.post('/api/payments/razorpay/create-order', { planType: "ROOM_PASS" });
+      const { orderId, amount, currency, keyId } = res.data;
+
+      const options = {
+        key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount,
+        currency,
+        name: "WhisprLive",
+        description: "24-Hour Room Pass",
+        image: `${window.location.origin}/favicon.svg`,
+        order_id: orderId,
+        handler: async (response) => {
+          try {
+            const verifyRes = await API.post("/api/payments/razorpay/verify", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            if (verifyRes.data?.user) {
+              localStorage.setItem('pulse_user', JSON.stringify(verifyRes.data.user));
+              if (refreshUser) refreshUser();
+            }
+            toast.success("Payment successful! 1 Room Pass has been credited.");
+            setShowUpgradeModal(false);
+          } catch (err) {
+            toast.error(err.response?.data?.message || "Signature verification failed");
+          } finally {
+            setUpgradingPlan(null);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setUpgradingPlan(null);
+          }
+        },
+        prefill: {
+          name: currentUser?.username || "Guest User",
+          email: currentUser?.email || "test@whisprlive.com",
+          contact: "9876543210",
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+      };
+
+      const paymentObject = new window.Razorpay(options);
+      paymentObject.open();
     } catch (err) {
       setUpgradingPlan(null);
-      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to start payment session.';
-      if (err.response?.status === 401 || err.response?.status === 403 || errMsg.includes('Token')) {
-        toast.error('Your session has expired or is invalid. Please sign in again.');
-        localStorage.removeItem('pulse_token');
-        localStorage.removeItem('pulse_user');
-        navigate("/signin");
-      } else {
-        toast.error(errMsg);
-      }
+      const errMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to start payment session.';
+      toast.error(errMsg);
     }
   };
 
@@ -123,7 +158,7 @@ export default function DashboardPage() {
   })();
   const username = currentUser?.username || currentUser?.email || "Host";
   const isSolo = !currentUser?.plan || currentUser?.plan === "SOLO";
-  // Handle Stripe Post-Payment Success and initial user sync
+  // Handle Post-Payment Success and initial user sync
   useEffect(() => {
     if (refreshUser) refreshUser();
     const paymentStatus = searchParams.get("payment");

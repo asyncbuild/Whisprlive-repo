@@ -12,7 +12,7 @@ import { useToast } from "../context/ToastContext";
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { user, token } = useAuth();
+  const { user, token, refreshUser } = useAuth();
   const { toast } = useToast();
   const isLoggedIn = Boolean(token);
   const currentPlan = user?.plan || "SOLO";
@@ -41,21 +41,60 @@ export default function LandingPage() {
 
     setLoadingPlan(planType);
     try {
-      const res = await API.post('/api/payments/create-checkout-session', { planType });
-      if (res.data?.url) {
-        window.location.href = res.data.url;
-      }
+      // 1. Create order on backend
+      const res = await API.post("/api/payments/razorpay/create-order", { planType });
+      const { orderId, amount, currency, keyId } = res.data;
+
+      // 2. Open Razorpay Checkout modal
+      const options = {
+        key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount,
+        currency,
+        name: "WhisprLive",
+        description: "24-Hour Room Pass",
+        image: `${window.location.origin}/favicon.svg`,
+        order_id: orderId,
+        handler: async (response) => {
+          try {
+            // 3. Send signature to backend for verification
+            const verifyRes = await API.post("/api/payments/razorpay/verify", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            if (verifyRes.data?.user) {
+              localStorage.setItem('pulse_user', JSON.stringify(verifyRes.data.user));
+              if (refreshUser) refreshUser();
+            }
+            toast.success("Payment successful! 1 Room Pass has been credited.");
+            navigate("/dashboard");
+          } catch (err) {
+            toast.error(err.response?.data?.message || "Signature verification failed");
+          } finally {
+            setLoadingPlan(null);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setLoadingPlan(null);
+          }
+        },
+        prefill: {
+          name: user?.username || "Guest User",
+          email: user?.email || "test@whisprlive.com",
+          contact: "9876543210",
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+      };
+
+      const paymentObject = new window.Razorpay(options);
+      paymentObject.open();
     } catch (err) {
-      const errMsg = err.response?.data?.error || 'Failed to start payment session.';
-      if (err.response?.status === 401 || err.response?.status === 403 || errMsg.includes('Token')) {
-        toast.error('Your session has expired or is invalid. Please sign in again.');
-        localStorage.removeItem('pulse_token');
-        localStorage.removeItem('pulse_user');
-        navigate("/signin");
-      } else {
-        toast.error(errMsg);
-      }
       setLoadingPlan(null);
+      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to initiate payment");
     }
   };
 

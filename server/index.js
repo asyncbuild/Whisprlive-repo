@@ -12,88 +12,18 @@ import { Server } from 'socket.io';
 import { initializeSockets } from './sockets/socketHandler.js';
 import prisma from "./config/db.js"
 import {PLAN_LIMITS} from "./config/plans.js"
-import Stripe from "stripe"
+import Razorpay from "razorpay";
+import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library"
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
 
 const app = express()
 const httpServer = createServer(app)
-
-const STRIPE_PRICES = {
-  ROOM_PASS: {
-    amount: 39900, // ₹399.00 (in paise)
-    currency: "inr",
-    name: "WhisprLive 24-Hour Room Pass",
-    description: "1 Pro Room with 24-hour access, up to 500 guests, and exports",
-  },
-  HOST: {
-    amount: 149900,
-    currency: "inr",
-    name: "WhisprLive Host Plan",
-    description: "Unlimited sessions, 1,000 guests, 60-min timers, and exports"
-  },
-  STUDIO: {
-    amount: 399900,
-    currency: "inr",
-    name: "WhisprLive Studio Plan",
-    description: "Everything in Host + 5 seats and 120-min timers",
-  },
-};
-
-app.post("/api/payments/webhook",express.raw({type:"application/json"}),async(req,res)=>{
-    const sig = req.headers["stripe-signature"]
-    let event
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      )
-    } catch (err) {
-      console.error(`⚠️ Webhook signature verification failed:`, err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const userId = session.metadata?.userId;
-      const planType = session.metadata?.planType;
-
-      if (userId && planType === "ROOM_PASS") {
-        try {
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              roomPasses: { increment: 1 },
-            },
-          });
-          console.log(`✅ Added 1 Room Pass credit for user ${userId}`);
-        } catch (error) {
-          console.error("❌ Error adding room pass credit:", error);
-          return res.status(500).json({ error: error.message });
-        }
-      } else if (userId && planType) {
-        try {
-          const existingUser = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { plan: true },
-          });
-          if (existingUser && existingUser.plan !== planType) {
-            await prisma.user.update({
-              where: { id: userId },
-              data: { plan: planType },
-            });
-            console.log(`[Production] Plan upgraded to ${planType} for user: ${userId}`);
-          }
-        } catch (error) {
-          console.error("Error updating user plan:", error);
-          return res.status(500).json({ error: error.message, stack: error });
-        }
-      }
-    }
-    res.json({received:true})
-})
 
 app.use(cors())
 app.use(express.json())
@@ -247,43 +177,71 @@ app.get("/api/user/me",verifyToken,async(req,res)=>{
   }
 })
 
-//Stripe Checkout Route
-app.post("/api/payments/create-checkout-session",verifyToken,async(req,res)=>{
-  const {planType} = req.body;
-  const planInfo = STRIPE_PRICES[planType];
-    if(!planType || !planInfo){
-      return res.status(400).json({error:"Invalid plan type"})
+// Razorpay Payment Routes
+// 1. Create Razorpay Order
+app.post("/api/payments/razorpay/create-order", verifyToken, async (req, res) => {
+  const { planType } = req.body;
+  if (planType !== "ROOM_PASS") {
+    return res.status(400).json({ message: "Invalid plan type" });
+  }
+
+  try {
+    const options = {
+      amount: 39900, // ₹399 in paise
+      currency: "INR",
+      receipt: `rcpt_${req.user.id.slice(-6)}_${Date.now().toString().slice(-6)}`,
+      notes: {
+        userId: req.user.id,
+        planType: "ROOM_PASS",
+      },
+    };
+
+    const order = await razorpay.orders.create(options);
+    res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (err) {
+    console.error("Razorpay order error:", err);
+    res.status(500).json({ message: "Failed to initialize payment" });
+  }
+});
+
+// 2. Verify Payment Signature and Credit Room Pass
+app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return res.status(400).json({ message: "Missing payment parameters" });
+  }
+
+  try {
+    // Generate expected HMAC SHA256 signature
+    const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET);
+    hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const generatedSignature = hmac.digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      return res.status(400).json({ message: "Invalid transaction signature" });
     }
-    try {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types:["card","upi"],
-        line_items:[
-          {
-            price_data:{
-              currency:planInfo.currency,
-              product_data:{
-                name:planInfo.name,
-                description:planInfo.description
-              },
-              unit_amount:planInfo.amount,
-            },
-            quantity:1
-          }
-        ],
-        mode:"payment",
-        customer_email:req.user.email,
-        metadata:{
-          userId: req.user.id,
-          planType:planType
-        },
-        success_url: `${process.env.CLIENT_URL || "http://localhost:5173"}/dashboard?payment=success&plan=${planType}`,
-        cancel_url: `${process.env.CLIENT_URL || "http://localhost:5173"}/#pricing`,
-      })
-      res.json({url:session.url})
-    } catch (error) {
-      console.error("Stripe session creation error:", error);
-      res.status(500).json({error:error.message})
-    }
+
+    // Grant 1 Room Pass credit to user
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { roomPasses: { increment: 1 } },
+      select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+    });
+
+    res.json({
+      message: "Payment verified successfully!",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("Razorpay verification error:", err);
+    res.status(500).json({ message: "Internal verification error" });
+  }
 });
 
 // Room & Session Routes
