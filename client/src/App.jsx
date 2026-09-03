@@ -6,6 +6,11 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import DashboardPage from './pages/DashboardPage';
 import PublicAskPage from './pages/PublicAskPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import RefundPage from './pages/RefundPage';
 
 // Protected Route Guard for the Host Dashboard
 function ProtectedRoute({ children }) {
@@ -24,6 +29,13 @@ export default function App() {
               <Route path="/signup" element={<AuthPage mode="signup" />} />
               <Route path="/signin" element={<AuthPage mode="signin" />} />
               
+              {/* Compliance & Policy Pages */}
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/refund" element={<RefundPage />} />
+
               <Route
                 path="/dashboard"
                 element={

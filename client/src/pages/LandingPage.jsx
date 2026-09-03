@@ -257,7 +257,6 @@ export default function LandingPage() {
               <div className="price-card" style={{ opacity: 0.75, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
                   <div className="price-plan">Pro Creator</div>
-                  <div className="price-amount">₹799<span style={{ fontSize: "14px" }}> /mo</span></div>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li>• Unlimited rooms</li>
                     <li>• Up to 1,000 guests</li>
@@ -273,7 +272,6 @@ export default function LandingPage() {
               <div className="price-card" style={{ opacity: 0.75, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
                   <div className="price-plan">Conference</div>
-                  <div className="price-amount">₹1,499<span style={{ fontSize: "14px" }}> /event</span></div>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li>• Up to 2,500 guests</li>
                     <li>• 48-hour room duration</li>
@@ -295,10 +293,17 @@ export default function LandingPage() {
             <Brand onClick={() => scrollTo("home")} />
             <div className="footer-cols">
               <div className="footer-col">
-                <h4>Product</h4>
-                <a onClick={() => scrollTo("about")}>About</a>
+                <h4>Company &amp; Product</h4>
+                <Link to="/about">About Us</Link>
                 <a onClick={() => scrollTo("pricing")}>Pricing</a>
+                <Link to="/contact">Contact Us</Link>
                 <a onClick={() => navigate("/ask/demo")}>Live page example</a>
+              </div>
+              <div className="footer-col">
+                <h4>Legal &amp; Policies</h4>
+                <Link to="/terms">Terms &amp; Conditions</Link>
+                <Link to="/privacy">Privacy Policy</Link>
+                <Link to="/refund">Cancellation &amp; Refund Policy</Link>
               </div>
               <div className="footer-col">
                 <h4>Account</h4>

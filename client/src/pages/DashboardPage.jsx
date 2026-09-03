@@ -184,6 +184,11 @@ export default function DashboardPage() {
           const startMs = new Date(parsed.startsAt || now).getTime();
           const endMs = new Date(parsed.expiresAt || now + 15 * 60000).getTime();
 
+          if (now >= endMs) {
+            localStorage.removeItem("pulse_active_session");
+            return;
+          }
+
           setUntilStart(Math.max(0, Math.floor((startMs - now) / 1000)));
           setSecondsLeft(Math.max(0, Math.floor((endMs - now) / 1000)));
 
@@ -279,7 +284,8 @@ export default function DashboardPage() {
     if (!session?.roomCode) return;
 
     const token = localStorage.getItem("pulse_token");
-    const socket = io("http://localhost:3000", {
+    const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    const socket = io(socketUrl, {
       auth: { token }
     });
 
@@ -360,11 +366,6 @@ export default function DashboardPage() {
 
   // Export session messages
   const exportSession = async (roomCode) => {
-    if (isSolo) {
-      toast.info("Exporting responses is a premium feature. Upgrade to Host plan to unlock exports!");
-      openUpgradeModal();
-      return;
-    }
     setExportingCode(roomCode);
     try {
       const res = await API.get(`/api/rooms/${roomCode}/export`, { responseType: "blob" });
@@ -376,7 +377,10 @@ export default function DashboardPage() {
       link.click();
       link.remove();
     } catch (err) {
-      if (err.response?.data instanceof Blob) {
+      if (err.response?.status === 403) {
+        toast.info("Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
+        openUpgradeModal();
+      } else if (err.response?.data instanceof Blob) {
         try {
           const text = await err.response.data.text();
           const parsed = JSON.parse(text);
@@ -614,14 +618,21 @@ export default function DashboardPage() {
                   <div className="duration-pills">
                     {(() => {
                       const plan = currentUser?.plan || "SOLO";
-                      const availableDurations = plan === "STUDIO" ? [5, 15, 30, 60, 120] : plan === "HOST" ? [5, 15, 30, 60] : [5, 15];
+                      const hasPasses = (currentUser?.roomPasses || 0) > 0;
+                      const availableDurations = plan === "STUDIO"
+                        ? [5, 15, 30, 60, 120]
+                        : plan === "HOST"
+                        ? [5, 15, 30, 60]
+                        : hasPasses
+                        ? [5, 15, 30, 60, 120, 1440]
+                        : [5, 15];
                       return availableDurations.map((d) => (
                         <button
                           key={d}
                           className={`duration-pill ${duration === d ? "active" : ""}`}
                           onClick={() => setDuration(d)}
                         >
-                          {d} min
+                          {d >= 60 ? `${d / 60}h` : `${d} min`}
                         </button>
                       ));
                     })()}
@@ -984,7 +995,6 @@ export default function DashboardPage() {
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: 0.75 }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Pro Creator</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--text-dim)" }}>₹799<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /mo</span></div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
                       <li>Up to 1,000 guests</li>
@@ -1000,7 +1010,6 @@ export default function DashboardPage() {
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: 0.75 }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Conference</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--text-dim)" }}>₹1,499<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /event</span></div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Up to 2,500 guests</li>
                       <li>48-hour room duration</li>

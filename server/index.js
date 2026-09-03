@@ -26,6 +26,10 @@ const app = express()
 const httpServer = createServer(app)
 
 app.use(cors())
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  next();
+});
 app.use(express.json())
 
 const io = new Server(httpServer,{
@@ -97,7 +101,7 @@ app.post("/signin",async(req,res)=>{
     res.json({
       message:"Signin successful",
       token,
-      user:{id:user.id,email:user.email,username:user.username}
+      user:{id:user.id,email:user.email,username:user.username,plan:user.plan || "SOLO",roomPasses:user.roomPasses || 0}
     })
   } catch(err) {
     res.status(500).json({error:err.message})
