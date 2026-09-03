@@ -47,7 +47,7 @@ export default function LandingPage() {
 
       // 2. Open Razorpay Checkout modal
       const options = {
-        key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        key: keyId || import.meta.env.RAZORPAY_KEY_ID,
         amount,
         currency,
         name: "WhisprLive",

@@ -88,7 +88,7 @@ export default function DashboardPage() {
       const { orderId, amount, currency, keyId } = res.data;
 
       const options = {
-        key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        key: keyId || import.meta.env.RAZORPAY_KEY_ID,
         amount,
         currency,
         name: "WhisprLive",
@@ -622,10 +622,10 @@ export default function DashboardPage() {
                       const availableDurations = plan === "STUDIO"
                         ? [5, 15, 30, 60, 120]
                         : plan === "HOST"
-                        ? [5, 15, 30, 60]
-                        : hasPasses
-                        ? [5, 15, 30, 60, 120, 1440]
-                        : [5, 15];
+                          ? [5, 15, 30, 60]
+                          : hasPasses
+                            ? [5, 15, 30, 60, 120, 1440]
+                            : [5, 15];
                       return availableDurations.map((d) => (
                         <button
                           key={d}
