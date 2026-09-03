@@ -967,7 +967,7 @@ export default function DashboardPage() {
               <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 20 }}>
                 Unlock longer room timers, higher participant limits, and message exports.
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+              <div className="upgrade-modal-grid">
                 {/* 24h Room Pass */}
                 <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>

@@ -81,9 +81,15 @@ body {
   padding: 0 32px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .container {
-    padding: 0 20px;
+    padding: 0 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 18px;
   }
 }
 
@@ -1816,4 +1822,234 @@ body {
   justify-content: center;
   width: 100%;
   max-width: 320px;
+}
+
+/* =========================================================================
+   COMPREHENSIVE DASHBOARD MOBILE RESPONSIVENESS
+   ========================================================================= */
+
+.upgrade-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+/* Tablet & Small Desktop (<= 768px) */
+@media (max-width: 768px) {
+  .dash-top {
+    height: auto;
+    padding: 12px 0;
+  }
+
+  .dash-top .container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .dash-user {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    margin-right: 18px;
+    flex-shrink: 0;
+    font-size: 13.5px;
+  }
+}
+
+/* Mobile Screens (<= 680px) */
+@media (max-width: 680px) {
+  .dash-body {
+    padding: 20px 0 60px;
+  }
+
+  .dash-head {
+    margin-bottom: 20px;
+  }
+
+  .dash-head h1 {
+    font-size: 22px;
+  }
+
+  .new-session-card {
+    padding: 18px 16px;
+    border-radius: var(--radius-md);
+  }
+
+  .ns-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .ns-title-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .duration-field {
+    width: 100%;
+  }
+
+  .duration-pills {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .duration-pill {
+    flex: 1;
+    min-width: 50px;
+    text-align: center;
+    padding: 9px 10px;
+    font-size: 12.5px;
+  }
+
+  .ns-row .btn-primary {
+    width: 100%;
+    margin-top: 4px;
+    justify-content: center;
+  }
+
+  .link-box {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .link-box-left {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .link-box .url {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    font-size: 12.5px;
+  }
+
+  .link-box-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .link-box-actions .btn {
+    flex: 1;
+    justify-content: center;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+
+  .session-panel-head {
+    padding: 14px 16px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .feed-toolbar {
+    padding: 12px 16px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .feed-search {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .chip-row {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 4px;
+    width: 100%;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chip {
+    flex-shrink: 0;
+  }
+
+  .past-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .past-card-stats {
+    width: 100%;
+    justify-content: space-between;
+    border-top: 1px dashed var(--border);
+    padding-top: 10px;
+  }
+
+  .past-card-actions {
+    width: 100%;
+  }
+
+  .past-card-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .upgrade-modal-grid {
+    grid-template-columns: 1fr;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+}
+
+/* Small Mobile Screens (<= 480px) */
+@media (max-width: 480px) {
+  .user-pill {
+    font-size: 12px;
+    padding: 6px 10px 6px 6px;
+  }
+
+  .bubble {
+    padding: 12px 14px;
+  }
+
+  .bubble-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .modal-content {
+    padding: 20px 16px;
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+
+  .qr-big-box img {
+    width: 170px;
+    height: 170px;
+  }
 }
