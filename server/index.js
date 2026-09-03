@@ -32,6 +32,10 @@ app.use((req, res, next) => {
 });
 app.use(express.json())
 
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "WhisprLive API Server is running" });
+});
+
 const io = new Server(httpServer,{
   cors:{
     origin:"*",
