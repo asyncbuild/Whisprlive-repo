@@ -93,12 +93,14 @@ export default function AuthPage({ mode }) {
           </div>
         )}
 
-        {/* =========================================================================
-            STANDARD EMAIL/PASSWORD AUTHENTICATION FORM (TEMPORARILY COMMENTED OUT)
-            Currently using Google OAuth as primary authentication.
-            To restore email/password signin and signup, uncomment the form below.
-           ========================================================================= */}
-        {/*
+        <AuthGoogleButton />
+
+        <div style={{ display: "flex", alignItems: "center", margin: "18px 0", color: "var(--text-faint)", fontSize: 12 }}>
+          <div style={{ flex: 1, borderBottom: "1px solid var(--border)" }} />
+          <span style={{ padding: "0 10px", fontWeight: 600 }}>OR EMAIL</span>
+          <div style={{ flex: 1, borderBottom: "1px solid var(--border)" }} />
+        </div>
+
         <form onSubmit={handleSubmit}>
           {isSignup && (
             <div className="field">
@@ -144,7 +146,7 @@ export default function AuthPage({ mode }) {
               />
             </div>
           )}
-          <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: 12 }} disabled={loading}>
+          <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: 14 }} disabled={loading}>
             {loading ? (
               <>Processing... <Loader2 size={16} className="spin" /></>
             ) : (
@@ -152,9 +154,6 @@ export default function AuthPage({ mode }) {
             )}
           </button>
         </form>
-        */}
-
-        <AuthGoogleButton />
 
         <div className="auth-foot" style={{ marginTop: 16 }}>
           {isSignup ? (

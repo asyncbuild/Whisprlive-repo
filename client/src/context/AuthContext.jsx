@@ -17,6 +17,29 @@ export function AuthProvider({ children }) {
     return saved;
   });
 
+  // Sync auth state across multiple browser tabs automatically
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'pulse_token') {
+        const newToken = e.newValue;
+        if (!newToken || newToken === 'null' || newToken === 'undefined') {
+          setToken(null);
+        } else {
+          setToken(newToken);
+        }
+      }
+      if (e.key === 'pulse_user') {
+        try {
+          setUser(e.newValue ? JSON.parse(e.newValue) : null);
+        } catch (err) {
+          setUser(null);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   const refreshUser = async () => {
     const currentToken = localStorage.getItem('pulse_token');
     if (!currentToken || currentToken === '[object Object]') return;
@@ -27,7 +50,11 @@ export function AuthProvider({ children }) {
         setUser(res.data.user);
       }
     } catch (err) {
-      console.error('Failed to refresh user', err);
+      if (err.response?.status === 401) {
+        logout();
+      } else {
+        console.error('Failed to refresh user', err);
+      }
     }
   };
 
