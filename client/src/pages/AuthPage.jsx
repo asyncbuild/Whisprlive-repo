@@ -95,6 +95,12 @@ export default function AuthPage({ mode }) {
 
         <AuthGoogleButton />
 
+        {/* =========================================================================
+            STANDARD EMAIL/PASSWORD AUTHENTICATION FORM (TEMPORARILY COMMENTED OUT)
+            Currently using Google OAuth as primary authentication.
+            To restore email/password signin and signup, uncomment the form below.
+           ========================================================================= */}
+        {/*
         <div style={{ display: "flex", alignItems: "center", margin: "18px 0", color: "var(--text-faint)", fontSize: 12 }}>
           <div style={{ flex: 1, borderBottom: "1px solid var(--border)" }} />
           <span style={{ padding: "0 10px", fontWeight: 600 }}>OR EMAIL</span>
@@ -154,6 +160,7 @@ export default function AuthPage({ mode }) {
             )}
           </button>
         </form>
+        */}
 
         <div className="auth-foot" style={{ marginTop: 16 }}>
           {isSignup ? (
