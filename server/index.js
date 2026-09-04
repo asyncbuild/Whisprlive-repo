@@ -190,15 +190,19 @@ app.get("/api/user/me", verifyToken, async (req, res) => {
 // Razorpay Payment Routes
 // 1. Create Razorpay Order
 app.post("/api/payments/razorpay/create-order", verifyToken, async (req, res) => {
-  const { planType } = req.body;
+  const { planType, currency } = req.body;
   if (planType !== "ROOM_PASS") {
     return res.status(400).json({ message: "Invalid plan type" });
   }
 
+  const isUSD = currency === "USD";
+  const amount = isUSD ? 500 : 39900; // $5 USD (500 cents) or ₹399 INR (39900 paise)
+  const orderCurrency = isUSD ? "USD" : "INR";
+
   try {
     const options = {
-      amount: 39900, // ₹399 in paise
-      currency: "INR",
+      amount,
+      currency: orderCurrency,
       receipt: `rcpt_${req.user.id.slice(-6)}_${Date.now().toString().slice(-6)}`,
       notes: {
         userId: req.user.id,
@@ -486,6 +490,16 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
 //check room status
 app.get("/api/rooms/public/:roomId", async (req, res) => {
   const { roomId } = req.params
+  if (roomId.toLowerCase() === "demo") {
+    return res.json({
+      title: "Interactive WhisprLive Demo Room",
+      startsAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 24 * 3600000).toISOString(),
+      status: "Active",
+      canSend: true,
+      isDemo: true
+    });
+  }
   try {
     const room = await prisma.room.findFirst({
       where: { roomCode: roomId },
@@ -525,6 +539,19 @@ app.post("/api/rooms/public/:roomId/messages", async (req, res) => {
   }
   if (content.length > 300) {
     return res.status(400).json({ message: "Message exceeds 300 characters" })
+  }
+  if (roomId.toLowerCase() === "demo") {
+    const demoMsg = {
+      id: "demo-" + Date.now(),
+      content: content.trim(),
+      guestName: "Anonymous Guest",
+      createdAt: new Date().toISOString()
+    };
+    return res.status(201).json({
+      message: "Message sent successfully (Demo)",
+      newMessage: demoMsg,
+      data: demoMsg
+    });
   }
   try {
     const room = await prisma.room.findUnique({

@@ -9,6 +9,7 @@ import LiveMockCard from "../components/LiveMockCard";
 import { useAuth } from "../context/AuthContext";
 
 import { useToast } from "../context/ToastContext";
+import { useGeoCurrency } from "../utils/geoCurrency";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -16,10 +17,20 @@ export default function LandingPage() {
   const { toast } = useToast();
   const isLoggedIn = Boolean(token);
   const currentPlan = user?.plan || "SOLO";
+  const geoCurrency = useGeoCurrency();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState(null);
-  const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null) };
+  const [joinCode, setJoinCode] = useState("");
+  const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null), liveMock: useRef(null) };
+
+  const handleJoinRoom = (e) => {
+    e?.preventDefault();
+    const clean = joinCode.trim();
+    if (!clean) return;
+    const extracted = clean.includes("/ask/") ? clean.split("/ask/")[1]?.trim() : clean;
+    navigate(`/ask/${extracted}`);
+  };
 
   const scrollTo = (key) => {
     setMenuOpen(false);
@@ -42,7 +53,7 @@ export default function LandingPage() {
     setLoadingPlan(planType);
     try {
       // 1. Create order on backend
-      const res = await API.post("/api/payments/razorpay/create-order", { planType });
+      const res = await API.post("/api/payments/razorpay/create-order", { planType, currency: geoCurrency.code });
       const { orderId, amount, currency, keyId } = res.data;
 
       // 2. Open Razorpay Checkout modal
@@ -155,6 +166,57 @@ export default function LandingPage() {
                   See a live page <ArrowUpRight size={16} />
                 </button>
               </div>
+
+              {/* Join Live Room Input Box */}
+              <div style={{
+                margin: "24px 0",
+                padding: "16px 18px",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-lg)",
+                boxShadow: "0 12px 30px -10px rgba(0, 0, 0, .07)",
+                maxWidth: 460
+              }}>
+                <label style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--text-dim)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.03em"
+                }}>
+                  <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A room?
+                </label>
+                <form onSubmit={handleJoinRoom} style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Enter Room Code (e.g. 1-97BVwr)"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface-2)",
+                      color: "var(--text)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 13.5
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-sm"
+                    disabled={!joinCode.trim()}
+                    style={{ padding: "0 16px", whiteSpace: "nowrap" }}
+                  >
+                    Join Room <ArrowRight size={14} />
+                  </button>
+                </form>
+              </div>
               <div className="hero-meta">
                 <div className="hero-meta-item">
                   <span className="hero-meta-num mono">0s</span>
@@ -170,7 +232,9 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <LiveMockCard />
+            <div ref={refs.liveMock}>
+              <LiveMockCard />
+            </div>
           </div>
         </section>
       </div>
@@ -216,7 +280,7 @@ export default function LandingPage() {
               <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
                   <div className="price-plan">Solo Free</div>
-                  <div className="price-amount">₹0</div>
+                  <div className="price-amount">{geoCurrency.symbol}0</div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 3 rooms / month</li>
@@ -239,7 +303,7 @@ export default function LandingPage() {
                 <span className="price-tag">Popular for Events</span>
                 <div>
                   <div className="price-plan" style={{ color: "var(--accent)", fontWeight: 700 }}>24h Room Pass</div>
-                  <div className="price-amount">₹399</div>
+                  <div className="price-amount">{geoCurrency.formatted}</div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>One-time pass per event</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 1 dedicated room (24 hours)</li>
@@ -254,7 +318,7 @@ export default function LandingPage() {
                   disabled={loadingPlan === "ROOM_PASS"}
                   onClick={() => handleCheckout("ROOM_PASS")}
                 >
-                  {loadingPlan === "ROOM_PASS" ? "Redirecting..." : "Buy Room Pass (₹399)"}
+                  {loadingPlan === "ROOM_PASS" ? "Redirecting..." : `Buy Room Pass (${geoCurrency.formatted})`}
                 </button>
               </div>
 

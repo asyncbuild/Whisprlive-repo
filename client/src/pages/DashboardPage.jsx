@@ -11,6 +11,7 @@ import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { useGeoCurrency } from "../utils/geoCurrency";
 
 function formatClock(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -40,6 +41,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout, refreshUser } = useAuth();
   const { toast } = useToast();
+  const geoCurrency = useGeoCurrency();
   const [tab, setTab] = useState("new"); // "new" | "active" | "past"
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(15);
@@ -92,7 +94,7 @@ export default function DashboardPage() {
     }
     setUpgradingPlan(planType);
     try {
-      const res = await API.post('/api/payments/razorpay/create-order', { planType: "ROOM_PASS" });
+      const res = await API.post('/api/payments/razorpay/create-order', { planType: "ROOM_PASS", currency: geoCurrency.code });
       const { orderId, amount, currency, keyId } = res.data;
 
       const options = {
@@ -1117,7 +1119,7 @@ export default function DashboardPage() {
                   <div>
                     <span style={{ fontSize: 11, fontWeight: 700, background: "var(--accent)", color: "#fff", padding: "2px 8px", borderRadius: 999 }}>Popular for Events</span>
                     <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginTop: 8 }}>24h Room Pass</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--accent)" }}>₹399<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /pass</span></div>
+                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--accent)" }}>{geoCurrency.formatted}<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /pass</span></div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>1 room for 24 hours</li>
                       <li>Up to 500 messages / room</li>
@@ -1131,7 +1133,7 @@ export default function DashboardPage() {
                     disabled={upgradingPlan === "ROOM_PASS"}
                     onClick={() => handleUpgradeCheckout("ROOM_PASS")}
                   >
-                    {upgradingPlan === "ROOM_PASS" ? "Redirecting..." : "Buy Pass (₹399)"}
+                    {upgradingPlan === "ROOM_PASS" ? "Redirecting..." : `Buy Pass (${geoCurrency.formatted})`}
                   </button>
                 </div>
 

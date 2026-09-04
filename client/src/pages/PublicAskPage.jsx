@@ -36,6 +36,21 @@ export default function PublicAskPage() {
 
   // 1. Fetch live session status from server
   const fetchStatus = async () => {
+    if (roomCode?.toLowerCase() === "demo") {
+      setRoomInfo({
+        title: "Interactive WhisprLive Demo Room",
+        startsAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 24 * 3600000).toISOString(),
+        status: "Active",
+        canSend: true,
+        isDemo: true
+      });
+      setUntilStart(0);
+      setUntilEnd(3600);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await API.get(`/api/rooms/public/${roomCode}`);
       setRoomInfo(res.data);
@@ -109,6 +124,17 @@ export default function PublicAskPage() {
     if (!text.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
+    if (roomCode?.toLowerCase() === "demo" || roomInfo?.isDemo) {
+      setTimeout(() => {
+        setText("");
+        setSent(true);
+        setIsSubmitting(false);
+        toast.success("🎉 Question sent! Experience how fast WhisprLive delivers live Q&A.");
+        setTimeout(() => setSent(false), 3500);
+      }, 300);
+      return;
+    }
+
     try {
       await API.post(`/api/rooms/public/${roomCode}/messages`, { content: text.trim() });
       setText("");
@@ -165,6 +191,25 @@ export default function PublicAskPage() {
     <div className="public-wrap">
       <div style={{ marginBottom: 30 }}><Brand onClick={() => navigate("/")} /></div>
       <div className="public-card">
+        {roomCode?.toLowerCase() === "demo" && (
+          <div style={{
+            marginBottom: 20,
+            padding: "12px 16px",
+            background: "rgba(99, 102, 241, 0.12)",
+            border: "1px solid var(--accent)",
+            borderRadius: "var(--radius-md)",
+            fontSize: 13.5,
+            color: "var(--accent)",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 8
+          }}>
+            <Radio size={15} style={{ color: "var(--live)", flexShrink: 0 }} />
+            <span><strong>Interactive Demo Room:</strong> Type any test question below to experience how fast WhisprLive delivers live Q&amp;A!</span>
+          </div>
+        )}
+
         <div className="public-header">
           <span className="eyebrow">
             <Radio size={13} />
