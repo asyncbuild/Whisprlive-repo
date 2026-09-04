@@ -22,13 +22,13 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <div className="pulse-root">
+        <div className="whisprlive-root">
           <Router>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/signup" element={<AuthPage mode="signup" />} />
               <Route path="/signin" element={<AuthPage mode="signin" />} />
-              
+
               {/* Compliance & Policy Pages */}
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />

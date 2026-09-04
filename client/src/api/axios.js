@@ -5,7 +5,7 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem('pulse_token');
+  const token = localStorage.getItem('whisprlive_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -20,8 +20,8 @@ API.interceptors.response.use(
       (error.response.status === 401 ||
         (error.response.status === 403 && error.response.data?.error?.includes('Token')))
     ) {
-      localStorage.removeItem('pulse_token');
-      localStorage.removeItem('pulse_user');
+      localStorage.removeItem('whisprlive_token');
+      localStorage.removeItem('whisprlive_user');
     }
     return Promise.reject(error);
   }

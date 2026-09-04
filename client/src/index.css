@@ -38,7 +38,7 @@ body {
   line-height: 1.5;
 }
 
-.pulse-root {
+.whisprlive-root {
   font-family: var(--font-body);
   color: var(--text);
   background: var(--bg);
@@ -47,26 +47,26 @@ body {
   line-height: 1.5;
 }
 
-.pulse-root h1,
-.pulse-root h2,
-.pulse-root h3,
-.pulse-root h4 {
+.whisprlive-root h1,
+.whisprlive-root h2,
+.whisprlive-root h3,
+.whisprlive-root h4 {
   font-family: var(--font-display);
   letter-spacing: -0.02em;
   margin: 0;
   color: var(--text);
 }
 
-.pulse-root p {
+.whisprlive-root p {
   margin: 0;
 }
 
-.pulse-root button {
+.whisprlive-root button {
   font-family: var(--font-body);
   cursor: pointer;
 }
 
-.pulse-root a {
+.whisprlive-root a {
   color: inherit;
   text-decoration: none;
 }
@@ -433,6 +433,13 @@ body {
   border-radius: 50%;
   background: var(--live);
   animation: breathe 1.6s ease-in-out infinite;
+}
+
+.ended-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
 }
 
 .live-card-title {
@@ -1248,6 +1255,10 @@ body {
 
 .countdown.urgent {
   color: var(--live);
+}
+
+.countdown.completed {
+  color: var(--text-faint);
 }
 
 .empty-feed {

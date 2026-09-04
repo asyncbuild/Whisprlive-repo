@@ -32,7 +32,7 @@ export default function LandingPage() {
       return;
     }
 
-    const currentToken = localStorage.getItem('pulse_token');
+    const currentToken = localStorage.getItem('whisprlive_token');
     if (!currentToken) {
       toast.info('Please sign in or create an account first.');
       navigate("/signin");
@@ -64,7 +64,7 @@ export default function LandingPage() {
             });
 
             if (verifyRes.data?.user) {
-              localStorage.setItem('pulse_user', JSON.stringify(verifyRes.data.user));
+              localStorage.setItem('whisprlive_user', JSON.stringify(verifyRes.data.user));
               if (refreshUser) refreshUser();
             }
             toast.success("Payment successful! 1 Room Pass has been credited.");

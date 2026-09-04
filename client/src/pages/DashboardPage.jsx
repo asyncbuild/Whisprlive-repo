@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket
+  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -63,10 +63,13 @@ export default function DashboardPage() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [exportingCode, setExportingCode] = useState(null);
   const [endingSession, setEndingSession] = useState(false);
+  const [closingRoom, setClosingRoom] = useState(false);
 
   // Modal states
   const [showQrModal, setShowQrModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
   const [upgradingPlan, setUpgradingPlan] = useState(null);
 
   // Upvoted messages tracking (prevents duplicate votes)
@@ -76,7 +79,7 @@ export default function DashboardPage() {
   };
 
   const handleUpgradeCheckout = async (planType = "ROOM_PASS") => {
-    const currentToken = localStorage.getItem('pulse_token');
+    const currentToken = localStorage.getItem('whisprlive_token');
     if (!currentToken) {
       toast.error('Your session has expired. Please sign in again.');
       navigate("/signin");
@@ -104,7 +107,7 @@ export default function DashboardPage() {
             });
 
             if (verifyRes.data?.user) {
-              localStorage.setItem('pulse_user', JSON.stringify(verifyRes.data.user));
+              localStorage.setItem('whisprlive_user', JSON.stringify(verifyRes.data.user));
               if (refreshUser) refreshUser();
             }
             toast.success("Payment successful! 1 Room Pass has been credited.");
@@ -142,7 +145,7 @@ export default function DashboardPage() {
   // Upvoted messages tracking (prevents duplicate votes)
   const [votedIds, setVotedIds] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("pulse_voted_messages") || "[]");
+      return JSON.parse(localStorage.getItem("whisprlive_voted_messages") || "[]");
     } catch (e) {
       return [];
     }
@@ -151,7 +154,7 @@ export default function DashboardPage() {
   // Retrieve user details safely
   const currentUser = user || (() => {
     try {
-      return JSON.parse(localStorage.getItem("pulse_user"));
+      return JSON.parse(localStorage.getItem("whisprlive_user"));
     } catch (e) {
       return null;
     }
@@ -173,7 +176,7 @@ export default function DashboardPage() {
   // 1. Restore active session from localStorage on initial page load / refresh
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("pulse_active_session");
+      const saved = localStorage.getItem("whisprlive_active_session");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.roomCode) {
@@ -183,14 +186,13 @@ export default function DashboardPage() {
           const now = Date.now();
           const startMs = new Date(parsed.startsAt || now).getTime();
           const endMs = new Date(parsed.expiresAt || now + 15 * 60000).getTime();
+          const isEnded = Boolean(parsed.isEnded || now >= endMs);
 
-          if (now >= endMs) {
-            localStorage.removeItem("pulse_active_session");
-            return;
-          }
+          setSession({ ...parsed, isEnded });
+          setTab("active");
 
           setUntilStart(Math.max(0, Math.floor((startMs - now) / 1000)));
-          setSecondsLeft(Math.max(0, Math.floor((endMs - now) / 1000)));
+          setSecondsLeft(isEnded ? 0 : Math.max(0, Math.floor((endMs - now) / 1000)));
 
           // Fetch existing messages from the database
           setMessagesLoading(true);
@@ -259,7 +261,7 @@ export default function DashboardPage() {
       };
 
       // Persist active session in localStorage
-      localStorage.setItem("pulse_active_session", JSON.stringify(sessionData));
+      localStorage.setItem("whisprlive_active_session", JSON.stringify(sessionData));
       setSession(sessionData);
       setMessages([]);
 
@@ -283,7 +285,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!session?.roomCode) return;
 
-    const token = localStorage.getItem("pulse_token");
+    const token = localStorage.getItem("whisprlive_token");
     const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
     const socket = io(socketUrl, {
       auth: { token }
@@ -330,13 +332,13 @@ export default function DashboardPage() {
       const diffEnd = Math.max(0, Math.floor((endMs - now) / 1000));
 
       setUntilStart(diffStart);
-      setSecondsLeft(diffEnd);
+      setSecondsLeft(session.isEnded ? 0 : diffEnd);
 
       // Auto-mark started if waiting time hits 0
       if (diffStart === 0 && !session.started) {
         setSession((prev) => {
           const updated = { ...prev, started: true };
-          localStorage.setItem("pulse_active_session", JSON.stringify(updated));
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
           return updated;
         });
       }
@@ -406,13 +408,13 @@ export default function DashboardPage() {
       expiresAt: new Date(now.getTime() + (session.duration || duration) * 60000).toISOString()
     };
     setSession(updated);
-    localStorage.setItem("pulse_active_session", JSON.stringify(updated));
+    localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
     setUntilStart(0);
     setSecondsLeft((session?.duration || duration) * 60);
   };
 
   const resetSession = () => {
-    localStorage.removeItem("pulse_active_session");
+    localStorage.removeItem("whisprlive_active_session");
     setSession(null);
     setMessages([]);
     setTitle("");
@@ -455,7 +457,7 @@ export default function DashboardPage() {
     const nextVoted = isVoted ? votedIds.filter((vId) => vId !== id) : [...votedIds, id];
     setVotedIds(nextVoted);
     try {
-      localStorage.setItem("pulse_voted_messages", JSON.stringify(nextVoted));
+      localStorage.setItem("whisprlive_voted_messages", JSON.stringify(nextVoted));
     } catch (e) { }
 
     const delta = isVoted ? -1 : 1;
@@ -482,7 +484,7 @@ export default function DashboardPage() {
   const answeredCount = messages.filter((m) => m.answered).length;
 
   const endSession = async () => {
-    if (endingSession) return;
+    if (endingSession || isSessionCompleted) return;
     setEndingSession(true);
     if (session?.roomCode) {
       try {
@@ -491,25 +493,71 @@ export default function DashboardPage() {
         console.error("Failed to end session on server:", err);
       }
     }
-    resetSession();
-    loadHistory();
+    const updated = { ...session, isEnded: true };
+    setSession(updated);
+    try {
+      localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+    } catch (e) { }
+    setSecondsLeft(0);
     setEndingSession(false);
+    toast.info("Session timer ended. Guests can no longer submit questions.");
+  };
+
+  const closeRoom = async () => {
+    if (closingRoom) return;
+    setClosingRoom(true);
+    if (session?.roomCode && !session.isEnded) {
+      try {
+        await API.patch(`/api/rooms/${session.roomCode}/end`);
+      } catch (err) {
+        console.error("Failed to end session on server during close:", err);
+      }
+    }
+    resetSession();
+    await loadHistory();
+    setClosingRoom(false);
     setTab("past");
+    toast.success("Room closed.");
   };
 
   const handleLogout = () => {
     if (logout) logout();
-    localStorage.removeItem("pulse_active_session");
+    localStorage.removeItem("whisprlive_active_session");
     navigate("/");
   };
 
   const isSessionScheduled = untilStart > 0 && !session?.started;
+  const isSessionCompleted = Boolean(
+    session && (session.isEnded || (secondsLeft <= 0 && session.started !== false)) && !isSessionScheduled
+  );
+
+  const handleProtectedNavigation = (action) => {
+    if (session && !isSessionCompleted && !isSessionScheduled) {
+      setPendingAction(() => action);
+      setShowLeaveModal(true);
+    } else {
+      action();
+    }
+  };
+
+  useEffect(() => {
+    if (!session || isSessionCompleted || isSessionScheduled) return;
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "There is an active session running right now. Anyhow, the session remains active in your dashboard.";
+      return e.returnValue;
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [session, isSessionCompleted, isSessionScheduled]);
 
   return (
     <div className="dash-shell">
       <div className="dash-top">
         <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-          <Brand onClick={() => navigate("/")} />
+          <Brand onClick={() => handleProtectedNavigation(() => navigate("/"))} />
           <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {/* Active Plan Badge */}
             <span
@@ -570,7 +618,7 @@ export default function DashboardPage() {
               {username}
             </div>
 
-            <button className="icon-btn" onClick={handleLogout} title="Sign out">
+            <button className="icon-btn" onClick={() => handleProtectedNavigation(handleLogout)} title="Sign out">
               <LogOut size={15} />
             </button>
           </div>
@@ -589,13 +637,14 @@ export default function DashboardPage() {
 
         {/* 3 Tabs: New session | Active session | Past sessions */}
         <div className="tabs">
-          <button className={`tab ${tab === "new" ? "active" : ""}`} onClick={() => setTab("new")}>
+          <button className={`tab ${tab === "new" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("new"))}>
             New session
           </button>
           <button className={`tab ${tab === "active" ? "active" : ""}`} onClick={() => setTab("active")}>
-            Active session {session && <span className="live-dot" style={{ display: "inline-block", marginLeft: 6 }} />}
+            Active session {session && !isSessionCompleted && <span className="live-dot" style={{ display: "inline-block", marginLeft: 6 }} />}
+            {session && isSessionCompleted && <span className="ended-dot" style={{ display: "inline-block", marginLeft: 6 }} />}
           </button>
-          <button className={`tab ${tab === "past" ? "active" : ""}`} onClick={() => setTab("past")}>
+          <button className={`tab ${tab === "past" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("past"))}>
             Past sessions
           </button>
         </div>
@@ -707,7 +756,7 @@ export default function DashboardPage() {
                         <strong style={{ color: "var(--accent)" }}>{session.roomCode}</strong>
                       </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {isSessionScheduled ? (
                         <>
                           <span className="opens-badge">
@@ -716,21 +765,45 @@ export default function DashboardPage() {
                           <button className="btn btn-primary btn-sm" onClick={startSessionEarly}>
                             <Play size={14} /> Start Session Early
                           </button>
+                          <button className="btn btn-soft btn-sm" onClick={closeRoom} disabled={closingRoom}>
+                            {closingRoom ? <Loader2 size={13} className="spin" /> : <XCircle size={14} />} Close room
+                          </button>
                         </>
                       ) : (
                         <>
-                          <span className={`countdown ${secondsLeft <= 60 ? "urgent" : ""}`}>
-                            <Clock size={15} /> {formatClock(secondsLeft)} remaining
+                          <span className={`countdown ${isSessionCompleted ? "completed" : secondsLeft <= 60 ? "urgent" : ""}`}>
+                            <Clock size={15} /> {isSessionCompleted ? "00:00 (Session ended)" : `${formatClock(secondsLeft)} remaining`}
                           </span>
                           <button
                             className="btn btn-ghost btn-sm"
                             onClick={endSession}
-                            disabled={endingSession}
+                            disabled={isSessionCompleted || endingSession}
+                            style={{
+                              opacity: isSessionCompleted ? 0.5 : 1,
+                              cursor: isSessionCompleted ? "not-allowed" : "pointer"
+                            }}
+                            title={isSessionCompleted ? "Session completed" : "End session timer early"}
                           >
                             {endingSession ? (
                               <>Ending... <Loader2 size={13} className="spin" /></>
                             ) : (
                               <><Square size={14} /> End session</>
+                            )}
+                          </button>
+                          <button
+                            className="btn btn-soft btn-sm"
+                            onClick={closeRoom}
+                            disabled={closingRoom}
+                            title="Close and archive room"
+                            style={{
+                              borderColor: isSessionCompleted ? "var(--accent)" : undefined,
+                              fontWeight: isSessionCompleted ? 600 : "normal"
+                            }}
+                          >
+                            {closingRoom ? (
+                              <>Closing... <Loader2 size={13} className="spin" /></>
+                            ) : (
+                              <><XCircle size={14} /> Close room</>
                             )}
                           </button>
                         </>
@@ -771,9 +844,22 @@ export default function DashboardPage() {
                 <div className="session-panel">
                   <div className="session-panel-head">
                     <div className="live-badge">
-                      {!isSessionScheduled && <span className="live-dot" />}
-                      <span style={{ color: isSessionScheduled ? "var(--text-faint)" : "var(--live)" }}>
-                        {isSessionScheduled ? "SCHEDULED Q&A" : "LIVE MESSAGES"}
+                      {!isSessionScheduled && !isSessionCompleted && <span className="live-dot" />}
+                      {isSessionCompleted && <span className="ended-dot" />}
+                      <span
+                        style={{
+                          color: isSessionScheduled
+                            ? "var(--text-faint)"
+                            : isSessionCompleted
+                              ? "var(--text-dim)"
+                              : "var(--live)"
+                        }}
+                      >
+                        {isSessionScheduled
+                          ? "SCHEDULED Q&A"
+                          : isSessionCompleted
+                            ? "SESSION ENDED"
+                            : "LIVE MESSAGES"}
                       </span>
                     </div>
                     {!isSessionScheduled && (
@@ -1021,6 +1107,78 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Session Leave Warning Modal */}
+      {showLeaveModal && (
+        <div className="modal-overlay" onClick={() => setShowLeaveModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="modal-head">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: "50%",
+                  background: "rgba(239, 68, 68, 0.12)",
+                  color: "#ef4444",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}>
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 17, margin: 0, fontWeight: 700 }}>Active session running</h3>
+                  <span className="mono" style={{ fontSize: 12, color: "var(--accent)" }}>
+                    Room Code: {session?.roomCode}
+                  </span>
+                </div>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowLeaveModal(false)}>
+                <X size={15} />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 14, color: "var(--text-dim)", fontSize: 14, lineHeight: 1.5 }}>
+              <p style={{ margin: 0 }}>
+                There is an active session running right now. Are you sure you want to navigate away from this room view?
+              </p>
+              <div style={{
+                marginTop: 14,
+                padding: "12px 14px",
+                background: "var(--surface-2)",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                fontSize: 13,
+                color: "var(--text)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8
+              }}>
+                <Sparkles size={16} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                <span><strong>Don't worry:</strong> Anyhow, your session remains active in your dashboard.</span>
+              </div>
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: 22 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowLeaveModal(false)}>
+                Stay in session
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setShowLeaveModal(false);
+                  if (pendingAction) {
+                    pendingAction();
+                    setPendingAction(null);
+                  }
+                }}
+              >
+                Proceed anyway
+              </button>
             </div>
           </div>
         </div>

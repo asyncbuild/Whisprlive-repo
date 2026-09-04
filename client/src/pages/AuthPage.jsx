@@ -26,7 +26,7 @@ export default function AuthPage({ mode }) {
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    if (token || localStorage.getItem('pulse_token')) {
+    if (token || localStorage.getItem('whisprlive_token')) {
       navigate('/dashboard', { replace: true });
     }
   }, [token, navigate]);

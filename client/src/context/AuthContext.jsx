@@ -5,13 +5,13 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('pulse_user');
+    const saved = localStorage.getItem('whisprlive_user');
     return saved ? JSON.parse(saved) : null;
   });
   const [token, setToken] = useState(() => {
-    const saved = localStorage.getItem('pulse_token');
+    const saved = localStorage.getItem('whisprlive_token');
     if (!saved || saved === '[object Object]' || saved === 'undefined' || saved === 'null') {
-      localStorage.removeItem('pulse_token');
+      localStorage.removeItem('whisprlive_token');
       return null;
     }
     return saved;
@@ -20,7 +20,7 @@ export function AuthProvider({ children }) {
   // Sync auth state across multiple browser tabs automatically
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key === 'pulse_token') {
+      if (e.key === 'whisprlive_token') {
         const newToken = e.newValue;
         if (!newToken || newToken === 'null' || newToken === 'undefined') {
           setToken(null);
@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
           setToken(newToken);
         }
       }
-      if (e.key === 'pulse_user') {
+      if (e.key === 'whisprlive_user') {
         try {
           setUser(e.newValue ? JSON.parse(e.newValue) : null);
         } catch (err) {
@@ -41,12 +41,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshUser = async () => {
-    const currentToken = localStorage.getItem('pulse_token');
+    const currentToken = localStorage.getItem('whisprlive_token');
     if (!currentToken || currentToken === '[object Object]') return;
     try {
       const res = await API.get('/api/user/me');
       if (res.data?.user) {
-        localStorage.setItem('pulse_user', JSON.stringify(res.data.user));
+        localStorage.setItem('whisprlive_user', JSON.stringify(res.data.user));
         setUser(res.data.user);
       }
     } catch (err) {
@@ -61,18 +61,18 @@ export function AuthProvider({ children }) {
   const login = (userData, authToken) => {
     const validToken = typeof authToken === 'string' ? authToken : null;
     if (validToken) {
-      localStorage.setItem('pulse_token', validToken);
+      localStorage.setItem('whisprlive_token', validToken);
       setToken(validToken);
     }
     if (userData) {
-      localStorage.setItem('pulse_user', JSON.stringify(userData));
+      localStorage.setItem('whisprlive_user', JSON.stringify(userData));
       setUser(userData);
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('pulse_token');
-    localStorage.removeItem('pulse_user');
+    localStorage.removeItem('whisprlive_token');
+    localStorage.removeItem('whisprlive_user');
     setToken(null);
     setUser(null);
   };
