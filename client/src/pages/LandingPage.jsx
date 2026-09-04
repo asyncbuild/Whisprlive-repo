@@ -224,8 +224,13 @@ export default function LandingPage() {
                     <li><Check size={15} /> 15-min timers</li>
                   </ul>
                 </div>
-                <button className="btn btn-ghost btn-block" disabled style={{ marginTop: "24px" }}>
-                  Current Free Tier
+                <button
+                  className={`btn ${isLoggedIn ? "btn-ghost" : "btn-primary"} btn-block`}
+                  disabled={isLoggedIn}
+                  onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                  style={{ marginTop: "24px" }}
+                >
+                  {isLoggedIn ? "Current Free Tier" : "Continue with Solo plan"}
                 </button>
               </div>
 
