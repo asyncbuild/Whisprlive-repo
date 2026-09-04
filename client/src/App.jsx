@@ -1,7 +1,8 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { trackPageView } from './utils/analytics';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import DashboardPage from './pages/DashboardPage';
@@ -18,12 +19,24 @@ function ProtectedRoute({ children }) {
   return token ? children : <Navigate to="/" replace />;
 }
 
+// Track pageviews on SPA route changes for GA4
+function RouteTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    trackPageView(location.pathname + location.search);
+  }, [location]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
         <div className="whisprlive-root">
           <Router>
+            <RouteTracker />
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/signup" element={<AuthPage mode="signup" />} />
