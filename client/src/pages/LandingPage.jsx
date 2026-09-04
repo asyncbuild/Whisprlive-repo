@@ -220,7 +220,7 @@ export default function LandingPage() {
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 3 rooms / month</li>
-                    <li><Check size={15} /> Up to 50 guests</li>
+                    <li><Check size={15} /> Up to 25 messages / room</li>
                     <li><Check size={15} /> 15-min timers</li>
                   </ul>
                 </div>
@@ -238,7 +238,7 @@ export default function LandingPage() {
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>One-time pass per event</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 1 dedicated room (24 hours)</li>
-                    <li><Check size={15} /> Up to 500 guests</li>
+                    <li><Check size={15} /> Up to 500 messages / room</li>
                     <li><Check size={15} /> Export messages (.txt)</li>
                     <li><Check size={15} /> UPI &amp; Global Cards</li>
                   </ul>
@@ -259,7 +259,7 @@ export default function LandingPage() {
                   <div className="price-plan">Pro Creator</div>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li>• Unlimited rooms</li>
-                    <li>• Up to 1,000 guests</li>
+                    <li>• Up to 1,000 messages / room</li>
                     <li>• Custom branding</li>
                   </ul>
                 </div>
@@ -273,7 +273,7 @@ export default function LandingPage() {
                 <div>
                   <div className="price-plan">Conference</div>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li>• Up to 2,500 guests</li>
+                    <li>• Up to 2,500 messages / room</li>
                     <li>• 48-hour room duration</li>
                     <li>• Live analytics dashboard</li>
                   </ul>

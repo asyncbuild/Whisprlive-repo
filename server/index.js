@@ -394,6 +394,10 @@ app.get("/api/rooms/history", verifyToken, async (req, res) => {
 app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
   const { roomId } = req.params
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { plan: true, roomPasses: true }
+    })
     const room = await prisma.room.findFirst({
       where: { roomCode: roomId, hostId: req.user.id },
       include: {
@@ -404,6 +408,17 @@ app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
     })
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
+    }
+    const limits = PLAN_LIMITS[user?.plan || "SOLO"]
+    const now = new Date();
+    const isExpired = room.expiresAt && now > new Date(room.expiresAt);
+    const hasPass = (user?.roomPasses || 0) > 0 || room.isPassUsed;
+
+    if (isExpired && !limits.canExport && !hasPass) {
+      return res.status(403).json({
+        error: "Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass.",
+        isPremiumLocked: true
+      });
     }
     res.json({ messages: room.messages })
   } catch (err) {
@@ -436,7 +451,7 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { plan: true }
+      select: { plan: true, roomPasses: true }
     })
     const room = await prisma.room.findFirst({
       where: { roomCode: roomId, hostId: req.user.id },
@@ -450,7 +465,9 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
     const limits = PLAN_LIMITS[user?.plan || "SOLO"]
-    if (!limits.canExport && !room.isPassUsed) {
+    const hasPass = (user?.roomPasses || 0) > 0 || room.isPassUsed;
+
+    if (!limits.canExport && !hasPass) {
       return res.status(403).json({
         error: "Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass."
       });
@@ -520,11 +537,12 @@ app.post("/api/rooms/public/:roomId/messages", async (req, res) => {
     if (!room) {
       return res.status(404).json({ message: "Room not found" })
     }
-    //check plan limit
+    // Check plan message limit
     const activeTier = room.isPassUsed ? 'ROOM_PASS' : (room.host.plan || 'SOLO');
     const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
-    if (room._count.messages >= limits.maxGuests) {
-      return res.status(403).json({ message: "This session has reached its participant capacity." })
+    const maxMessagesAllowed = limits.maxMessages || limits.maxGuests || 25;
+    if (room._count.messages >= maxMessagesAllowed) {
+      return res.status(403).json({ message: `This session has reached its capacity limit of ${maxMessagesAllowed} messages.` })
     }
     const now = new Date()
     if (now < new Date(room.startsAt)) {

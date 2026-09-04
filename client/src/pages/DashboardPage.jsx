@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, ThumbsUp, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle
+  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -69,6 +69,11 @@ export default function DashboardPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [selectedPastSession, setSelectedPastSession] = useState(null);
+  const [pastMessages, setPastMessages] = useState([]);
+  const [loadingMessagesCode, setLoadingMessagesCode] = useState(null);
+  const [pastModalQuery, setPastModalQuery] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
   const [upgradingPlan, setUpgradingPlan] = useState(null);
 
@@ -395,6 +400,45 @@ export default function DashboardPage() {
       }
     } finally {
       setExportingCode(null);
+    }
+  };
+
+  const openShowMessagesModal = async (sessionItem) => {
+    const code = sessionItem.roomCode || sessionItem.id;
+    const hasRoomPass = (currentUser?.roomPasses || 0) > 0;
+    const isUnlocked = !isSolo || sessionItem.isPassUsed || hasRoomPass;
+
+    if (!isUnlocked) {
+      toast.info("Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
+      openUpgradeModal();
+      return;
+    }
+
+    setLoadingMessagesCode(code);
+    try {
+      const res = await API.get(`/api/rooms/${code}/messages`);
+      const rawMsgs = res.data.messages || [];
+      const formatted = rawMsgs.map((m) => ({
+        id: m.id,
+        guest: m.guestName || "Anonymous Guest",
+        text: m.content,
+        votes: m.upvotes || 0,
+        answered: m.isAnswered || m.status === "answered",
+        ts: new Date(m.createdAt).getTime()
+      }));
+      setPastMessages(formatted);
+      setSelectedPastSession(sessionItem);
+      setPastModalQuery("");
+      setShowMessagesModal(true);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        toast.info("Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
+        openUpgradeModal();
+      } else {
+        toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to load session messages");
+      }
+    } finally {
+      setLoadingMessagesCode(null);
     }
   };
 
@@ -888,9 +932,6 @@ export default function DashboardPage() {
                           <button className={`chip ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All</button>
                           <button className={`chip ${filter === "unanswered" ? "active" : ""}`} onClick={() => setFilter("unanswered")}>Unanswered</button>
                           <button className={`chip ${filter === "answered" ? "active" : ""}`} onClick={() => setFilter("answered")}>Answered</button>
-                          <span className="chip-divider" />
-                          <button className={`chip ${sortMode === "new" ? "active" : ""}`} onClick={() => setSortMode("new")}>Newest</button>
-                          <button className={`chip ${sortMode === "top" ? "active" : ""}`} onClick={() => setSortMode("top")}><ThumbsUp size={11} /> Top</button>
                         </div>
                       </div>
 
@@ -902,7 +943,6 @@ export default function DashboardPage() {
                             <div className="feed-empty-inline">No questions match that search or filter.</div>
                           )}
                           {visibleMessages.map((m) => {
-                            const isVoted = votedIds.includes(m.id);
                             return (
                               <div className={`bubble ${m.answered ? "answered" : ""}`} key={m.id}>
                                 <div className="bubble-top">
@@ -914,13 +954,6 @@ export default function DashboardPage() {
                                     {m.answered && <span className="bubble-tag"><CheckCircle2 size={11} /> Answered</span>}
                                   </div>
                                   <div className="bubble-actions">
-                                    <button
-                                      className={`vote-btn ${isVoted ? "voted" : ""}`}
-                                      onClick={() => upvote(m.id)}
-                                      title={isVoted ? "Click to remove your upvote" : "Upvote question"}
-                                    >
-                                      <ThumbsUp size={12} fill={isVoted ? "currentColor" : "none"} /> {m.votes || 0}
-                                    </button>
                                     <button
                                       className={`answer-btn ${m.answered ? "done" : ""}`}
                                       onClick={() => toggleAnswered(m.id)}
@@ -978,22 +1011,47 @@ export default function DashboardPage() {
                       <div className="stat"><span className="stat-num">{responseCount}</span><span className="stat-label">Responses</span></div>
                       <div className="stat"><span className="stat-num">{durMinutes}m</span><span className="stat-label">Duration</span></div>
                     </div>
-                    <div className="past-card-actions">
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => exportSession(code)}
-                        disabled={isExporting}
-                        title={isSolo ? "Unlock export with Host plan" : "Export session messages"}
-                      >
-                        {isExporting ? (
-                          <Loader2 size={13} className="spin" />
-                        ) : isSolo ? (
-                          <Lock size={13} style={{ color: "var(--accent)" }} />
-                        ) : (
-                          <Download size={13} />
-                        )}
-                        {isExporting ? "Exporting..." : "Export"}
-                      </button>
+                    <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {(() => {
+                        const hasRoomPass = (currentUser?.roomPasses || 0) > 0;
+                        const isUnlocked = !isSolo || p.isPassUsed || hasRoomPass;
+
+                        return (
+                          <>
+                            <button
+                              className="btn btn-soft btn-sm"
+                              onClick={() => openShowMessagesModal(p)}
+                              disabled={loadingMessagesCode === code}
+                              title={!isUnlocked ? "Unlock responses with Host plan or Room Pass" : "View session messages"}
+                            >
+                              {loadingMessagesCode === code ? (
+                                <Loader2 size={13} className="spin" />
+                              ) : !isUnlocked ? (
+                                <Lock size={13} style={{ color: "var(--accent)" }} />
+                              ) : (
+                                <Eye size={13} />
+                              )}
+                              {loadingMessagesCode === code ? "Loading..." : "Show Messages"}
+                            </button>
+
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => exportSession(code)}
+                              disabled={isExporting}
+                              title={!isUnlocked ? "Unlock export with Host plan or Room Pass" : "Export session messages"}
+                            >
+                              {isExporting ? (
+                                <Loader2 size={13} className="spin" />
+                              ) : !isUnlocked ? (
+                                <Lock size={13} style={{ color: "var(--accent)" }} />
+                              ) : (
+                                <Download size={13} />
+                              )}
+                              {isExporting ? "Exporting..." : "Export"}
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -1062,7 +1120,7 @@ export default function DashboardPage() {
                     <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--accent)" }}>₹399<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /pass</span></div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>1 room for 24 hours</li>
-                      <li>Up to 500 guests</li>
+                      <li>Up to 500 messages / room</li>
                       <li>Export responses</li>
                       <li>UPI &amp; Global Cards</li>
                     </ul>
@@ -1083,7 +1141,7 @@ export default function DashboardPage() {
                     <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Pro Creator</div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
-                      <li>Up to 1,000 guests</li>
+                      <li>Up to 1,000 messages / room</li>
                       <li>Custom branding</li>
                     </ul>
                   </div>
@@ -1097,7 +1155,7 @@ export default function DashboardPage() {
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Conference</div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>Up to 2,500 guests</li>
+                      <li>Up to 2,500 messages / room</li>
                       <li>48-hour room duration</li>
                       <li>Live analytics dashboard</li>
                     </ul>
@@ -1178,6 +1236,91 @@ export default function DashboardPage() {
                 }}
               >
                 Proceed anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Show Messages Modal Window */}
+      {showMessagesModal && selectedPastSession && (
+        <div className="modal-overlay" onClick={() => setShowMessagesModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, width: "90%" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 14 }}>
+              <div>
+                <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700 }}>
+                  {selectedPastSession.title || "Session Messages"}
+                </h3>
+                <div className="mono" style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 4 }}>
+                  Room Code: <strong style={{ color: "var(--accent)" }}>{selectedPastSession.roomCode || selectedPastSession.id}</strong> · {pastMessages.length} responses
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => exportSession(selectedPastSession.roomCode || selectedPastSession.id)}
+                  disabled={exportingCode === (selectedPastSession.roomCode || selectedPastSession.id)}
+                >
+                  {exportingCode === (selectedPastSession.roomCode || selectedPastSession.id) ? (
+                    <Loader2 size={13} className="spin" />
+                  ) : (
+                    <Download size={13} />
+                  )}
+                  Export
+                </button>
+                <button className="modal-close-btn" onClick={() => setShowMessagesModal(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div className="feed-search" style={{ marginBottom: 14 }}>
+                <Search size={14} />
+                <input
+                  placeholder="Search questions in this session..."
+                  value={pastModalQuery}
+                  onChange={(e) => setPastModalQuery(e.target.value)}
+                />
+              </div>
+
+              <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingRight: 4 }}>
+                {pastMessages.filter((m) =>
+                  pastModalQuery.trim()
+                    ? (m.text + " " + m.guest).toLowerCase().includes(pastModalQuery.trim().toLowerCase())
+                    : true
+                ).length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-faint)", fontSize: 14 }}>
+                    {pastMessages.length === 0 ? "No questions were submitted during this session." : "No questions match your search."}
+                  </div>
+                ) : (
+                  pastMessages
+                    .filter((m) =>
+                      pastModalQuery.trim()
+                        ? (m.text + " " + m.guest).toLowerCase().includes(pastModalQuery.trim().toLowerCase())
+                        : true
+                    )
+                    .map((m) => (
+                      <div className={`bubble ${m.answered ? "answered" : ""}`} key={m.id} style={{ background: "var(--surface-2)" }}>
+                        <div className="bubble-top">
+                          <div className="bubble-meta">
+                            <span className="bubble-avatar">
+                              {m.guest?.charAt(0)?.toUpperCase() || "G"}
+                            </span>
+                            <span>{m.guest}</span>
+                            {m.answered && <span className="bubble-tag"><CheckCircle2 size={11} /> Answered</span>}
+                          </div>
+                        </div>
+                        <div className="bubble-text">{m.text}</div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: 18, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowMessagesModal(false)}>
+                Close
               </button>
             </div>
           </div>
