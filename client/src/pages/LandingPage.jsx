@@ -97,7 +97,7 @@ export default function LandingPage() {
           contact: "9876543210",
         },
         theme: {
-          color: "#4f46e5",
+          color: "#2563eb",
         },
       };
 

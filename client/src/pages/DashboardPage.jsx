@@ -136,7 +136,7 @@ export default function DashboardPage() {
           contact: "9876543210",
         },
         theme: {
-          color: "#4f46e5",
+          color: "#2563eb",
         },
       };
 
@@ -208,7 +208,7 @@ export default function DashboardPage() {
               if (res.data?.messages) {
                 const msgs = res.data.messages.map((m) => ({
                   id: m.id,
-                  guest: m.guestName || "Anonymous Guest",
+                  guest: m.guestName || "Anonymous",
                   text: m.content,
                   votes: m.upvotes || 0,
                   answered: m.isAnswered || m.status === "answered",
@@ -306,7 +306,7 @@ export default function DashboardPage() {
     socket.on("new_message", (newMsg) => {
       const formatted = {
         id: newMsg.id || Math.random().toString(),
-        guest: newMsg.guestName || "Anonymous Guest",
+        guest: newMsg.guestName || "Anonymous",
         text: newMsg.content || newMsg.text,
         votes: newMsg.upvotes || 0,
         answered: newMsg.status === "answered" || newMsg.isAnswered === true,
@@ -422,7 +422,7 @@ export default function DashboardPage() {
       const rawMsgs = res.data.messages || [];
       const formatted = rawMsgs.map((m) => ({
         id: m.id,
-        guest: m.guestName || "Anonymous Guest",
+        guest: m.guestName || "Anonymous",
         text: m.content,
         votes: m.upvotes || 0,
         answered: m.isAnswered || m.status === "answered",

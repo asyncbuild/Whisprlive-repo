@@ -3,19 +3,19 @@
 :root {
   --bg: #FAFAFA;
   --surface: #FFFFFF;
-  --surface-2: #F2F2F0;
-  --border: #E5E5E9;
-  --text: #15161A;
-  --text-dim: #65667A;
-  --text-faint: #A0A1AC;
-  --accent: #333F9E;
-  --accent-dark: #242E7D;
-  --accent-soft: #EDEFFB;
+  --surface-2: #F1F5F9;
+  --border: #E2E8F0;
+  --text: #0F172A;
+  --text-dim: #475569;
+  --text-faint: #94A3B8;
+  --accent: #2563EB;
+  --accent-dark: #1D4ED8;
+  --accent-soft: #EFF6FF;
   --live: #FF5A36;
   --live-soft: #FFECE5;
-  --success: #1E9E5A;
-  --danger: #E53935;
-  --danger-soft: #FFECE5;
+  --success: #10B981;
+  --danger: #EF4444;
+  --danger-soft: #FEF2F2;
   --radius-lg: 18px;
   --radius-md: 12px;
   --radius-sm: 8px;
@@ -136,7 +136,7 @@ body {
 }
 
 .btn-soft:hover {
-  background: #E2E5F8;
+  background: #DBEAFE;
 }
 
 .btn-danger {
@@ -224,7 +224,7 @@ body {
 
 .brand-logo-img {
   object-fit: contain;
-  filter: drop-shadow(0 2px 6px rgba(99, 102, 241, 0.3));
+  filter: drop-shadow(0 3px 8px rgba(37, 99, 235, 0.35));
   transition: filter 0.2s ease;
 }
 
@@ -233,7 +233,7 @@ body {
 }
 
 .brand-container:hover .brand-logo-img {
-  filter: drop-shadow(0 4px 10px rgba(99, 102, 241, 0.5));
+  filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.55));
 }
 
 .brand-title {
@@ -251,7 +251,7 @@ body {
 
 .brand-accent {
   color: var(--accent);
-  background: linear-gradient(135deg, #4338CA 0%, #6366F1 50%, #8B5CF6 100%);
+  background: linear-gradient(135deg, #0066FF 0%, #4F46E5 50%, #8B5CF6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-left: 1px;
@@ -748,7 +748,7 @@ body {
 
 .price-card.featured {
   border-color: var(--accent);
-  box-shadow: 0 22px 50px -28px rgba(51, 63, 158, .45);
+  box-shadow: 0 22px 50px -28px rgba(37, 99, 235, 0.35);
   position: relative;
 }
 
@@ -1175,7 +1175,7 @@ body {
 .qr-box:hover {
   border-color: var(--accent);
   transform: scale(1.05);
-  box-shadow: 0 4px 12px -2px rgba(51, 63, 158, .2);
+  box-shadow: 0 4px 12px -2px rgba(37, 99, 235, 0.25);
 }
 
 .qr-box img {

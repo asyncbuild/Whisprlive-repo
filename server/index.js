@@ -544,7 +544,7 @@ app.post("/api/rooms/public/:roomId/messages", async (req, res) => {
     const demoMsg = {
       id: "demo-" + Date.now(),
       content: content.trim(),
-      guestName: "Anonymous Guest",
+      guestName: "Anonymous",
       createdAt: new Date().toISOString()
     };
     return res.status(201).json({
