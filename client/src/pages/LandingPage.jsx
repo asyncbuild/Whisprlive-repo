@@ -63,7 +63,7 @@ export default function LandingPage() {
         currency,
         name: "WhisprLive",
         description: "24-Hour Room Pass",
-        image: `${window.location.origin}/favicon.svg`,
+        image: `${window.location.origin}/Logo Bgless.png`,
         order_id: orderId,
         handler: async (response) => {
           try {
