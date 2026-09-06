@@ -19,6 +19,7 @@ function formatTargetTime(ts) {
 
 import { useToast } from "../context/ToastContext";
 import { getClientDeviceModel } from "../utils/deviceInfo";
+import { trackEvent } from "../utils/analytics";
 
 function WhatsAppIcon({ size = 15 }) {
   return (
@@ -194,6 +195,7 @@ export default function PublicAskPage() {
         content: text.trim(),
         clientDeviceModel: clientDeviceModel || undefined
       });
+      trackEvent("question_submitted", "PublicRoom", roomCode);
       setText("");
       setSent(true);
       setTimeout(() => setSent(false), 3000);
@@ -279,7 +281,7 @@ export default function PublicAskPage() {
           <p>Ask whatever is on your mind. Your identity stays completely anonymous.</p>
 
           {/* Dynamic timer badge based on room status */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
             <div className="timer-badge">
               <Clock size={14} />
               {isScheduled ? (
@@ -294,18 +296,22 @@ export default function PublicAskPage() {
               href={`https://wa.me/?text=${encodeURIComponent(`📢 Ask your questions live in *${roomInfo.title}* on WhisprLive:\n👉 ${window.location.href}`)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn btn-sm"
               style={{
                 background: "linear-gradient(135deg, #25D366 0%, #128C7E 100%)",
                 color: "#fff",
                 border: "none",
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 13,
+                height: 36,
+                padding: "0 16px",
                 boxShadow: "0 2px 8px rgba(37, 211, 102, 0.3)",
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 6,
-                borderRadius: 999
+                borderRadius: 999,
+                textDecoration: "none",
+                boxSizing: "border-box"
               }}
             >
               <WhatsAppIcon size={14} /> Share on WhatsApp

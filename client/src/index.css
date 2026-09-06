@@ -1731,14 +1731,16 @@ body {
 .timer-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  margin-top: 16px;
-  padding: 8px 16px;
+  height: 36px;
+  padding: 0 16px;
   border-radius: 999px;
   background: var(--surface-2);
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
+  box-sizing: border-box;
 }
 
 .ask-box {
