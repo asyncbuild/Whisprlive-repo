@@ -7,6 +7,7 @@ import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 import { nanoid } from "nanoid"
 import { verifyToken } from "./middleware/middleware.js"
+import { authLimiter, apiLimiter, roomCreationLimiter, messageSubmissionLimiter } from "./middleware/rateLimiter.js"
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { initializeSockets } from './sockets/socketHandler.js';
@@ -25,12 +26,16 @@ const razorpay = new Razorpay({
 const app = express()
 const httpServer = createServer(app)
 
+// Rate Limiting & Security Middlewares
 app.use(cors())
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   next();
 });
 app.use(express.json())
+
+// Apply general API rate limiter to all /api/ routes
+app.use("/api/", apiLimiter);
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "WhisprLive API Server is running" });
@@ -48,7 +53,7 @@ initializeSockets(io, prisma) // Pass prisma to socket initialization
 //Authentication Routes
 
 // Signup Route
-app.post("/signup", async (req, res) => {
+app.post("/signup", authLimiter, async (req, res) => {
   const { username, email, password } = req.body
   if (!username || !email || !password) {
     return res.status(400).json({ message: "All fields are required" })
@@ -81,7 +86,7 @@ app.post("/signup", async (req, res) => {
 })
 
 // Signin Route
-app.post("/signin", async (req, res) => {
+app.post("/signin", authLimiter, async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) {
     return res.status(400).json({ message: "All fields are required" })
@@ -114,7 +119,7 @@ app.post("/signin", async (req, res) => {
 })
 
 //Google Signin/signup route
-app.post("/api/auth/google", async (req, res) => {
+app.post("/api/auth/google", authLimiter, async (req, res) => {
   const { credential } = req.body;
   if (!credential) {
     return res.status(400).json({
@@ -260,7 +265,7 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
 
 // Room & Session Routes
 // Create new session Route
-app.post("/api/rooms", verifyToken, async (req, res) => {
+app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
   const { title, durationMinutes, startsAt, usePass } = req.body;
   const parsedDuration = parseInt(durationMinutes, 10);
 
@@ -531,7 +536,7 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
 })
 
 //Send message to a specific room 
-app.post("/api/rooms/public/:roomId/messages", async (req, res) => {
+app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (req, res) => {
   const { roomId } = req.params
   const { content } = req.body
   if (!content || content.trim() === "") {
