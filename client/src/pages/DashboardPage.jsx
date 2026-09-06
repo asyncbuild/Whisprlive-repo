@@ -726,7 +726,7 @@ export default function DashboardPage() {
 
             <div className="user-pill">
               <span className="avatar"><User size={13} /></span>
-              {username}
+              <span className="username-text">{username}</span>
             </div>
 
             <button className="icon-btn" onClick={() => handleProtectedNavigation(handleLogout)} title="Sign out">
