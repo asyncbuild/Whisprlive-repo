@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye
+  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -35,6 +35,20 @@ function formatFullDateTime(ts) {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function WhatsAppIcon({ size = 16 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}
+    >
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662a11.87 11.87 0 005.705 1.454h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+    </svg>
+  );
 }
 
 export default function DashboardPage() {
@@ -70,6 +84,10 @@ export default function DashboardPage() {
   // Modal states
   const [showQrModal, setShowQrModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistPlan, setWaitlistPlan] = useState("HOST");
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [selectedPastSession, setSelectedPastSession] = useState(null);
@@ -79,11 +97,39 @@ export default function DashboardPage() {
   const [pendingAction, setPendingAction] = useState(null);
   const [upgradingPlan, setUpgradingPlan] = useState(null);
 
-  // Upvoted messages tracking (prevents duplicate votes)
+  const openWaitlist = (planName) => {
+    setWaitlistPlan(planName);
+    setWaitlistEmail(currentUser?.email || "");
+    setShowUpgradeModal(false);
+    setShowWaitlistModal(true);
+  };
+
+  const handleWaitlistSubmit = async (e) => {
+    e?.preventDefault();
+    const cleanEmail = waitlistEmail.trim();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    setSubmittingWaitlist(true);
+    try {
+      const res = await API.post("/api/waitlist", { email: cleanEmail, plan: waitlistPlan });
+      toast.success(res.data?.message || "🎉 You've been added to the waitlist!");
+      setShowWaitlistModal(false);
+      setWaitlistEmail("");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to join waitlist. Please try again.");
+    } finally {
+      setSubmittingWaitlist(false);
+    }
+  };
+
   const openUpgradeModal = () => {
     setUpgradingPlan(null);
     setShowUpgradeModal(true);
   };
+
 
   const handleUpgradeCheckout = async (planType = "ROOM_PASS") => {
     const currentToken = localStorage.getItem('whisprlive_token');
@@ -321,6 +367,25 @@ export default function DashboardPage() {
 
     socket.on("message_answered", ({ messageId, isAnswered }) => {
       setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, answered: isAnswered } : m)));
+    });
+
+    socket.on("session_ended", (data) => {
+      setSecondsLeft(0);
+      setSession((prev) => {
+        if (!prev) return null;
+        const updated = {
+          ...prev,
+          isEnded: true,
+          endReason: data?.reason || "This room has reached its capacity limit or has ended."
+        };
+        localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+        return updated;
+      });
+      if (data?.reason) {
+        toast.info(data.reason);
+      } else {
+        toast.info("This session has ended.");
+      }
     });
 
     return () => socket.disconnect();
@@ -701,9 +766,9 @@ export default function DashboardPage() {
             <div className="new-session-card">
               <div className="ns-row">
                 <div className="ns-title-field">
-                  <label>Session title</label>
+                  <label>Event Name / Session Title</label>
                   <input
-                    placeholder="e.g. Product roadmap Q&A"
+                    placeholder="e.g. Tech Conference Keynote Q&A"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                   />
@@ -752,10 +817,28 @@ export default function DashboardPage() {
                   <button className={`chip ${startMode === "now" ? "active" : ""}`} onClick={() => setStartMode("now")}>
                     Start immediately
                   </button>
-                  <button className={`chip ${startMode === "schedule" ? "active" : ""}`} onClick={() => setStartMode("schedule")}>
+                  <button
+                    className={`chip ${startMode === "schedule" ? "active" : ""}`}
+                    onClick={() => {
+                      const hasPasses = (currentUser?.roomPasses || 0) > 0;
+                      const isSoloUser = (!currentUser?.plan || currentUser?.plan === "SOLO") && !hasPasses;
+                      if (isSoloUser) {
+                        toast.info("Scheduled starts require a Room Pass. Upgrade to schedule sessions in advance.");
+                        openUpgradeModal();
+                        return;
+                      }
+                      setStartMode("schedule");
+                    }}
+                  >
                     Schedule for specific time
+                    {((!currentUser?.plan || currentUser?.plan === "SOLO") && (currentUser?.roomPasses || 0) <= 0) && (
+                      <span style={{ fontSize: 10, background: "var(--accent-soft)", color: "var(--accent)", padding: "1px 6px", borderRadius: 999, marginLeft: 6 }}>
+                        Pass Required
+                      </span>
+                    )}
                   </button>
                 </div>
+
                 {startMode === "schedule" && (
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
                     <input
@@ -877,6 +960,24 @@ export default function DashboardPage() {
                       <span className="url">{session.link}</span>
                     </div>
                     <div className="link-box-actions">
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(`📢 Join our live Q&A session: *${session.title || "Live Q&A"}*\n\nAsk your questions anonymously here:\n👉 http://${session.link}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm"
+                        style={{
+                          background: "linear-gradient(135deg, #25D366 0%, #128C7E 100%)",
+                          color: "#fff",
+                          border: "none",
+                          fontWeight: 600,
+                          boxShadow: "0 3px 10px rgba(37, 211, 102, 0.3)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 7
+                        }}
+                      >
+                        <WhatsAppIcon size={16} /> WhatsApp Share
+                      </a>
                       <button className="btn btn-soft btn-sm" onClick={() => setShowQrModal(true)}>
                         <QrCode size={14} /> Enlarge QR
                       </button>
@@ -884,7 +985,31 @@ export default function DashboardPage() {
                         {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied Link" : "Copy Link"}
                       </button>
                     </div>
+
                   </div>
+
+                  {isSessionCompleted && (
+                    <div style={{
+                      marginTop: 16,
+                      padding: "14px 18px",
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-md)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      fontSize: 13.5,
+                      color: "var(--text)"
+                    }}>
+                      <AlertTriangle size={18} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                      <div>
+                        <strong style={{ color: "var(--text)" }}>Session Ended:</strong>{" "}
+                        <span style={{ color: "var(--text-dim)" }}>
+                          {session.endReason || "This room has reached its capacity limit or timer has ended."}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="session-panel">
@@ -1086,7 +1211,26 @@ export default function DashboardPage() {
               <div className="link-box" style={{ width: "100%", marginTop: 0, justifyContent: "center" }}>
                 <span className="url">{session.link}</span>
               </div>
-              <div className="modal-actions" style={{ justifyContent: "center", marginTop: 16 }}>
+              <div className="modal-actions" style={{ justifyContent: "center", marginTop: 16, gap: 10, flexWrap: "wrap" }}>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`📢 Join our live Q&A session: *${session.title || "Live Q&A"}*\n\nAsk your questions anonymously here:\n👉 http://${session.link}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn"
+                  style={{
+                    background: "linear-gradient(135deg, #25D366 0%, #128C7E 100%)",
+                    color: "#fff",
+                    border: "none",
+                    fontWeight: 600,
+                    fontSize: 13.5,
+                    boxShadow: "0 3px 10px rgba(37, 211, 102, 0.3)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7
+                  }}
+                >
+                  <WhatsAppIcon size={17} /> Share on WhatsApp
+                </a>
                 <button className="btn btn-primary" onClick={copyLink}>
                   {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied Link" : "Copy Link"}
                 </button>
@@ -1102,7 +1246,7 @@ export default function DashboardPage() {
       {/* Upgrade Plan Modal */}
       {showUpgradeModal && (
         <div className="modal-overlay" onClick={() => setShowUpgradeModal(false)}>
-          <div className="modal-content" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3><Sparkles size={18} style={{ color: "var(--accent)" }} /> Upgrade Your Account</h3>
               <button className="modal-close-btn" onClick={() => setShowUpgradeModal(false)}>
@@ -1113,7 +1257,7 @@ export default function DashboardPage() {
               <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 20 }}>
                 Unlock longer room timers, higher participant limits, and message exports.
               </p>
-              <div className="upgrade-modal-grid">
+              <div className="upgrade-modal-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
                 {/* 24h Room Pass */}
                 <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>
@@ -1123,13 +1267,14 @@ export default function DashboardPage() {
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>1 room for 24 hours</li>
                       <li>Up to 500 messages / room</li>
+                      <li>Scheduled start supported</li>
+                      <li>30 days history retention</li>
                       <li>Export responses</li>
-                      <li>UPI &amp; Global Cards</li>
                     </ul>
                   </div>
                   <button
                     className="btn btn-primary btn-block"
-                    style={{ marginTop: 10, fontSize: 13 }}
+                    style={{ marginTop: 14, fontSize: 13 }}
                     disabled={upgradingPlan === "ROOM_PASS"}
                     onClick={() => handleUpgradeCheckout("ROOM_PASS")}
                   >
@@ -1137,40 +1282,117 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-                {/* Pro Creator (Coming Soon) */}
-                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: 0.75 }}>
+                {/* Host Plan (Coming Soon) */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Pro Creator</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>Host</div>
+                      <span style={{ fontSize: 10, fontWeight: 700, background: "var(--surface-2)", color: "var(--text-dim)", padding: "2px 6px", borderRadius: 999 }}>Soon</span>
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 700, margin: "6px 0", color: "var(--text)" }}>
+                      {geoCurrency.isIndia ? "₹349/mo" : "$9/mo"}
+                    </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
                       <li>Up to 1,000 messages / room</li>
-                      <li>Custom branding</li>
+                      <li>60-min room timers</li>
+                      <li>Scheduled start</li>
+                      <li>90 days history retention</li>
                     </ul>
                   </div>
-                  <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--text-faint)", padding: "8px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: 10 }}>
-                    Coming Soon
-                  </div>
+                  <button
+                    className="btn btn-soft btn-block"
+                    style={{ marginTop: 14, fontSize: 12.5 }}
+                    onClick={() => openWaitlist("HOST")}
+                  >
+                    <Bell size={13} /> Notify Me
+                  </button>
                 </div>
 
-                {/* Conference (Coming Soon) */}
-                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: 0.75 }}>
+                {/* Studio Plan (Coming Soon) */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-dim)" }}>Conference</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>Studio</div>
+                      <span style={{ fontSize: 10, fontWeight: 700, background: "var(--surface-2)", color: "var(--text-dim)", padding: "2px 6px", borderRadius: 999 }}>Soon</span>
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 700, margin: "6px 0", color: "var(--text)" }}>
+                      {geoCurrency.isIndia ? "₹799/mo" : "$19/mo"}
+                    </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
+                      <li>Unlimited rooms</li>
                       <li>Up to 2,500 messages / room</li>
-                      <li>48-hour room duration</li>
-                      <li>Live analytics dashboard</li>
+                      <li>120-min room timers</li>
+                      <li>1 year history retention</li>
+                      <li>Export (.txt &amp; CSV)</li>
+                      <li>Priority email support</li>
                     </ul>
                   </div>
-                  <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--text-faint)", padding: "8px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: 10 }}>
-                    Coming Soon
-                  </div>
+                  <button
+                    className="btn btn-soft btn-block"
+                    style={{ marginTop: 14, fontSize: 12.5 }}
+                    onClick={() => openWaitlist("STUDIO")}
+                  >
+                    <Bell size={13} /> Notify Me
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Plan Waitlist Modal Popup */}
+      {showWaitlistModal && (
+        <div className="modal-overlay" onClick={() => setShowWaitlistModal(false)}>
+          <div className="modal-content" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3><Bell size={18} style={{ color: "var(--accent)" }} /> Join {waitlistPlan === "STUDIO" ? "Studio" : "Host"} Plan Waitlist</h3>
+              <button className="modal-close-btn" onClick={() => setShowWaitlistModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.5, margin: 0 }}>
+                The <strong>{waitlistPlan === "STUDIO" ? "Studio ($19/mo · ₹799/mo)" : "Host ($9/mo · ₹349/mo)"}</strong> plan will be launching soon. Enter your email below to receive an early launch invitation!
+              </p>
+
+              <form onSubmit={handleWaitlistSubmit} style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", display: "block", marginBottom: 6 }}>
+                    Your Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="name@example.com"
+                    value={waitlistEmail}
+                    onChange={(e) => setWaitlistEmail(e.target.value)}
+                    required
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface-2)",
+                      color: "var(--text)",
+                      fontSize: 14
+                    }}
+                  />
+                </div>
+                <div className="modal-actions" style={{ marginTop: 8 }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowWaitlistModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={submittingWaitlist}>
+                    {submittingWaitlist ? <><Loader2 size={13} className="spin" /> Joining...</> : <><Bell size={13} /> Join Waitlist</>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Active Session Leave Warning Modal */}
       {showLeaveModal && (

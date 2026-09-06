@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X
+  ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X, Bell, Loader2, Sparkles
 } from "lucide-react";
 import API from "../api/axios";
 import Brand from "../components/Brand";
@@ -22,7 +22,52 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [joinCode, setJoinCode] = useState("");
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistPlan, setWaitlistPlan] = useState("HOST");
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
+  const [sessionStats, setSessionStats] = useState({ totalSessions: 0, formattedTotal: "..." });
   const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null), liveMock: useRef(null) };
+
+  React.useEffect(() => {
+    API.get("/api/stats")
+      .then((res) => {
+        if (res.data?.formattedTotal !== undefined) {
+          setSessionStats(res.data);
+        }
+      })
+      .catch(() => {
+        setSessionStats({ totalSessions: 0, formattedTotal: "0" });
+      });
+  }, []);
+
+  const openWaitlist = (planName) => {
+    setWaitlistPlan(planName);
+    setWaitlistEmail(user?.email || "");
+    setShowWaitlistModal(true);
+  };
+
+  const handleWaitlistSubmit = async (e) => {
+    e?.preventDefault();
+    const cleanEmail = waitlistEmail.trim();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    setSubmittingWaitlist(true);
+    try {
+      const res = await API.post("/api/waitlist", { email: cleanEmail, plan: waitlistPlan });
+      toast.success(res.data?.message || "🎉 You've been added to the waitlist!");
+      setShowWaitlistModal(false);
+      setWaitlistEmail("");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to join waitlist. Please try again.");
+    } finally {
+      setSubmittingWaitlist(false);
+    }
+  };
+
 
   const handleJoinRoom = (e) => {
     e?.preventDefault();
@@ -193,7 +238,7 @@ export default function LandingPage() {
                 <form onSubmit={handleJoinRoom} style={{ display: "flex", gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="Enter Room Code (e.g. 1-97BVwr)"
+                    placeholder="Enter Room Code (e.g. 8tVmSOa1)"
                     value={joinCode}
                     onChange={(e) => setJoinCode(e.target.value)}
                     style={{
@@ -223,7 +268,7 @@ export default function LandingPage() {
                   <span className="hero-meta-label">to join, no signup</span>
                 </div>
                 <div className="hero-meta-item">
-                  <span className="hero-meta-num mono">12k+</span>
+                  <span className="hero-meta-num mono">{sessionStats.formattedTotal}</span>
                   <span className="hero-meta-label">sessions hosted</span>
                 </div>
                 <div className="hero-meta-item">
@@ -275,17 +320,19 @@ export default function LandingPage() {
               <span className="section-eyebrow">Pricing</span>
               <h2>Start free. Upgrade when the rooms get bigger.</h2>
             </div>
-            <div className="pricing-grid">
+            <div className="pricing-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
               {/* Solo Free */}
               <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
-                  <div className="price-plan">Solo Free</div>
+                  <div className="price-plan">Solo (Free)</div>
                   <div className="price-amount">{geoCurrency.symbol}0</div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 3 rooms / month</li>
-                    <li><Check size={15} /> Up to 25 messages / room</li>
+                    <li><Check size={15} /> Up to 15 messages / room</li>
                     <li><Check size={15} /> 15-min timers</li>
+                    <li><Check size={15} /> Start now only</li>
+                    <li><Check size={15} /> 7 days history retention</li>
                   </ul>
                 </div>
                 <button
@@ -306,10 +353,11 @@ export default function LandingPage() {
                   <div className="price-amount">{geoCurrency.formatted}</div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>One-time pass per event</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> 1 dedicated room (24 hours)</li>
+                    <li><Check size={15} /> 1 room for 24 hours</li>
                     <li><Check size={15} /> Up to 500 messages / room</li>
-                    <li><Check size={15} /> Export messages (.txt)</li>
-                    <li><Check size={15} /> UPI &amp; Global Cards</li>
+                    <li><Check size={15} /> Scheduled start supported</li>
+                    <li><Check size={15} /> 30 days history retention</li>
+                    <li><Check size={15} /> Export transcript (.txt)</li>
                   </ul>
                 </div>
                 <button
@@ -322,39 +370,67 @@ export default function LandingPage() {
                 </button>
               </div>
 
-              {/* Pro Creator (Coming Soon) */}
-              <div className="price-card" style={{ opacity: 0.75, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              {/* Host Plan (Coming Soon) */}
+              <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
-                  <div className="price-plan">Pro Creator</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div className="price-plan">Host</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: "var(--surface-2)", color: "var(--text-dim)", padding: "2px 8px", borderRadius: 999 }}>Soon</span>
+                  </div>
+                  <div className="price-amount" style={{ fontSize: 22, marginTop: 6, fontWeight: 800 }}>
+                    {geoCurrency.isIndia ? "₹349/mo" : "$9/mo"}
+                  </div>
+                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>For active hosts &amp; speakers</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li>• Unlimited rooms</li>
-                    <li>• Up to 1,000 messages / room</li>
-                    <li>• Custom branding</li>
+                    <li><Check size={15} /> Unlimited rooms</li>
+                    <li><Check size={15} /> Up to 1,000 messages / room</li>
+                    <li><Check size={15} /> 60-min room timers</li>
+                    <li><Check size={15} /> Scheduled start</li>
+                    <li><Check size={15} /> 90 days history retention</li>
                   </ul>
                 </div>
-                <div style={{ textAlign: "center", fontSize: "12px", fontWeight: 600, color: "var(--text-faint)", padding: "10px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: "24px" }}>
-                  Coming Soon
-                </div>
+                <button
+                  className="btn btn-soft btn-block"
+                  style={{ marginTop: "24px" }}
+                  onClick={() => openWaitlist("HOST")}
+                >
+                  <Bell size={14} /> Notify Me
+                </button>
               </div>
 
-              {/* Conference (Coming Soon) */}
-              <div className="price-card" style={{ opacity: 0.75, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              {/* Studio Plan (Coming Soon) */}
+              <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
-                  <div className="price-plan">Conference</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div className="price-plan">Studio</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: "var(--surface-2)", color: "var(--text-dim)", padding: "2px 8px", borderRadius: 999 }}>Soon</span>
+                  </div>
+                  <div className="price-amount" style={{ fontSize: 22, marginTop: 6, fontWeight: 800 }}>
+                    {geoCurrency.isIndia ? "₹799/mo" : "$19/mo"}
+                  </div>
+                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>For conferences &amp; studios</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li>• Up to 2,500 messages / room</li>
-                    <li>• 48-hour room duration</li>
-                    <li>• Live analytics dashboard</li>
+                    <li><Check size={15} /> Unlimited rooms</li>
+                    <li><Check size={15} /> Up to 2,500 messages / room</li>
+                    <li><Check size={15} /> 120-min room timers</li>
+                    <li><Check size={15} /> 1 year history retention</li>
+                    <li><Check size={15} /> Export (.txt &amp; CSV)</li>
+                    <li><Check size={15} /> Priority email support</li>
                   </ul>
                 </div>
-                <div style={{ textAlign: "center", fontSize: "12px", fontWeight: 600, color: "var(--text-faint)", padding: "10px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", marginTop: "24px" }}>
-                  Coming Soon
-                </div>
+                <button
+                  className="btn btn-soft btn-block"
+                  style={{ marginTop: "24px" }}
+                  onClick={() => openWaitlist("STUDIO")}
+                >
+                  <Bell size={14} /> Notify Me
+                </button>
               </div>
             </div>
           </div>
         </section>
       </div>
+
 
       <footer className="footer">
         <div className="container">
@@ -393,6 +469,57 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Plan Waitlist Modal Popup */}
+      {showWaitlistModal && (
+        <div className="modal-overlay" onClick={() => setShowWaitlistModal(false)}>
+          <div className="modal-content" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3><Bell size={18} style={{ color: "var(--accent)" }} /> Join {waitlistPlan === "STUDIO" ? "Studio" : "Host"} Plan Waitlist</h3>
+              <button className="modal-close-btn" onClick={() => setShowWaitlistModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.5, margin: 0 }}>
+                The <strong>{waitlistPlan === "STUDIO" ? "Studio ($19/mo · ₹799/mo)" : "Host ($9/mo · ₹349/mo)"}</strong> plan will be launching soon. Enter your email below to get early access and a launch invitation!
+              </p>
+
+              <form onSubmit={handleWaitlistSubmit} style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", display: "block", marginBottom: 6 }}>
+                    Your Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="name@example.com"
+                    value={waitlistEmail}
+                    onChange={(e) => setWaitlistEmail(e.target.value)}
+                    required
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface-2)",
+                      color: "var(--text)",
+                      fontSize: 14
+                    }}
+                  />
+                </div>
+                <div className="modal-actions" style={{ marginTop: 8 }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowWaitlistModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={submittingWaitlist}>
+                    {submittingWaitlist ? <><Loader2 size={13} className="spin" /> Joining...</> : <><Bell size={13} /> Join Waitlist</>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

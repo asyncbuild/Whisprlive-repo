@@ -12,6 +12,7 @@ import ContactPage from './pages/ContactPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RefundPage from './pages/RefundPage';
+import FeedbackWidget from './components/FeedbackWidget';
 
 // Protected Route Guard for the Host Dashboard
 function ProtectedRoute({ children }) {
@@ -64,6 +65,7 @@ export default function App() {
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            <FeedbackWidget />
           </Router>
         </div>
       </ToastProvider>

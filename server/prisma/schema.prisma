@@ -35,14 +35,39 @@ model Room {
 }
 
 model Message {
-  id        String   @id @default(uuid())
-  roomId    String
-  content   String   @db.VarChar(300)
-  status    String   @default("accepted") // "accepted", "rejected", "pinned"
-  upvotes   Int      @default(0)
-  isAnswered Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  roomId      String
+  content     String   @db.VarChar(300)
+  status      String   @default("accepted") // "accepted", "rejected", "pinned"
+  upvotes     Int      @default(0)
+  isAnswered  Boolean  @default(false)
+
+  // Tracking Metadata
+  device      String?  // e.g. "Mobile (Android 11)"
+  deviceModel String?  // e.g. "Realme RMX3085" or "Samsung SM-S918B"
+  location    String?  // e.g. "Mumbai, India"
+  ipAddress   String?  // e.g. "49.37.142.18"
+
+  createdAt   DateTime @default(now())
 
   // Relations
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
 }
+
+model PlanWaitlist {
+  id        String   @id @default(uuid())
+  email     String
+  plan      String   // "HOST", "STUDIO"
+  createdAt DateTime @default(now())
+
+  @@unique([email, plan])
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  category  String   @default("suggestion") // "suggestion", "bug", "general"
+  message   String
+  email     String?
+  createdAt DateTime @default(now())
+}
+

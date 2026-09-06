@@ -20,11 +20,13 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
+    "geoip-lite": "^2.0.3",
     "google-auth-library": "^11.0.2",
     "jsonwebtoken": "^9.0.3",
     "nanoid": "^6.0.1",
     "razorpay": "^2.9.8",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "ua-parser-js": "^2.0.10"
   },
   "devDependencies": {
     "prisma": "^7.10.0"

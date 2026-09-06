@@ -7,7 +7,8 @@ import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 import { nanoid } from "nanoid"
 import { verifyToken } from "./middleware/middleware.js"
-import { authLimiter, apiLimiter, roomCreationLimiter, messageSubmissionLimiter } from "./middleware/rateLimiter.js"
+import { authLimiter, roomCreationLimiter, messageSubmissionLimiter, paymentLimiter, feedbackLimiter } from "./middleware/rateLimiter.js"
+import { parseClientMetadata } from "./utils/deviceTracker.js"
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { initializeSockets } from './sockets/socketHandler.js';
@@ -26,6 +27,9 @@ const razorpay = new Razorpay({
 const app = express()
 const httpServer = createServer(app)
 
+// Enable trust proxy so Express reads real client IP behind proxies/Cloudflare/Render
+app.set("trust proxy", 1);
+
 // Rate Limiting & Security Middlewares
 app.use(cors())
 app.use((req, res, next) => {
@@ -34,12 +38,24 @@ app.use((req, res, next) => {
 });
 app.use(express.json())
 
-// Apply general API rate limiter to all /api/ routes
-app.use("/api/", apiLimiter);
-
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "WhisprLive API Server is running" });
 });
+
+// Public Platform Metrics (total rooms/sessions hosted)
+app.get("/api/stats", async (req, res) => {
+  try {
+    const totalSessions = await prisma.room.count();
+    let formattedTotal = totalSessions.toLocaleString();
+    if (totalSessions >= 1000) {
+      formattedTotal = (totalSessions / 1000).toFixed(1) + "k+";
+    }
+    res.json({ totalSessions, formattedTotal });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 const io = new Server(httpServer, {
   cors: {
@@ -194,7 +210,7 @@ app.get("/api/user/me", verifyToken, async (req, res) => {
 
 // Razorpay Payment Routes
 // 1. Create Razorpay Order
-app.post("/api/payments/razorpay/create-order", verifyToken, async (req, res) => {
+app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, async (req, res) => {
   const { planType, currency } = req.body;
   if (planType !== "ROOM_PASS") {
     return res.status(400).json({ message: "Invalid plan type" });
@@ -306,6 +322,14 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
     const activeTier = isUsingPass ? "ROOM_PASS" : userPlan;
     const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
 
+    // Scheduled start validation for Solo tier
+    const isScheduled = startsAt && (new Date(startsAt).getTime() - Date.now() > 60000);
+    if (isScheduled && !limits.canSchedule) {
+      return res.status(403).json({
+        error: "Scheduled starts are not supported on the Solo plan. Purchase a Room Pass to schedule sessions in advance.",
+      });
+    }
+
     // Monthly cap check for standard Free rooms
     if (!isUsingPass && limits.monthlySessions !== Infinity && standardCount >= limits.monthlySessions) {
       return res.status(403).json({
@@ -380,10 +404,16 @@ app.patch("/api/rooms/:roomId/end", verifyToken, async (req, res) => {
   }
 })
 
-// Get all sessions Route
+// Get all sessions Route (filtered by plan history retention days)
 app.get("/api/rooms/history", verifyToken, async (req, res) => {
   const userId = req.user.id
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true }
+    });
+    const userPlan = user?.plan || "SOLO";
+
     const rooms = await prisma.room.findMany({
       where: { hostId: userId },
       include: {
@@ -392,12 +422,81 @@ app.get("/api/rooms/history", verifyToken, async (req, res) => {
         }
       },
       orderBy: { createdAt: 'desc' }
-    })
-    res.json({ rooms })
+    });
+
+    const now = Date.now();
+    const filteredRooms = rooms.filter((room) => {
+      const activeTier = room.isPassUsed ? "ROOM_PASS" : userPlan;
+      const retentionDays = PLAN_LIMITS[activeTier]?.historyRetentionDays || 7;
+      const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
+      return (now - new Date(room.createdAt).getTime()) <= retentionMs;
+    });
+
+    res.json({ rooms: filteredRooms });
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: err.message });
   }
-})
+});
+
+// Join Plan Waitlist (for Host & Studio coming soon plans)
+app.post("/api/waitlist", async (req, res) => {
+  const { email, plan } = req.body;
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return res.status(400).json({ message: "A valid email address is required." });
+  }
+  const targetPlan = (plan || "HOST").toUpperCase();
+  if (targetPlan !== "HOST" && targetPlan !== "STUDIO") {
+    return res.status(400).json({ message: "Invalid plan selected." });
+  }
+
+  try {
+    const existing = await prisma.planWaitlist.findFirst({
+      where: { email: email.trim().toLowerCase(), plan: targetPlan }
+    });
+    if (existing) {
+      return res.json({ message: "You're already on the waitlist! We'll notify you as soon as this plan launches." });
+    }
+    await prisma.planWaitlist.create({
+      data: {
+        email: email.trim().toLowerCase(),
+        plan: targetPlan
+      }
+    });
+    res.status(201).json({ message: "🎉 Thank you! You've been added to the waitlist. We'll notify you as soon as this plan launches." });
+  } catch (err) {
+    console.error("Waitlist error:", err);
+    res.status(500).json({ message: "Failed to join waitlist. Please try again." });
+  }
+});
+
+// Submit User Feedback / Feature Suggestion (Rate Limited: max 5 submissions / 15 min / IP)
+app.post("/api/feedback", feedbackLimiter, async (req, res) => {
+  const { category, message, email } = req.body;
+  if (!message || typeof message !== "string" || message.trim() === "") {
+    return res.status(400).json({ message: "Please provide your feedback or suggestion message." });
+  }
+
+  const validCategories = ["suggestion", "bug", "general"];
+  const cleanCategory = validCategories.includes((category || "").toLowerCase())
+    ? category.toLowerCase()
+    : "suggestion";
+
+  try {
+    await prisma.feedback.create({
+      data: {
+        category: cleanCategory,
+        message: message.trim(),
+        email: email && typeof email === "string" && email.includes("@") ? email.trim() : null
+      }
+    });
+    res.status(201).json({ message: "🎉 Thank you for your feedback! We really appreciate your ideas." });
+  } catch (err) {
+    console.error("Feedback submission error:", err);
+    res.status(500).json({ message: "Failed to submit feedback. Please try again." });
+  }
+});
+
+
 
 // Get all msgs for a specific room 
 app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
@@ -572,10 +671,25 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     // Check plan message limit
     const activeTier = room.isPassUsed ? 'ROOM_PASS' : (room.host.plan || 'SOLO');
     const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
-    const maxMessagesAllowed = limits.maxMessages || limits.maxGuests || 25;
+    const maxMessagesAllowed = limits.maxMessages;
+    const tierName = activeTier === "SOLO" ? "free tier" : activeTier;
+
     if (room._count.messages >= maxMessagesAllowed) {
-      return res.status(403).json({ message: `This session has reached its capacity limit of ${maxMessagesAllowed} messages.` })
+      // Automatically end session in database
+      await prisma.room.update({
+        where: { id: room.id },
+        data: { isAccepting: false, expiresAt: new Date() }
+      });
+      io.to(roomId).emit("session_ended", {
+        roomCode: roomId,
+        reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
+      });
+      return res.status(403).json({
+        message: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`,
+        isExpired: true
+      });
     }
+
     const now = new Date()
     if (now < new Date(room.startsAt)) {
       return res.status(400).json({ message: "Session has not started yet" })
@@ -586,15 +700,36 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     if (!room.isAccepting) {
       return res.status(400).json({ message: "Session is not accepting messages" })
     }
+
+    const metadata = parseClientMetadata(req);
+
     const newMessage = await prisma.message.create({
       data: {
         roomId: room.id,
         content: content.trim(),
-        status: "accepted"
+        status: "accepted",
+        device: metadata.device,
+        deviceModel: metadata.deviceModel,
+        location: metadata.location,
+        ipAddress: metadata.ipAddress,
       }
     })
     console.log(`📨 Emitting new_message to room ${roomId}:`, newMessage);
     io.to(roomId).emit("new_message", newMessage)
+
+    // Automatically end session if this message hits the max capacity limit
+    if (room._count.messages + 1 >= maxMessagesAllowed) {
+      await prisma.room.update({
+        where: { id: room.id },
+        data: { isAccepting: false, expiresAt: new Date() }
+      });
+      console.log(`Room ${roomId} reached ${tierName} capacity (${maxMessagesAllowed} messages). Session automatically ended.`);
+      io.to(roomId).emit("session_ended", {
+        roomCode: roomId,
+        reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
+      });
+    }
+
     res.status(201).json({
       message: "Message sent successfully",
       newMessage,
