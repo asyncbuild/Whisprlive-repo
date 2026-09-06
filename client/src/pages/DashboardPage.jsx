@@ -1123,12 +1123,19 @@ export default function DashboardPage() {
                 const responseCount = p._count?.messages ?? p.responses ?? 0;
                 const durMinutes = p.durationMinutes ?? p.duration ?? 15;
                 const dateStr = formatFullDateTime(p.createdAt || p.date);
-                const isExporting = exportingCode === code;
+                const isLongTitle = titleText.length > 50;
 
                 return (
                   <div className="past-card" key={code}>
                     <div className="past-card-left">
-                      <span className="past-card-title">{titleText}</span>
+                      <div className="past-title-marquee-wrap">
+                        <span
+                          className={`past-card-title ${isLongTitle ? "is-marquee" : ""}`}
+                          title={titleText}
+                        >
+                          {isLongTitle ? `${titleText} \u00A0\u00A0\u2022\u00A0\u00A0 ${titleText}` : titleText}
+                        </span>
+                      </div>
                       <span className="past-card-date" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                         <Clock size={13} style={{ color: "var(--accent)" }} />
                         {dateStr} · Code: <strong style={{ color: "var(--text)" }}>{code}</strong>
@@ -1144,39 +1151,21 @@ export default function DashboardPage() {
                         const isUnlocked = !isSolo || p.isPassUsed || hasRoomPass;
 
                         return (
-                          <>
-                            <button
-                              className="btn btn-soft btn-sm"
-                              onClick={() => openShowMessagesModal(p)}
-                              disabled={loadingMessagesCode === code}
-                              title={!isUnlocked ? "Unlock responses with Host plan or Room Pass" : "View session messages"}
-                            >
-                              {loadingMessagesCode === code ? (
-                                <Loader2 size={13} className="spin" />
-                              ) : !isUnlocked ? (
-                                <Lock size={13} style={{ color: "var(--accent)" }} />
-                              ) : (
-                                <Eye size={13} />
-                              )}
-                              {loadingMessagesCode === code ? "Loading..." : "Show Messages"}
-                            </button>
-
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => exportSession(code)}
-                              disabled={isExporting}
-                              title={!isUnlocked ? "Unlock export with Host plan or Room Pass" : "Export session messages"}
-                            >
-                              {isExporting ? (
-                                <Loader2 size={13} className="spin" />
-                              ) : !isUnlocked ? (
-                                <Lock size={13} style={{ color: "var(--accent)" }} />
-                              ) : (
-                                <Download size={13} />
-                              )}
-                              {isExporting ? "Exporting..." : "Export"}
-                            </button>
-                          </>
+                          <button
+                            className="btn btn-soft btn-sm"
+                            onClick={() => openShowMessagesModal(p)}
+                            disabled={loadingMessagesCode === code}
+                            title={!isUnlocked ? "Unlock responses with Host plan or Room Pass" : "View session messages"}
+                          >
+                            {loadingMessagesCode === code ? (
+                              <Loader2 size={13} className="spin" />
+                            ) : !isUnlocked ? (
+                              <Lock size={13} style={{ color: "var(--accent)" }} />
+                            ) : (
+                              <Eye size={13} />
+                            )}
+                            {loadingMessagesCode === code ? "Loading..." : "Show Messages"}
+                          </button>
                         );
                       })()}
                     </div>

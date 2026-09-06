@@ -1384,35 +1384,80 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 18px 22px;
+  padding: 16px 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 20px;
 }
 
 .past-card-left {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 180px;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.past-title-marquee-wrap {
+  position: relative;
+  overflow: hidden;
+  max-width: 100%;
+  width: 100%;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
 }
 
 .past-card-title {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15.5px;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.past-card-title.is-marquee {
+  white-space: nowrap;
+  display: inline-block;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: marqueeTicker 25s linear infinite;
+  will-change: transform;
+}
+
+.past-title-marquee-wrap:hover .past-card-title.is-marquee {
+  animation-play-state: paused;
+}
+
+@keyframes marqueeTicker {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .past-card-date {
   font-size: 12.5px;
   color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .past-card-stats {
   display: flex;
   gap: 22px;
+  flex-shrink: 0;
 }
 
 .stat {
@@ -1436,7 +1481,10 @@ body {
 
 .past-card-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Modal styles */
@@ -1715,11 +1763,27 @@ body {
 .public-header {
   text-align: center;
   margin-bottom: 26px;
+  width: 100%;
+  max-width: 100%;
 }
 
-.public-header h1 {
+.public-title-box {
+  width: 100%;
+  max-width: 100%;
+  margin: 16px 0 8px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.public-title-box h1 {
   font-size: 24px;
-  margin-top: 14px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .public-header p {

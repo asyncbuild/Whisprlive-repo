@@ -277,7 +277,9 @@ export default function PublicAskPage() {
             <Radio size={13} />
             {isScheduled ? "Scheduled Session" : isActive ? "Live AMA Session" : "Session Closed"}
           </span>
-          <h1>{roomInfo.title}</h1>
+          <div className="public-title-box">
+            <h1>{roomInfo.title}</h1>
+          </div>
           <p>Ask whatever is on your mind. Your identity stays completely anonymous.</p>
 
           {/* Dynamic timer badge based on room status */}
