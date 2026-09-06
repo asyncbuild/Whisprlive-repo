@@ -650,6 +650,56 @@ body {
   margin-bottom: 52px;
 }
 
+.about-head-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+  margin-bottom: 52px;
+}
+
+.use-case-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.use-case-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .04);
+  transition: all .2s ease;
+}
+
+.use-case-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -6px rgba(37, 99, 235, .1);
+}
+
+.use-case-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.use-case-card p {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.45;
+}
+
+@media (max-width: 860px) {
+  .about-head-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
 .section-eyebrow {
   font-family: var(--font-mono);
   font-size: 12.5px;

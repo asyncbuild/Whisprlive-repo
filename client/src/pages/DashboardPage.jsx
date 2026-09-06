@@ -811,6 +811,27 @@ export default function DashboardPage() {
                 </button>
               </div>
 
+              {/* Quick Presets Row */}
+              <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 600 }}>Quick presets:</span>
+                {[
+                  "🎤 Live Event Q&A",
+                  "🤫 Anonymous Confessions Wall",
+                  "💬 AMA & Honest Feedback",
+                  "🎓 Classroom Lecture Q&A"
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="chip"
+                    style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999 }}
+                    onClick={() => setTitle(preset)}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+
               <div className="schedule-row" style={{ marginTop: 20 }}>
                 <span className="schedule-label">Start timing:</span>
                 <div className="chip-row">

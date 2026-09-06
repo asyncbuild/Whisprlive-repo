@@ -193,12 +193,11 @@ export default function LandingPage() {
         <section className="hero">
           <div className="container hero-grid">
             <div>
-              <span className="eyebrow"><Radio size={13} />Live Q&amp;A, without the app</span>
-              <h1>The room's questions,<br />live on your screen.</h1>
+              <span className="eyebrow"><Radio size={13} />Live Q&amp;A · Secret Confessions · Real-Time Walls</span>
+              <h1>Live Q&amp;A &amp; Anonymous Confessions.<br />Zero Friction.</h1>
               <p className="hero-sub">
-                WhisprLive turns any audience into a live conversation. Share one link,
-                watch questions roll in as people type them, and close the session
-                the moment it's done.
+                WhisprLive turns any audience, event, or social story into a real-time conversation.
+                Share one link or QR code — watch questions, secret confessions, and honest feedback roll in as people type them.
               </p>
               <div className="hero-actions">
                 <button
@@ -233,7 +232,7 @@ export default function LandingPage() {
                   textTransform: "uppercase",
                   letterSpacing: "0.03em"
                 }}>
-                  <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A room?
+                  <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A or Confessions room?
                 </label>
                 <form onSubmit={handleJoinRoom} style={{ display: "flex", gap: 8 }}>
                   <input
@@ -287,26 +286,47 @@ export default function LandingPage() {
       <div ref={refs.about}>
         <section className="section">
           <div className="container">
-            <div className="section-head">
-              <span className="section-eyebrow">About WhisprLive</span>
-              <h2>Built for the moment, not the meeting.</h2>
-              <p>Every WhisprLive session is a small, disposable room: it opens, it fills with real questions, and it closes. No accounts for guests, no leftover clutter for hosts.</p>
+            <div className="about-head-grid">
+              <div className="section-head" style={{ marginBottom: 0, maxWidth: "100%" }}>
+                <span className="section-eyebrow">About WhisprLive</span>
+                <h2>Built for events, streams &amp; secret stories.</h2>
+                <p>Every WhisprLive session is a disposable room: it opens, it receives questions or confessions in real time, and it closes automatically with zero leftover clutter.</p>
+              </div>
+
+              <div className="use-case-card-grid">
+                <div className="use-case-card">
+                  <div className="use-case-badge">🎤 Keynotes &amp; Events</div>
+                  <p>Pass no microphones around. Audience scans QR &amp; asks live questions.</p>
+                </div>
+                <div className="use-case-card">
+                  <div className="use-case-badge">🤫 Instagram &amp; Story Walls</div>
+                  <p>Post sticker link. Collect secret confessions &amp; honest story replies.</p>
+                </div>
+                <div className="use-case-card">
+                  <div className="use-case-badge">💬 Townhalls &amp; AMAs</div>
+                  <p>True anonymous feedback without corporate fear or judgment.</p>
+                </div>
+                <div className="use-case-card">
+                  <div className="use-case-badge">🎓 Classrooms &amp; Lectures</div>
+                  <p>Shy students participate freely without stage fright.</p>
+                </div>
+              </div>
             </div>
             <div className="feature-grid">
               <div className="feature">
                 <div className="feature-icon"><Link2 size={19} /></div>
-                <h3>One link, no app</h3>
-                <p>Anyone joins by tapping a link. No download, no login, no waiting room — they're asking questions in seconds.</p>
+                <h3>1-Click Link or QR Code</h3>
+                <p>Share on Instagram, WhatsApp, or project on stage. Guests join instantly in seconds — no downloads, signups, or app installs.</p>
               </div>
               <div className="feature">
                 <div className="feature-icon"><Zap size={19} /></div>
-                <h3>Live, not delayed</h3>
-                <p>Messages land on your screen the instant they're sent, ordered by time, so you're always reading the room as it is.</p>
+                <h3>100% True Anonymity</h3>
+                <p>Complete privacy for your audience. People feel safe submitting honest secrets, bold questions, and candid feedback.</p>
               </div>
               <div className="feature">
                 <div className="feature-icon"><Clock size={19} /></div>
-                <h3>Sessions that end</h3>
-                <p>Set a 5, 15, or 30-minute window up front. When time's up, the room closes itself — no Q&amp;A ever lingers.</p>
+                <h3>Disposable Timed Rooms</h3>
+                <p>Set a 15-min or 24-hr session up front. When time's up, the room closes itself automatically so no messages linger.</p>
               </div>
             </div>
           </div>

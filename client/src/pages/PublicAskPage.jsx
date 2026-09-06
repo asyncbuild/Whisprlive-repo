@@ -268,19 +268,19 @@ export default function PublicAskPage() {
             gap: 8
           }}>
             <Radio size={15} style={{ color: "var(--live)", flexShrink: 0 }} />
-            <span><strong>Interactive Demo Room:</strong> Type any test question below to experience how fast WhisprLive delivers live Q&amp;A!</span>
+            <span><strong>Interactive Demo Room:</strong> Send a question, confession, or feedback below to see how fast WhisprLive works in real time!</span>
           </div>
         )}
 
         <div className="public-header">
           <span className="eyebrow">
             <Radio size={13} />
-            {isScheduled ? "Scheduled Session" : isActive ? "Live AMA Session" : "Session Closed"}
+            {isScheduled ? "Scheduled Room" : isActive ? "Live Q&A & Confessions Room" : "Session Closed"}
           </span>
           <div className="public-title-box">
             <h1>{roomInfo.title}</h1>
           </div>
-          <p>Ask whatever is on your mind. Your identity stays completely anonymous.</p>
+          <p>Share your questions, secret confessions, or feedback. Your identity stays 100% anonymous.</p>
 
           {/* Dynamic timer badge based on room status */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
@@ -295,7 +295,7 @@ export default function PublicAskPage() {
               )}
             </div>
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(`📢 Ask your questions live in *${roomInfo.title}* on WhisprLive:\n👉 ${window.location.href}`)}`}
+              href={`https://wa.me/?text=${encodeURIComponent(`📢 Join *${roomInfo.title}* on WhisprLive — share anonymous questions, confessions & feedback:\n👉 ${window.location.href}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -324,7 +324,7 @@ export default function PublicAskPage() {
 
         {sent && (
           <div className="sent-toast">
-            <Check size={15} /> Your question is live on the host's screen.
+            <Check size={15} /> Sent! Your submission is live on the host's screen.
           </div>
         )}
 
@@ -336,15 +336,15 @@ export default function PublicAskPage() {
             <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6 }}>
               The host scheduled this room to open at <strong>{formatTargetTime(roomInfo.startsAt)}</strong>.
               <br />
-              Question submissions will unlock automatically in <strong>{formatClock(untilStart)}</strong>.
+              Submissions will unlock automatically in <strong>{formatClock(untilStart)}</strong>.
             </p>
           </div>
         ) : isActive ? (
-          /* 2. ACTIVE LIVE AMA STATE */
+          /* 2. ACTIVE LIVE ROOM STATE */
           <form className="ask-box" onSubmit={handleSubmit}>
             <textarea
               className="ask-textarea"
-              placeholder="What do you want to ask?"
+              placeholder="Share a question, secret confession, or honest feedback..."
               maxLength={300}
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -370,7 +370,7 @@ export default function PublicAskPage() {
             <Clock size={36} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Session Ended</h3>
             <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
-              This room is now closed and is no longer accepting new questions.
+              This room is now closed and is no longer accepting new submissions.
             </p>
           </div>
         )}
