@@ -193,11 +193,11 @@ export default function LandingPage() {
         <section className="hero">
           <div className="container hero-grid">
             <div>
-              <span className="eyebrow"><Radio size={13} />Live Q&amp;A · Secret Confessions · Real-Time Walls</span>
-              <h1>Live Q&amp;A &amp; Anonymous Confessions.<br />Zero Friction.</h1>
+              <span className="eyebrow"><Radio size={13} />Live Q&amp;A · Audience Feedback · Real-Time Walls</span>
+              <h1>Live Q&amp;A &amp; Anonymous Feedback.<br />Zero Friction.</h1>
               <p className="hero-sub">
                 WhisprLive turns any audience, event, or social story into a real-time conversation.
-                Share one link or QR code — watch questions, secret confessions, and honest feedback roll in as people type them.
+                Share one link or QR code — watch questions, ideas, and honest feedback roll in as people type them.
               </p>
               <div className="hero-actions">
                 <button
@@ -232,7 +232,7 @@ export default function LandingPage() {
                   textTransform: "uppercase",
                   letterSpacing: "0.03em"
                 }}>
-                  <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A or Confessions room?
+                  <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A room?
                 </label>
                 <form onSubmit={handleJoinRoom} style={{ display: "flex", gap: 8 }}>
                   <input
@@ -289,8 +289,8 @@ export default function LandingPage() {
             <div className="about-head-grid">
               <div className="section-head" style={{ marginBottom: 0, maxWidth: "100%" }}>
                 <span className="section-eyebrow">About WhisprLive</span>
-                <h2>Built for events, streams &amp; secret stories.</h2>
-                <p>Every WhisprLive session is a disposable room: it opens, it receives questions or confessions in real time, and it closes automatically with zero leftover clutter.</p>
+                <h2>Built for events, streams &amp; live interaction.</h2>
+                <p>Every WhisprLive session is a disposable room: it opens, it receives questions and feedback in real time, and it closes automatically with zero leftover clutter.</p>
               </div>
 
               <div className="use-case-card-grid">
@@ -299,8 +299,8 @@ export default function LandingPage() {
                   <p>Pass no microphones around. Audience scans QR &amp; asks live questions.</p>
                 </div>
                 <div className="use-case-card">
-                  <div className="use-case-badge">🤫 Instagram &amp; Story Walls</div>
-                  <p>Post sticker link. Collect secret confessions &amp; honest story replies.</p>
+                  <div className="use-case-badge">💡 Interactive Feedback</div>
+                  <p>Post sticker link. Collect audience ideas &amp; honest story replies.</p>
                 </div>
                 <div className="use-case-card">
                   <div className="use-case-badge">💬 Townhalls &amp; AMAs</div>
@@ -321,7 +321,7 @@ export default function LandingPage() {
               <div className="feature">
                 <div className="feature-icon"><Zap size={19} /></div>
                 <h3>100% True Anonymity</h3>
-                <p>Complete privacy for your audience. People feel safe submitting honest secrets, bold questions, and candid feedback.</p>
+                <p>Complete privacy for your audience. People feel safe submitting bold questions, candid thoughts, and honest feedback.</p>
               </div>
               <div className="feature">
                 <div className="feature-icon"><Clock size={19} /></div>

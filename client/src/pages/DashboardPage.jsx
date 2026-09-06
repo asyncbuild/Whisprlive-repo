@@ -816,7 +816,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 600 }}>Quick presets:</span>
                 {[
                   "🎤 Live Event Q&A",
-                  "🤫 Anonymous Confessions Wall",
+                  "💡 Audience Feedback Wall",
                   "💬 AMA & Honest Feedback",
                   "🎓 Classroom Lecture Q&A"
                 ].map((preset) => (

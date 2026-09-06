@@ -268,19 +268,19 @@ export default function PublicAskPage() {
             gap: 8
           }}>
             <Radio size={15} style={{ color: "var(--live)", flexShrink: 0 }} />
-            <span><strong>Interactive Demo Room:</strong> Send a question, confession, or feedback below to see how fast WhisprLive works in real time!</span>
+            <span><strong>Interactive Demo Room:</strong> Send a question or feedback below to see how fast WhisprLive works in real time!</span>
           </div>
         )}
 
         <div className="public-header">
           <span className="eyebrow">
             <Radio size={13} />
-            {isScheduled ? "Scheduled Room" : isActive ? "Live Q&A & Confessions Room" : "Session Closed"}
+            {isScheduled ? "Scheduled Room" : isActive ? "Live Q&A & Feedback Room" : "Session Closed"}
           </span>
           <div className="public-title-box">
             <h1>{roomInfo.title}</h1>
           </div>
-          <p>Share your questions, secret confessions, or feedback. Your identity stays 100% anonymous.</p>
+          <p>Share your questions, ideas, or feedback. Your identity stays 100% anonymous.</p>
 
           {/* Dynamic timer badge based on room status */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
@@ -295,7 +295,7 @@ export default function PublicAskPage() {
               )}
             </div>
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(`📢 Join *${roomInfo.title}* on WhisprLive — share anonymous questions, confessions & feedback:\n👉 ${window.location.href}`)}`}
+              href={`https://wa.me/?text=${encodeURIComponent(`📢 Join *${roomInfo.title}* on WhisprLive — share anonymous questions & feedback:\n👉 ${window.location.href}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -344,7 +344,7 @@ export default function PublicAskPage() {
           <form className="ask-box" onSubmit={handleSubmit}>
             <textarea
               className="ask-textarea"
-              placeholder="Share a question, secret confession, or honest feedback..."
+              placeholder="Share a question, suggestion, or honest feedback..."
               maxLength={300}
               value={text}
               onChange={(e) => setText(e.target.value)}
