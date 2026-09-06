@@ -18,6 +18,7 @@ function formatTargetTime(ts) {
 }
 
 import { useToast } from "../context/ToastContext";
+import { getClientDeviceModel } from "../utils/deviceInfo";
 
 function WhatsAppIcon({ size = 15 }) {
   return (
@@ -94,9 +95,19 @@ export default function PublicAskPage() {
     if (!roomCode) return;
 
     const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
-    const socket = io(socketUrl);
-    socket.emit("join_room", roomCode);
-    socket.emit("joinRoom", roomCode);
+    const socket = io(socketUrl, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000
+    });
+
+    const joinRoomAndSync = () => {
+      socket.emit("join_room", roomCode);
+      socket.emit("joinRoom", roomCode);
+      fetchStatus();
+    };
+
+    socket.on("connect", joinRoomAndSync);
 
     socket.on("session_ended", (data) => {
       setUntilEnd(0);
@@ -106,10 +117,22 @@ export default function PublicAskPage() {
       }
     });
 
-    return () => socket.disconnect();
+    // Mobile visibility sync: Re-check status when user unlocks phone or switches back to tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      socket.off("connect", joinRoomAndSync);
+      socket.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [roomCode]);
 
-  // 3. Real-time timer tick
+  // 3. Real-time timer tick & periodic status fallback
   useEffect(() => {
     if (!roomInfo) return;
 
@@ -125,15 +148,28 @@ export default function PublicAskPage() {
       setUntilEnd(diffEnd);
     }, 1000);
 
-    return () => clearInterval(interval);
+    // Periodic 10s fallback status check while active to handle mobile backgrounding
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === "visible" && roomInfo.canSend) {
+        fetchStatus();
+      }
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(pollInterval);
+    };
   }, [roomInfo]);
 
-  // Auto-sync status when countdown hits 0 so it unlocks seamlessly without refresh
+  // Auto-sync status when countdown hits 0 so it unlocks or locks seamlessly without refresh
   useEffect(() => {
-    if (untilStart === 0 && roomInfo && !roomInfo.canSend) {
+    if ((untilStart === 0 || untilEnd === 0) && roomInfo) {
+      if (untilEnd === 0) {
+        setRoomInfo((prev) => (prev ? { ...prev, status: "Expired", canSend: false, isAccepting: false } : prev));
+      }
       fetchStatus();
     }
-  }, [untilStart === 0]);
+  }, [untilStart === 0, untilEnd === 0]);
 
   // 4. Submit real anonymous message
   const handleSubmit = async (e) => {
@@ -153,7 +189,11 @@ export default function PublicAskPage() {
     }
 
     try {
-      await API.post(`/api/rooms/public/${roomCode}/messages`, { content: text.trim() });
+      const clientDeviceModel = await getClientDeviceModel();
+      await API.post(`/api/rooms/public/${roomCode}/messages`, {
+        content: text.trim(),
+        clientDeviceModel: clientDeviceModel || undefined
+      });
       setText("");
       setSent(true);
       setTimeout(() => setSent(false), 3000);

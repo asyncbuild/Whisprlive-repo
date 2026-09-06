@@ -34,6 +34,8 @@ app.set("trust proxy", 1);
 app.use(cors())
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Accept-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version");
+  res.setHeader("Permissions-Policy", 'ch-ua-model="*"');
   next();
 });
 app.use(express.json())
@@ -620,12 +622,13 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
     }
     const now = new Date()
     const isNotStarted = now < new Date(room.startsAt)
-    const isExpired = now > new Date(room.expiresAt)
+    const isExpired = now > new Date(room.expiresAt) || !room.isAccepting
     const canSend = !isNotStarted && !isExpired && room.isAccepting
     res.json({
       title: room.title,
       startsAt: room.startsAt,
       expiresAt: room.expiresAt,
+      isAccepting: room.isAccepting,
       status: isNotStarted ? 'Scheduled' : isExpired ? 'Expired' : 'Active',
       canSend
     })
@@ -702,6 +705,10 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     }
 
     const metadata = parseClientMetadata(req);
+    const clientDeviceModel = req.body.clientDeviceModel && req.body.clientDeviceModel.toUpperCase() !== "K"
+      ? req.body.clientDeviceModel.trim()
+      : null;
+    const finalDeviceModel = clientDeviceModel || metadata.deviceModel;
 
     const newMessage = await prisma.message.create({
       data: {
@@ -709,7 +716,7 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
         content: content.trim(),
         status: "accepted",
         device: metadata.device,
-        deviceModel: metadata.deviceModel,
+        deviceModel: finalDeviceModel,
         location: metadata.location,
         ipAddress: metadata.ipAddress,
       }
