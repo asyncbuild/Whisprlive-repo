@@ -2,8 +2,8 @@ import { UAParser } from "ua-parser-js";
 import geoip from "geoip-lite";
 
 /**
- * Extracts IP Address, Location (City/Country), Device Summary, and Hardware Model (e.g. RMX3085)
- * from incoming HTTP Express Request headers.
+ * Extracts IP Address, Location (City/Country), Device Summary, and Hardware Model
+ * from incoming HTTP Express Request headers, handling Chrome Android User-Agent Reduction ('K').
  */
 export function parseClientMetadata(req) {
   // 1. Extract IP Address (handling proxies like Vercel / Cloudflare)
@@ -23,29 +23,58 @@ export function parseClientMetadata(req) {
     }
   }
 
-  // 3. Parse User-Agent (Browser, OS, Device & Hardware Model)
+  // 3. Check Sec-CH-UA Client Hints headers (Modern Chrome / Android sends actual model here)
+  const clientHintModel = req.headers["sec-ch-ua-model"]
+    ? req.headers["sec-ch-ua-model"].replace(/"/g, "").trim()
+    : "";
+  const clientHintPlatform = req.headers["sec-ch-ua-platform"]
+    ? req.headers["sec-ch-ua-platform"].replace(/"/g, "").trim()
+    : "";
+
+  // 4. Parse User-Agent (Browser, OS, Device & Hardware Model)
   const userAgent = req.headers["user-agent"] || "";
   const parser = new UAParser(userAgent);
   const result = parser.getResult();
 
   const vendor = result.device.vendor || "";
-  const rawModel = result.device.model || "";
-  const osName = result.os.name || "";
+  let rawModel = result.device.model || "";
+  const osName = result.os.name || clientHintPlatform || "";
   const osVersion = result.os.version || "";
   const browserName = result.browser.name || "";
 
-  // Exact Hardware Model Code (e.g. "Realme RMX3085", "Samsung SM-S918B")
+  // Chrome Android User-Agent Reduction replaces device models with privacy placeholder "K"
+  if (rawModel.toUpperCase() === "K" || rawModel.toUpperCase() === "BUILD/K") {
+    rawModel = "";
+  }
+
+  // Determine clean, accurate hardware model
   let deviceModel = "Unknown Model";
-  if (rawModel) {
-    deviceModel = vendor ? `${vendor} ${rawModel}` : rawModel;
-  } else if (vendor) {
-    deviceModel = `${vendor} Device`;
-  } else if (osName) {
-    deviceModel = `${osName} Device`;
+  if (clientHintModel && clientHintModel.toUpperCase() !== "K") {
+    deviceModel = vendor && !clientHintModel.toLowerCase().startsWith(vendor.toLowerCase())
+      ? `${vendor} ${clientHintModel}`
+      : clientHintModel;
+  } else if (rawModel) {
+    deviceModel = vendor && !rawModel.toLowerCase().startsWith(vendor.toLowerCase())
+      ? `${vendor} ${rawModel}`
+      : rawModel;
+  } else {
+    // Fallback: Check for Android Build code (e.g. Build/TP1A.220624.014 or Build/RMX3085)
+    const buildMatch = userAgent.match(/Build\/([A-Za-z0-9._-]+)/i);
+    if (buildMatch && buildMatch[1] && buildMatch[1].toUpperCase() !== "K") {
+      const buildCode = buildMatch[1];
+      deviceModel = vendor ? `${vendor} (${buildCode})` : `${osName || "Android"} (${buildCode})`;
+    } else if (vendor) {
+      deviceModel = `${vendor} Mobile`;
+    } else if (osName) {
+      deviceModel = `${osName} Device`;
+    }
   }
 
   // General Device Summary (e.g. "Mobile (Android 11 / Chrome)")
-  const deviceType = result.device.type ? (result.device.type.charAt(0).toUpperCase() + result.device.type.slice(1)) : "Desktop";
+  const deviceType = result.device.type
+    ? (result.device.type.charAt(0).toUpperCase() + result.device.type.slice(1))
+    : (userAgent.toLowerCase().includes("mobile") ? "Mobile" : "Desktop");
+
   const deviceSummary = `${deviceType} (${osName} ${osVersion} / ${browserName})`.trim();
 
   return {
