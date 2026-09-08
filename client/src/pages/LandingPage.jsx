@@ -26,19 +26,38 @@ export default function LandingPage() {
   const [waitlistPlan, setWaitlistPlan] = useState("HOST");
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
-  const [sessionStats, setSessionStats] = useState({ totalSessions: 0, formattedTotal: "..." });
+  const [displayTotal, setDisplayTotal] = useState("...");
   const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null), liveMock: useRef(null) };
 
   React.useEffect(() => {
+    let isMounted = true;
+    // Rapidly change random number under 500 every 45ms while waiting for real backend stats
+    const interval = setInterval(() => {
+      if (isMounted) {
+        const rand = Math.floor(12 + Math.random() * 470);
+        setDisplayTotal(rand.toLocaleString());
+      }
+    }, 45);
+
     API.get("/api/stats")
       .then((res) => {
-        if (res.data?.formattedTotal !== undefined) {
-          setSessionStats(res.data);
+        if (isMounted) {
+          clearInterval(interval);
+          const finalTotal = res.data?.formattedTotal ?? (res.data?.totalSessions !== undefined ? res.data.totalSessions.toLocaleString() : "0");
+          setDisplayTotal(finalTotal);
         }
       })
       .catch(() => {
-        setSessionStats({ totalSessions: 0, formattedTotal: "0" });
+        if (isMounted) {
+          clearInterval(interval);
+          setDisplayTotal("0");
+        }
       });
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const openWaitlist = (planName) => {
@@ -267,7 +286,7 @@ export default function LandingPage() {
                   <span className="hero-meta-label">to join, no signup</span>
                 </div>
                 <div className="hero-meta-item">
-                  <span className="hero-meta-num mono">{sessionStats.formattedTotal}</span>
+                  <span className="hero-meta-num mono">{displayTotal}</span>
                   <span className="hero-meta-label">sessions hosted</span>
                 </div>
                 <div className="hero-meta-item">
