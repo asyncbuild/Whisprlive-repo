@@ -43,6 +43,7 @@ export default function FeedbackWidget() {
       {/* Floating Action Button */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
+        className="feedback-widget-btn"
         style={{
           position: "fixed",
           bottom: 24,
@@ -73,7 +74,7 @@ export default function FeedbackWidget() {
       {/* Feedback Modal / Drawer Popup */}
       {isOpen && (
         <div
-          className="modal-overlay"
+          className="modal-overlay feedback-modal-overlay"
           onClick={() => setIsOpen(false)}
           style={{ zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: 24 }}
         >

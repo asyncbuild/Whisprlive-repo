@@ -190,7 +190,7 @@ export default function LandingPage() {
               </button>
             ) : (
               <>
-                <button className="btn btn-ghost btn-sm" onClick={() => navigate("/signin")}>Sign in</button>
+                <button className="btn btn-ghost btn-sm nav-hide-mobile" onClick={() => navigate("/signin")}>Sign in</button>
                 <button className="btn btn-primary btn-sm" onClick={() => navigate("/signup")}>Get started</button>
               </>
             )}
@@ -200,10 +200,16 @@ export default function LandingPage() {
           </div>
         </div>
         {menuOpen && (
-          <div className="container" style={{ paddingBottom: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="container mobile-menu-dropdown">
             <a className="nav-link" onClick={() => scrollTo("home")}>Home</a>
             <a className="nav-link" onClick={() => scrollTo("about")}>About</a>
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
+            {!isLoggedIn && (
+              <div className="mobile-menu-auth">
+                <button className="btn btn-ghost btn-sm btn-block" onClick={() => { setMenuOpen(false); navigate("/signin"); }}>Sign in</button>
+                <button className="btn btn-primary btn-sm btn-block" onClick={() => { setMenuOpen(false); navigate("/signup"); }}>Get started</button>
+              </div>
+            )}
           </div>
         )}
       </nav>
@@ -231,50 +237,22 @@ export default function LandingPage() {
               </div>
 
               {/* Join Live Room Input Box */}
-              <div style={{
-                margin: "24px 0",
-                padding: "16px 18px",
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-lg)",
-                boxShadow: "0 12px 30px -10px rgba(0, 0, 0, .07)",
-                maxWidth: 460
-              }}>
-                <label style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "var(--text-dim)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 10,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.03em"
-                }}>
+              <div className="join-room-card">
+                <label className="join-room-label">
                   <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A room?
                 </label>
-                <form onSubmit={handleJoinRoom} style={{ display: "flex", gap: 8 }}>
+                <form onSubmit={handleJoinRoom} className="join-room-form">
                   <input
                     type="text"
                     placeholder="Enter Room Code (e.g. 8tVmSOa1)"
                     value={joinCode}
                     onChange={(e) => setJoinCode(e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: "10px 14px",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--border)",
-                      background: "var(--surface-2)",
-                      color: "var(--text)",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 13.5
-                    }}
+                    className="join-room-input"
                   />
                   <button
                     type="submit"
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-primary btn-sm join-room-btn"
                     disabled={!joinCode.trim()}
-                    style={{ padding: "0 16px", whiteSpace: "nowrap" }}
                   >
                     Join Room <ArrowRight size={14} />
                   </button>
