@@ -551,6 +551,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
 }
@@ -584,12 +585,18 @@ body {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .live-timer {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-dim);
+  flex-shrink: 0;
 }
 
 .live-feed {
