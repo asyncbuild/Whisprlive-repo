@@ -313,10 +313,10 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
       },
     });
 
-    // Automatically apply Room Pass if requested, or if duration > 15 min, or if 3 free rooms reached
+    // Automatically apply Room Pass when a host explicitly requests one or exceeds free duration.
     let isUsingPass = false;
     if (user.roomPasses > 0) {
-      if (usePass || (userPlan === "SOLO" && (parsedDuration > 15 || standardCount >= 3))) {
+      if (usePass || (userPlan === "SOLO" && parsedDuration > 15)) {
         isUsingPass = true;
       }
     }
@@ -332,10 +332,10 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
       });
     }
 
-    // Monthly cap check for standard Free rooms
+    // Monthly cap check for paid tiers that define one. SOLO is intentionally unlimited.
     if (!isUsingPass && limits.monthlySessions !== Infinity && standardCount >= limits.monthlySessions) {
       return res.status(403).json({
-        error: "You have used your 3 free monthly rooms. Purchase a Room Pass to create another.",
+        error: "Your plan has reached its monthly session limit. Purchase a Room Pass to create another.",
       });
     }
 
@@ -522,9 +522,13 @@ app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
     const limits = PLAN_LIMITS[user?.plan || "SOLO"]
     const now = new Date();
     const isExpired = room.expiresAt && now > new Date(room.expiresAt);
-    const hasPass = (user?.roomPasses || 0) > 0 || room.isPassUsed;
+    const roomLimits = room.isPassUsed ? PLAN_LIMITS.ROOM_PASS : limits;
+    const retentionMs = (roomLimits.historyRetentionDays || 7) * 24 * 60 * 60 * 1000;
+    const isBeyondRetention = now.getTime() - new Date(room.createdAt).getTime() > retentionMs;
+    // A Room Pass grants access only to the room it was used to create.
+    const hasRoomEntitlement = room.isPassUsed;
 
-    if (isExpired && !limits.canExport && !hasPass) {
+    if (isBeyondRetention || (isExpired && !limits.canExport && !hasRoomEntitlement)) {
       return res.status(403).json({
         error: "Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass.",
         isPremiumLocked: true
@@ -575,9 +579,13 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
     const limits = PLAN_LIMITS[user?.plan || "SOLO"]
-    const hasPass = (user?.roomPasses || 0) > 0 || room.isPassUsed;
+    const roomLimits = room.isPassUsed ? PLAN_LIMITS.ROOM_PASS : limits;
+    const retentionMs = (roomLimits.historyRetentionDays || 7) * 24 * 60 * 60 * 1000;
+    const isBeyondRetention = Date.now() - new Date(room.createdAt).getTime() > retentionMs;
+    // An unused pass must not unlock unrelated historical sessions.
+    const hasRoomEntitlement = room.isPassUsed;
 
-    if (!limits.canExport && !hasPass) {
+    if (isBeyondRetention || (!limits.canExport && !hasRoomEntitlement)) {
       return res.status(403).json({
         error: "Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass."
       });

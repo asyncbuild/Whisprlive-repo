@@ -1,8 +1,8 @@
 export const PLAN_LIMITS = {
   SOLO: {
-    monthlySessions: 3,
+    monthlySessions: Infinity,
     maxDurationMinutes: 15,
-    maxMessages: 15,
+    maxMessages: 100,
     canSchedule: false,
     canExport: false,
     historyRetentionDays: 7,

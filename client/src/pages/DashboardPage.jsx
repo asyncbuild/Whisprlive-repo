@@ -472,8 +472,7 @@ export default function DashboardPage() {
 
   const openShowMessagesModal = async (sessionItem) => {
     const code = sessionItem.roomCode || sessionItem.id;
-    const hasRoomPass = (currentUser?.roomPasses || 0) > 0;
-    const isUnlocked = !isSolo || sessionItem.isPassUsed || hasRoomPass;
+    const isUnlocked = !isSolo || sessionItem.isPassUsed;
 
     if (!isUnlocked) {
       toast.info("Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
@@ -1168,8 +1167,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {(() => {
-                        const hasRoomPass = (currentUser?.roomPasses || 0) > 0;
-                        const isUnlocked = !isSolo || p.isPassUsed || hasRoomPass;
+                        const isUnlocked = !isSolo || p.isPassUsed;
 
                         return (
                           <button

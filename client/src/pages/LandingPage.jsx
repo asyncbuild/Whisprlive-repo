@@ -1,8 +1,9 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X, Bell, Loader2, Sparkles
+  ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X, Bell, Loader2, ShieldCheck, Smartphone, Users, MessageCircle, ChevronDown
 } from "lucide-react";
+import QRCode from "qrcode";
 import API from "../api/axios";
 import Brand from "../components/Brand";
 import LiveMockCard from "../components/LiveMockCard";
@@ -10,6 +11,25 @@ import { useAuth } from "../context/AuthContext";
 
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
+
+const FAQ_ITEMS = [
+  {
+    question: "Is WhisprLive an anonymous Q&A tool?",
+    answer: "Yes. Participants can submit questions without creating an account or sharing their name. Hosts can still moderate, pin, and answer questions from one live feed.",
+  },
+  {
+    question: "Can I collect live audience feedback?",
+    answer: "Yes. Share one room link or QR code during a town hall, classroom, conference, or webinar and see responses arrive in real time.",
+  },
+  {
+    question: "How does QR code Q&A work at events?",
+    answer: "Open a free session, show the generated QR code on screen, and let guests scan with their phone camera. No app download or participant login is required.",
+  },
+  {
+    question: "How is this different from a Zoom Q&A alternative?",
+    answer: "WhisprLive is designed for the audience layer: people join from any device, ask anonymously, and participate without interrupting the speaker or creating another account.",
+  },
+];
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -27,7 +47,27 @@ export default function LandingPage() {
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
   const [displayTotal, setDisplayTotal] = useState("...");
+  const [demoQr, setDemoQr] = useState("");
+  const [openFaq, setOpenFaq] = useState(0);
   const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null), liveMock: useRef(null) };
+
+  React.useEffect(() => {
+    document.title = "WhisprLive | Anonymous live Q&A without the friction";
+    const description = "Anonymous live Q&A and audience feedback for town halls, classrooms, conferences, and webinars. No app download or participant login required.";
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "description";
+      document.head.appendChild(meta);
+    }
+    meta.content = description;
+
+    QRCode.toDataURL(`${window.location.origin}/ask/demo`, {
+      width: 176,
+      margin: 1,
+      color: { dark: "#102a43", light: "#ffffff" },
+    }).then(setDemoQr).catch(() => setDemoQr(""));
+  }, []);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -219,21 +259,23 @@ export default function LandingPage() {
           <div className="container hero-grid">
             <div>
               <span className="eyebrow"><Radio size={13} />Live Q&amp;A · Audience Feedback · Real-Time Walls</span>
-              <h1>Live Q&amp;A &amp; Anonymous Feedback.<br />Zero Friction.</h1>
+              <h1>Audience questions, without the awkward pause.</h1>
               <p className="hero-sub">
-                WhisprLive turns any audience, event, or social story into a real-time conversation.
-                Share one link or QR code — watch questions, ideas, and honest feedback roll in as people type them.
+                Anonymous live Q&amp;A and audience feedback for the moments that matter. No app download, no login for participants, and no microphone queue.
               </p>
               <div className="hero-actions">
                 <button
                   className="btn btn-primary"
                   onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
                 >
-                  {isLoggedIn ? "Go to Dashboard" : "Start a session"} <ArrowRight size={16} />
+                  {isLoggedIn ? "Go to Dashboard" : "Start a free session"} <ArrowRight size={16} />
                 </button>
-                <button className="btn btn-ghost" onClick={() => navigate("/ask/demo")}>
-                  See a live page <ArrowUpRight size={16} />
+                <button className="btn btn-ghost" onClick={() => scrollTo("liveMock")}>
+                  Watch the live demo <ArrowUpRight size={16} />
                 </button>
+              </div>
+              <div className="hero-friction-proof">
+                <ShieldCheck size={16} /> <strong>Guests join in seconds.</strong> Hosts get a moderated, real-time question feed.
               </div>
 
               {/* Join Live Room Input Box */}
@@ -273,12 +315,30 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <div ref={refs.liveMock}>
+            <div ref={refs.liveMock} className="hero-demo-stage">
               <LiveMockCard />
+              <div className="demo-qr-card">
+                <div className="demo-qr-copy">
+                  <span className="section-eyebrow">Try it from your phone</span>
+                  <strong>Scan to join the demo room</strong>
+                  <span>No account. No app. Just ask.</span>
+                </div>
+                {demoQr ? <img src={demoQr} alt="QR code to join the WhisprLive demo room" /> : <div className="qr-loading" aria-label="Loading demo QR code" />}
+              </div>
             </div>
           </div>
         </section>
       </div>
+
+      <section className="trust-strip" aria-label="Supported event types">
+        <div className="container trust-strip-inner">
+          <span className="trust-label">Made for live moments</span>
+          <span><Users size={16} /> Town halls</span>
+          <span><MessageCircle size={16} /> Classrooms</span>
+          <span><Radio size={16} /> Conferences</span>
+          <span><Smartphone size={16} /> Webinars</span>
+        </div>
+      </section>
 
       <div ref={refs.about}>
         <section className="section">
@@ -345,10 +405,10 @@ export default function LandingPage() {
                   <div className="price-amount">{geoCurrency.symbol}0</div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> 3 rooms / month</li>
-                    <li><Check size={15} /> Up to 15 messages / room</li>
+                    <li><Check size={15} /> Unlimited sessions</li>
+                    <li><Check size={15} /> Up to 100 questions / session</li>
+                    <li><Check size={15} /> Anonymous questions</li>
                     <li><Check size={15} /> 15-min timers</li>
-                    <li><Check size={15} /> Start now only</li>
                     <li><Check size={15} /> 7 days history retention</li>
                   </ul>
                 </div>
@@ -447,6 +507,35 @@ export default function LandingPage() {
           </div>
         </section>
       </div>
+
+      <section className="section seo-section">
+        <div className="container seo-grid">
+          <div className="section-head" style={{ marginBottom: 0 }}>
+            <span className="section-eyebrow">A calmer alternative</span>
+            <h2>Less friction than the usual audience tools.</h2>
+            <p>Keep the room focused on the conversation. Participants scan, ask, and leave without creating another account.</p>
+          </div>
+          <div className="faq-list" aria-label="Frequently asked questions">
+            {FAQ_ITEMS.map((item, index) => {
+              const isOpen = openFaq === index;
+              return (
+                <div className={`faq-item${isOpen ? " is-open" : ""}`} key={item.question}>
+                  <button
+                    className="faq-trigger"
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => setOpenFaq(isOpen ? -1 : index)}
+                  >
+                    <span>{item.question}</span>
+                    <ChevronDown size={16} aria-hidden="true" />
+                  </button>
+                  {isOpen && <p className="faq-answer">{item.answer}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
 
       <footer className="footer">
