@@ -18,16 +18,16 @@ const FAQ_ITEMS = [
     answer: "Yes. Participants can submit questions without creating an account or sharing their name. Hosts can still moderate, pin, and answer questions from one live feed.",
   },
   {
-    question: "Can I collect live audience feedback?",
-    answer: "Yes. Share one room link or QR code during a town hall, classroom, conference, or webinar and see responses arrive in real time.",
+    question: "How does QR code Q&A work at live events and conferences?",
+    answer: "The host displays a room QR code on a projector screen or shares a room link. Attendees scan it using their phone camera and immediately submit questions or upvote existing ones anonymously. No app installs or signups are needed.",
   },
   {
-    question: "How does QR code Q&A work at events?",
-    answer: "Open a free session, show the generated QR code on screen, and let guests scan with their phone camera. No app download or participant login is required.",
+    question: "What payment options are available for event passes?",
+    answer: "WhisprLive offers pay-per-event pricing without subscriptions. Hosts in India can activate 24-hour live passes using UPI (Google Pay, PhonePe, Paytm), netbanking, or debit/credit cards.",
   },
   {
-    question: "How is this different from a Zoom Q&A alternative?",
-    answer: "WhisprLive is designed for the audience layer: people join from any device, ask anonymously, and participate without interrupting the speaker or creating another account.",
+    question: "Can WhisprLive be used for college fests, classrooms, and webinars?",
+    answer: "Yes. It functions as a lightweight audience response system for university lectures, technical workshops, company all-hands, and virtual webinars.",
   },
 ];
 
@@ -52,8 +52,8 @@ export default function LandingPage() {
   const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null), liveMock: useRef(null) };
 
   React.useEffect(() => {
-    document.title = "WhisprLive | Anonymous live Q&A without the friction";
-    const description = "Anonymous live Q&A and audience feedback for town halls, classrooms, conferences, and webinars. No app download or participant login required.";
+    document.title = "WhisprLive | Anonymous Live Q&A & QR Code Audience Interaction";
+    const description = "Real-time anonymous live Q&A and audience polling for events, webinars, and town halls. Instant access via QR code with pay-per-event passes and UPI support.";
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {
       meta = document.createElement("meta");
@@ -258,10 +258,10 @@ export default function LandingPage() {
         <section className="hero">
           <div className="container hero-grid">
             <div>
-              <span className="eyebrow"><Radio size={13} />Live Q&amp;A · Audience Feedback · Real-Time Walls</span>
-              <h1>Audience questions, without the awkward pause.</h1>
+              <span className="eyebrow"><Radio size={13} />Live Q&amp;A · QR Code Audience Feedback · Real-Time Sessions</span>
+              <h1>Anonymous Live Q&amp;A and Audience Interaction for Live Events</h1>
               <p className="hero-sub">
-                Anonymous live Q&amp;A and audience feedback for the moments that matter. No app download, no login for participants, and no microphone queue.
+                The frictionless audience response system for conferences, webinars, college fests, and corporate town halls. Participants scan a QR code to submit and upvote questions anonymously—no app downloads, logins, or subscription commitments.
               </p>
               <div className="hero-actions">
                 <button
@@ -372,8 +372,8 @@ export default function LandingPage() {
             <div className="feature-grid">
               <div className="feature">
                 <div className="feature-icon"><Link2 size={19} /></div>
-                <h3>1-Click Link or QR Code</h3>
-                <p>Share on Instagram, WhatsApp, or project on stage. Guests join instantly in seconds — no downloads, signups, or app installs.</p>
+                <h3>Instant QR Code &amp; Link Access</h3>
+                <p>Project the QR code on stage or share a link. Attendees submit live questions in seconds without account registration.</p>
               </div>
               <div className="feature">
                 <div className="feature-icon"><Zap size={19} /></div>
@@ -382,8 +382,8 @@ export default function LandingPage() {
               </div>
               <div className="feature">
                 <div className="feature-icon"><Clock size={19} /></div>
-                <h3>Disposable Timed Rooms</h3>
-                <p>Set a 15-min or 24-hr session up front. When time's up, the room closes itself automatically so no messages linger.</p>
+                <h3>Pay-Per-Event Disposable Rooms</h3>
+                <p>Affordable 24-hour room passes with native UPI and card checkout. No recurring monthly subscriptions.</p>
               </div>
             </div>
           </div>
