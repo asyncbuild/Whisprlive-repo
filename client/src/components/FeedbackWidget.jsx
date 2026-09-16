@@ -44,27 +44,6 @@ export default function FeedbackWidget() {
       <button
         onClick={() => setIsOpen((prev) => !prev)}
         className="feedback-widget-btn"
-        style={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          zIndex: 999,
-          background: "var(--accent)",
-          color: "#ffffff",
-          border: "none",
-          borderRadius: 999,
-          padding: "10px 18px",
-          fontWeight: 700,
-          fontSize: 13.5,
-          cursor: "pointer",
-          boxShadow: "0 8px 24px -4px rgba(37, 99, 235, 0.4)",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          transition: "transform 0.2s ease, box-shadow 0.2s ease"
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
         title="Give feedback or suggest a feature"
       >
         <MessageSquarePlus size={16} />
@@ -76,18 +55,10 @@ export default function FeedbackWidget() {
         <div
           className="modal-overlay feedback-modal-overlay"
           onClick={() => setIsOpen(false)}
-          style={{ zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: 24 }}
         >
           <div
-            className="modal-content"
+            className="modal-content feedback-modal-content"
             onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: 420,
-              width: "100%",
-              margin: 0,
-              boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.3)",
-              animation: "fadeIn 0.2s ease-out"
-            }}
           >
             <div className="modal-head">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
