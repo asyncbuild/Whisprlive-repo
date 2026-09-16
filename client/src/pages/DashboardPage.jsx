@@ -3,12 +3,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell
+  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
+  BarChart2, Pin, MessageSquare, ThumbsUp, Edit3
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
+import WordCloudVisualizer from "../components/WordCloudVisualizer";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
@@ -59,7 +61,7 @@ export default function DashboardPage() {
   const [tab, setTab] = useState("new"); // "new" | "active" | "past"
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(15);
-  const [session, setSession] = useState(null); // { title, duration, roomCode, link, started, expiresAt, startsAt }
+  const [session, setSession] = useState(null); // { title, duration, roomCode, link, started, expiresAt, startsAt, showPublicFeed }
   const [copied, setCopied] = useState(false);
   const [messages, setMessages] = useState([]);
   const [pastSessions, setPastSessions] = useState([]);
@@ -71,6 +73,7 @@ export default function DashboardPage() {
   const [startMode, setStartMode] = useState("now"); // now | schedule
   const [scheduleTime, setScheduleTime] = useState("");
   const [usePass, setUsePass] = useState(false);
+  const [activityType, setActivityType] = useState("ALL"); // "ALL" | "POLL" | "WORD_CLOUD" | "QA"
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Loading states
@@ -80,6 +83,30 @@ export default function DashboardPage() {
   const [exportingCode, setExportingCode] = useState(null);
   const [endingSession, setEndingSession] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
+
+  // Engagement & Live Poll States
+  const [showPublicFeed, setShowPublicFeed] = useState(true);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [activePoll, setActivePoll] = useState(null);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollType, setPollType] = useState("CHOICE"); // "CHOICE" | "WORD_CLOUD"
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [submittingPoll, setSubmittingPoll] = useState(false);
+  const [endingPoll, setEndingPoll] = useState(false);
+  const [replyingMessageId, setReplyingMessageId] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [savingReplyId, setSavingReplyId] = useState(null);
+
+  // Poll Templates & Library States
+  const [pollTemplates, setPollTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [modalPollTab, setModalPollTab] = useState("templates"); // "templates" | "create" | "active"
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [templateFormTitle, setTemplateFormTitle] = useState("");
+  const [launchingTemplateId, setLaunchingTemplateId] = useState(null);
+  const [deletingTemplateId, setDeletingTemplateId] = useState(null);
+  const [savingDraftOnly, setSavingDraftOnly] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
 
   // Modal states
   const [showQrModal, setShowQrModal] = useState(false);
@@ -258,6 +285,8 @@ export default function DashboardPage() {
                   text: m.content,
                   votes: m.upvotes || 0,
                   answered: m.isAnswered || m.status === "answered",
+                  isPinned: Boolean(m.isPinned),
+                  hostReply: m.hostReply || null,
                   ts: new Date(m.createdAt).getTime()
                 }));
                 setMessages(msgs);
@@ -267,6 +296,15 @@ export default function DashboardPage() {
             .finally(() => {
               setMessagesLoading(false);
             });
+
+          // Fetch active poll
+          API.get(`/api/rooms/public/${parsed.roomCode}/poll/active`)
+            .then((res) => setActivePoll(res.data?.poll || null))
+            .catch(() => {});
+
+          if (typeof parsed.showPublicFeed === "boolean") {
+            setShowPublicFeed(parsed.showPublicFeed);
+          }
         }
       }
     } catch (e) {
@@ -296,7 +334,9 @@ export default function DashboardPage() {
         title: title.trim(),
         durationMinutes: duration,
         startsAt: startsAtIso,
-        usePass
+        usePass,
+        showPublicFeed,
+        activityType
       };
       const res = await API.post("/api/rooms", payload);
       const roomCode = res.data.room;
@@ -310,13 +350,16 @@ export default function DashboardPage() {
         link: `${window.location.host}/ask/${roomCode}`,
         started: startMode === "now",
         startsAt: startTime.toISOString(),
-        expiresAt
+        expiresAt,
+        showPublicFeed: typeof res.data?.showPublicFeed === "boolean" ? res.data.showPublicFeed : showPublicFeed,
+        activityType: res.data?.activityType || activityType
       };
 
       // Persist active session in localStorage
       localStorage.setItem("whisprlive_active_session", JSON.stringify(sessionData));
       setSession(sessionData);
       setMessages([]);
+      setActivePoll(null);
 
       const now = Date.now();
       setUntilStart(Math.max(0, Math.floor((startTime.getTime() - now) / 1000)));
@@ -346,7 +389,6 @@ export default function DashboardPage() {
 
     socket.on("connect", () => {
       socket.emit("join_room", session.roomCode);
-      socket.emit("joinRoom", session.roomCode);
     });
 
     socket.on("new_message", (newMsg) => {
@@ -356,6 +398,8 @@ export default function DashboardPage() {
         text: newMsg.content || newMsg.text,
         votes: newMsg.upvotes || 0,
         answered: newMsg.status === "answered" || newMsg.isAnswered === true,
+        isPinned: Boolean(newMsg.isPinned),
+        hostReply: newMsg.hostReply || null,
         ts: new Date(newMsg.createdAt || Date.now()).getTime()
       };
       setMessages((prev) => [formatted, ...prev]);
@@ -367,6 +411,46 @@ export default function DashboardPage() {
 
     socket.on("message_answered", ({ messageId, isAnswered }) => {
       setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, answered: isAnswered } : m)));
+    });
+
+    socket.on("message_replied", ({ messageId, hostReply, isAnswered }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, hostReply, answered: isAnswered !== undefined ? isAnswered : m.answered }
+            : m
+        )
+      );
+    });
+
+    socket.on("message_pinned", ({ messageId, isPinned }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isPinned } : m))
+      );
+    });
+
+    socket.on("room_settings_updated", (data) => {
+      if (typeof data?.showPublicFeed === "boolean") {
+        setShowPublicFeed(data.showPublicFeed);
+        setSession((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, showPublicFeed: data.showPublicFeed };
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    });
+
+    socket.on("poll_created", (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on("poll_updated", (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on("poll_ended", () => {
+      setActivePoll(null);
     });
 
     socket.on("session_ended", (data) => {
@@ -562,13 +646,16 @@ export default function DashboardPage() {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const upvote = async (id) => {
     const isVoted = votedIds.includes(id);
     const nextVoted = isVoted ? votedIds.filter((vId) => vId !== id) : [...votedIds, id];
     setVotedIds(nextVoted);
     try {
       localStorage.setItem("whisprlive_voted_messages", JSON.stringify(nextVoted));
-    } catch (e) { }
+    } catch {
+      /* ignore */
+    }
 
     const delta = isVoted ? -1 : 1;
     setMessages((prev) =>
@@ -586,10 +673,295 @@ export default function DashboardPage() {
     }
   };
 
+  const togglePinned = async (id) => {
+    const targetMsg = messages.find((m) => m.id === id);
+    const nextPinned = targetMsg ? !targetMsg.isPinned : true;
+
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, isPinned: nextPinned } : m)));
+
+    if (session?.roomCode) {
+      try {
+        await API.patch(`/api/rooms/${session.roomCode}/messages/${id}/pin`, {
+          isPinned: nextPinned
+        });
+        toast.success(nextPinned ? "Question pinned to top" : "Question unpinned");
+      } catch (err) {
+        console.error("Failed to toggle pin:", err);
+      }
+    }
+  };
+
+  const startReply = (id, existingReply = "") => {
+    if (replyingMessageId === id) {
+      setReplyingMessageId(null);
+      setReplyText("");
+    } else {
+      setReplyingMessageId(id);
+      setReplyText(existingReply || "");
+    }
+  };
+
+  const saveHostReply = async (id) => {
+    if (!session?.roomCode) return;
+    setSavingReplyId(id);
+    try {
+      const cleanReply = replyText.trim();
+      await API.patch(`/api/rooms/${session.roomCode}/messages/${id}/reply`, {
+        hostReply: cleanReply
+      });
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === id ? { ...m, hostReply: cleanReply || null, answered: true } : m
+        )
+      );
+      setReplyingMessageId(null);
+      setReplyText("");
+      toast.success(cleanReply ? "Reply posted to audience feed!" : "Reply removed");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save reply");
+    } finally {
+      setSavingReplyId(null);
+    }
+  };
+
+  const togglePublicFeedVisibility = async (newVal) => {
+    if (!session?.roomCode) return;
+    setShowPublicFeed(newVal);
+    setSession((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, showPublicFeed: newVal };
+      localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+      return updated;
+    });
+
+    try {
+      await API.patch(`/api/rooms/${session.roomCode}/settings`, {
+        showPublicFeed: newVal
+      });
+      toast.success(newVal ? "Audience Q&A feed is now visible to attendees" : "Audience Q&A feed is now hidden (private to host)");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update feed visibility");
+    }
+  };
+
+  const handleLaunchPoll = async (e) => {
+    e?.preventDefault();
+    if (!session?.roomCode || !pollQuestion.trim()) return;
+
+    if (pollType === "CHOICE") {
+      const validOptions = pollOptions.filter((o) => o.trim() !== "");
+      if (validOptions.length < 2) {
+        toast.error("Please provide at least 2 options for multiple choice");
+        return;
+      }
+    }
+
+    setSubmittingPoll(true);
+    try {
+      const res = await API.post(`/api/rooms/${session.roomCode}/polls`, {
+        question: pollQuestion.trim(),
+        type: pollType,
+        options: pollOptions.filter((o) => o.trim() !== "")
+      });
+      setActivePoll(res.data?.poll);
+
+      // If user checked "Save as template"
+      if (saveAsTemplate) {
+        API.post("/api/poll-templates", {
+          title: templateFormTitle.trim() || undefined,
+          question: pollQuestion.trim(),
+          type: pollType,
+          options: pollOptions.filter((o) => o.trim() !== "")
+        }).then((tplRes) => {
+          if (tplRes.data?.template) {
+            setPollTemplates((prev) => [tplRes.data.template, ...prev]);
+          }
+        }).catch(() => {});
+      }
+
+      setPollQuestion("");
+      setTemplateFormTitle("");
+      setPollOptions(["", ""]);
+      setSaveAsTemplate(false);
+      setModalPollTab("active");
+      toast.success("🚀 Live poll launched to audience!");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to launch poll");
+    } finally {
+      setSubmittingPoll(false);
+    }
+  };
+
+  const handleEndPoll = async () => {
+    if (!session?.roomCode || !activePoll) return;
+    setEndingPoll(true);
+    try {
+      await API.patch(`/api/rooms/${session.roomCode}/polls/${activePoll.id}/end`);
+      setActivePoll(null);
+      setModalPollTab("templates");
+      fetchPollTemplates();
+      toast.info("Active poll ended");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to end poll");
+    } finally {
+      setEndingPoll(false);
+    }
+  };
+
+  // Poll Template Library Handlers
+  const fetchPollTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const res = await API.get("/api/poll-templates");
+      setPollTemplates(res.data?.templates || []);
+    } catch (err) {
+      console.error("Failed to load poll templates:", err);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  const startEditingTemplate = (t) => {
+    setEditingTemplateId(t.id);
+    setTemplateFormTitle(t.title || "");
+    setPollQuestion(t.question);
+    setPollType(t.type);
+    setPollOptions(t.options && t.options.length > 0 ? t.options : ["", ""]);
+    setModalPollTab("create");
+    setShowPollModal(true);
+  };
+
+  const cancelEditingTemplate = () => {
+    setEditingTemplateId(null);
+    setTemplateFormTitle("");
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setSaveAsTemplate(false);
+  };
+
+  const openCreatePollModal = () => {
+    cancelEditingTemplate();
+    setModalPollTab("create");
+    setShowPollModal(true);
+  };
+
+  const openSessionPollModal = () => {
+    cancelEditingTemplate();
+    fetchPollTemplates();
+    setModalPollTab("templates");
+    setShowPollModal(true);
+  };
+
+  const openActivePollModal = () => {
+    cancelEditingTemplate();
+    fetchPollTemplates();
+    setModalPollTab("active");
+    setShowPollModal(true);
+  };
+
+  const closePollModal = () => {
+    cancelEditingTemplate();
+    setModalPollTab("templates");
+    setShowPollModal(false);
+  };
+
+  const handleSaveDraftOnly = async (e) => {
+    if (e) e.preventDefault();
+    if (!pollQuestion.trim()) {
+      toast.error("Please enter a question or prompt");
+      return;
+    }
+    if (pollType === "CHOICE") {
+      const valid = pollOptions.filter((o) => o.trim() !== "");
+      if (valid.length < 2) {
+        toast.error("Please provide at least 2 options for multiple choice");
+        return;
+      }
+    }
+    setSavingDraftOnly(true);
+    try {
+      if (editingTemplateId) {
+        const res = await API.put(`/api/poll-templates/${editingTemplateId}`, {
+          title: templateFormTitle.trim() || undefined,
+          question: pollQuestion.trim(),
+          type: pollType,
+          options: pollOptions.filter((o) => o.trim() !== "")
+        });
+        toast.success("✨ Draft updated successfully!");
+        if (res.data?.template) {
+          setPollTemplates((prev) => prev.map((t) => (t.id === editingTemplateId ? res.data.template : t)));
+        }
+        cancelEditingTemplate();
+        setModalPollTab("templates");
+      } else {
+        const res = await API.post("/api/poll-templates", {
+          title: templateFormTitle.trim() || undefined,
+          question: pollQuestion.trim(),
+          type: pollType,
+          options: pollOptions.filter((o) => o.trim() !== "")
+        });
+        toast.success("✨ Saved to Poll Library!");
+        if (res.data?.template) {
+          setPollTemplates((prev) => [res.data.template, ...prev]);
+        }
+        setPollQuestion("");
+        setTemplateFormTitle("");
+        setPollOptions(["", ""]);
+        setSaveAsTemplate(false);
+        setModalPollTab("templates");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || (editingTemplateId ? "Failed to update draft" : "Failed to save draft"));
+    } finally {
+      setSavingDraftOnly(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId) => {
+    setDeletingTemplateId(templateId);
+    try {
+      await API.delete(`/api/poll-templates/${templateId}`);
+      setPollTemplates((prev) => prev.filter((t) => t.id !== templateId));
+      toast.info("Poll draft deleted");
+    } catch {
+      toast.error("Failed to delete draft");
+    } finally {
+      setDeletingTemplateId(null);
+    }
+  };
+
+  const handleLaunchTemplate = async (template) => {
+    if (!session?.roomCode) {
+      toast.error("Please create or enter an active session first to launch to an audience!");
+      return;
+    }
+    setLaunchingTemplateId(template.id);
+    try {
+      const res = await API.post(`/api/rooms/${session.roomCode}/polls/launch-template/${template.id}`);
+      setActivePoll(res.data?.poll);
+      toast.success(`🚀 "${template.question.slice(0, 30)}..." launched to audience!`);
+      setModalPollTab("active");
+      setShowPollModal(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to launch poll template");
+    } finally {
+      setLaunchingTemplateId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === "polls" || showPollModal) {
+      fetchPollTemplates();
+    }
+  }, [tab, showPollModal]);
+
   const visibleMessages = messages
     .filter((m) => (filter === "all" ? true : filter === "answered" ? m.answered : !m.answered))
     .filter((m) => (query.trim() ? (m.text + " " + m.guest).toLowerCase().includes(query.trim().toLowerCase()) : true))
-    .sort((a, b) => (sortMode === "top" ? b.votes - a.votes || b.ts - a.ts : b.ts - a.ts));
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return sortMode === "top" ? (b.votes || 0) - (a.votes || 0) || b.ts - a.ts : b.ts - a.ts;
+    });
 
   const answeredCount = messages.filter((m) => m.answered).length;
 
@@ -607,7 +979,9 @@ export default function DashboardPage() {
     setSession(updated);
     try {
       localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
-    } catch (e) { }
+    } catch {
+      /* ignore */
+    }
     setSecondsLeft(0);
     setEndingSession(false);
     toast.info("Session timer ended. Guests can no longer submit questions.");
@@ -757,6 +1131,9 @@ export default function DashboardPage() {
           <button className={`tab ${tab === "past" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("past"))}>
             Past sessions
           </button>
+          <button className={`tab ${tab === "polls" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("polls"))}>
+            <BarChart2 size={13} style={{ marginRight: 5 }} /> Poll Library
+          </button>
         </div>
 
         {/* TAB 1: CREATE NEW SESSION */}
@@ -873,6 +1250,26 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 )}
+
+                {/* Audience Feed Visibility Setting */}
+                <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
+                      Audience Q&A Feed Visibility
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+                      Allow participants to view approved questions and upvote in real-time. (Can also be toggled anytime during live session)
+                    </div>
+                  </div>
+                  <label className="toggle-switch-btn" title="Toggle Audience Live Feed">
+                    <input
+                      type="checkbox"
+                      checked={showPublicFeed}
+                      onChange={(e) => setShowPublicFeed(e.target.checked)}
+                    />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -993,16 +1390,31 @@ export default function DashboardPage() {
                           boxShadow: "0 3px 10px rgba(37, 211, 102, 0.3)",
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: 7
+                          justifyContent: "center",
+                          gap: 6
                         }}
                       >
-                        <WhatsAppIcon size={16} /> WhatsApp Share
+                        <WhatsAppIcon size={15} /> WhatsApp Share
                       </a>
                       <button className="btn btn-soft btn-sm" onClick={() => setShowQrModal(true)}>
                         <QrCode size={14} /> Enlarge QR
                       </button>
                       <button className="btn btn-soft btn-sm" onClick={copyLink}>
                         {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied Link" : "Copy Link"}
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => (activePoll ? openActivePollModal() : openSessionPollModal())}
+                        title={activePoll ? "View active live poll results or saved drafts" : "Open saved poll drafts to launch to audience"}
+                        style={{
+                          gap: 6,
+                          justifyContent: "center",
+                          background: activePoll ? "linear-gradient(135deg, #FF5A36 0%, #EA580C 100%)" : undefined,
+                          boxShadow: activePoll ? "0 2px 8px rgba(255, 90, 54, 0.3)" : undefined
+                        }}
+                      >
+                        <BarChart2 size={14} />
+                        {activePoll ? "Live Poll 🔴" : "Live Polls"}
                       </button>
                     </div>
 
@@ -1030,6 +1442,122 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Active Live Poll HUD Widget (Visible on Host screen in Real-Time) */}
+                {activePoll && (
+                  <div className="host-active-poll-hud" style={{
+                    marginBottom: 16,
+                    padding: "16px 20px",
+                    background: "linear-gradient(145deg, rgba(255, 90, 54, 0.06) 0%, var(--surface-1) 100%)",
+                    border: "1px solid rgba(255, 90, 54, 0.35)",
+                    borderRadius: "var(--radius-lg)",
+                    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.25)"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: "0.5px",
+                          textTransform: "uppercase",
+                          padding: "3px 10px",
+                          borderRadius: 999,
+                          background: "rgba(255, 90, 54, 0.15)",
+                          color: "var(--primary)",
+                          border: "1px solid rgba(255, 90, 54, 0.4)"
+                        }}>
+                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--primary)" }} />
+                          LIVE {activePoll.type === "WORD_CLOUD" ? "WORD CLOUD" : "POLL"}
+                        </span>
+                        <span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 500 }}>
+                          {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"} received
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button
+                          className="btn btn-soft btn-xs"
+                          onClick={openActivePollModal}
+                          style={{ fontSize: 12, padding: "5px 12px", borderRadius: "var(--radius-md)" }}
+                        >
+                          Expand View
+                        </button>
+                        <button
+                          className="btn btn-soft btn-xs"
+                          onClick={handleEndPoll}
+                          disabled={endingPoll}
+                          style={{ fontSize: 12, padding: "5px 12px", borderRadius: "var(--radius-md)", color: "var(--accent)" }}
+                        >
+                          {endingPoll ? "Ending..." : "End Poll"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <h4 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", marginBottom: 14 }}>
+                      {activePoll.question}
+                    </h4>
+
+                    {activePoll.type === "CHOICE" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {activePoll.options.map((opt) => (
+                          <div key={opt.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
+                              <span style={{ fontWeight: 500, color: "var(--text)" }}>{opt.text}</span>
+                              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{opt.percentage}% ({opt.votes})</span>
+                            </div>
+                            <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
+                              <div style={{
+                                height: "100%",
+                                width: `${opt.percentage}%`,
+                                background: "linear-gradient(90deg, #FF5A36 0%, #EA580C 100%)",
+                                borderRadius: 999,
+                                transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                              }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <WordCloudVisualizer
+                        words={activePoll.wordCloud || []}
+                        minHeight={200}
+                        showSummary={true}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Audience Feed Visibility Live Bar */}
+                <div className="host-feed-toggle-bar">
+                  <div className="host-toggle-label">
+                    <Eye size={18} style={{ color: showPublicFeed ? "var(--accent)" : "var(--text-faint)" }} />
+                    <div>
+                      <div>
+                        Audience Live Q&A Feed:{" "}
+                        {showPublicFeed ? (
+                          <strong style={{ color: "var(--accent)" }}>Visible to Attendees</strong>
+                        ) : (
+                          <strong style={{ color: "var(--text-dim)" }}>Hidden (Private to Host)</strong>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}>
+                        {showPublicFeed
+                          ? "Attendees can see approved questions, upvote them, and view your answers."
+                          : "Attendees can only see their question input box without seeing other participants' questions."}
+                      </div>
+                    </div>
+                  </div>
+                  <label className="toggle-switch-btn" title="Toggle Audience Live Feed">
+                    <input
+                      type="checkbox"
+                      checked={showPublicFeed}
+                      onChange={(e) => togglePublicFeedVisibility(e.target.checked)}
+                    />
+                    <span className="toggle-slider" />
+                  </label>
                 </div>
 
                 <div className="session-panel">
@@ -1090,6 +1618,7 @@ export default function DashboardPage() {
                             <div className="feed-empty-inline">No questions match that search or filter.</div>
                           )}
                           {visibleMessages.map((m) => {
+                            const isReplying = replyingMessageId === m.id;
                             return (
                               <div className={`bubble ${m.answered ? "answered" : ""}`} key={m.id}>
                                 <div className="bubble-top">
@@ -1098,9 +1627,37 @@ export default function DashboardPage() {
                                       {m.guest?.charAt(0)?.toUpperCase() || "G"}
                                     </span>
                                     <span>{m.guest}</span>
-                                    {m.answered && <span className="bubble-tag"><CheckCircle2 size={11} /> Answered</span>}
+                                    {m.isPinned && (
+                                      <span className="pinned-badge" style={{ fontSize: 10.5, padding: "1px 7px" }}>
+                                        <Pin size={10} /> Pinned
+                                      </span>
+                                    )}
+                                    {m.answered && (
+                                      <span className="bubble-tag">
+                                        <CheckCircle2 size={11} /> Answered
+                                      </span>
+                                    )}
+                                    <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)", display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4 }}>
+                                      <ThumbsUp size={11} /> {m.votes || 0}
+                                    </span>
                                   </div>
                                   <div className="bubble-actions">
+                                    <button
+                                      className={`answer-btn ${m.isPinned ? "done" : ""}`}
+                                      onClick={() => togglePinned(m.id)}
+                                      title={m.isPinned ? "Unpin question" : "Pin to top for attendees"}
+                                      style={{ marginRight: 4 }}
+                                    >
+                                      <Pin size={13} />
+                                    </button>
+                                    <button
+                                      className={`answer-btn ${m.hostReply ? "done" : ""}`}
+                                      onClick={() => startReply(m.id, m.hostReply)}
+                                      title={m.hostReply ? "Edit host answer" : "Answer question for attendees"}
+                                      style={{ marginRight: 4 }}
+                                    >
+                                      <MessageSquare size={13} />
+                                    </button>
                                     <button
                                       className={`answer-btn ${m.answered ? "done" : ""}`}
                                       onClick={() => toggleAnswered(m.id)}
@@ -1110,7 +1667,71 @@ export default function DashboardPage() {
                                     </button>
                                   </div>
                                 </div>
+
                                 <div className="bubble-text">{m.text}</div>
+
+                                {/* Host's Answer Displayed to Attendees */}
+                                {m.hostReply && (
+                                  <div className="dash-host-reply-box">
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", display: "flex", alignItems: "center", gap: 4 }}>
+                                        <Sparkles size={11} /> Your Answer to Attendees:
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => startReply(m.id, m.hostReply)}
+                                        style={{ border: "none", background: "transparent", color: "var(--text-dim)", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.45 }}>
+                                      {m.hostReply}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Inline Host Reply Editor */}
+                                {isReplying && (
+                                  <div style={{ marginTop: 10, padding: 12, background: "var(--surface)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)" }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>
+                                      Answer to Attendees (Visible in Live Feed):
+                                    </div>
+                                    <textarea
+                                      className="dash-reply-input"
+                                      placeholder="Type your official response to this question..."
+                                      value={replyText}
+                                      onChange={(e) => setReplyText(e.target.value)}
+                                      maxLength={300}
+                                    />
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                                      <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                                        {replyText.length}/300
+                                      </span>
+                                      <div style={{ display: "flex", gap: 8 }}>
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost btn-sm"
+                                          onClick={() => setReplyingMessageId(null)}
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-primary btn-sm"
+                                          disabled={savingReplyId === m.id}
+                                          onClick={() => saveHostReply(m.id)}
+                                        >
+                                          {savingReplyId === m.id ? (
+                                            <Loader2 size={13} className="spin" />
+                                          ) : (
+                                            "Post Answer"
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -1191,6 +1812,134 @@ export default function DashboardPage() {
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: POLL DRAFTS & TEMPLATES LIBRARY */}
+        {tab === "polls" && (
+          <div className="poll-library-view">
+            <div className="poll-library-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Poll & Word Cloud Templates</h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-dim)", margin: "4px 0 0" }}>
+                  Prepare your interactive questions beforehand. Launch any draft into an active room with 1 click.
+                </p>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={openCreatePollModal}
+              >
+                <PlusCircle size={14} /> Create New Template
+              </button>
+            </div>
+
+            {loadingTemplates ? (
+              <LoadingSpinner text="Loading poll templates..." />
+            ) : pollTemplates.length === 0 ? (
+              <div className="empty-feed" style={{ padding: "60px 20px", textAlign: "center" }}>
+                <BarChart2 size={34} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
+                <h4>No saved poll templates yet</h4>
+                <p style={{ color: "var(--text-dim)", fontSize: 13.5, maxWidth: 420, margin: "6px auto 16px" }}>
+                  Create multiple-choice questions or word cloud prompts now so you don't have to type them live during your presentations.
+                </p>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={openCreatePollModal}
+                >
+                  <PlusCircle size={14} /> Create Your First Template
+                </button>
+              </div>
+            ) : (
+              <div className="poll-templates-grid">
+                {pollTemplates.map((t) => (
+                  <div key={t.id} className="poll-template-card">
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span className="poll-type-badge" style={{ fontSize: 11 }}>
+                        <Radio size={11} style={{ color: "var(--accent)" }} />
+                        {t.type === "WORD_CLOUD" ? "Word Cloud" : "Multiple Choice"}
+                      </span>
+                      {t.title && (
+                        <span style={{ fontSize: 11.5, color: "var(--text-dim)", background: "var(--surface-2)", padding: "2px 8px", borderRadius: 999 }}>
+                          {t.title}
+                        </span>
+                      )}
+                    </div>
+
+                    <h4 style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", margin: "6px 0 12px", lineHeight: 1.4 }}>
+                      {t.question}
+                    </h4>
+
+                    {t.type === "CHOICE" && t.options && t.options.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+                        {t.options.map((opt, oIdx) => (
+                          <span key={oIdx} className="poll-opt-pill">
+                            {opt}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 12, marginTop: "auto" }}>
+                      <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                        {new Date(t.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button
+                          className="icon-btn"
+                          title="Edit draft"
+                          onClick={() => startEditingTemplate(t)}
+                          style={{ padding: 6, color: "var(--text)" }}
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          className="icon-btn"
+                          title="Delete draft"
+                          disabled={deletingTemplateId === t.id}
+                          onClick={() => handleDeleteTemplate(t.id)}
+                          style={{ padding: 6, color: "var(--accent)" }}
+                        >
+                          {deletingTemplateId === t.id ? <Loader2 size={13} className="spin" /> : <Trash2 size={14} />}
+                        </button>
+
+                        {session && !isSessionCompleted ? (
+                          activePoll && activePoll.isActive && activePoll.question === t.question ? (
+                            <button
+                              className="btn btn-soft btn-xs"
+                              onClick={openActivePollModal}
+                              style={{
+                                fontSize: 12,
+                                padding: "5px 12px",
+                                color: "var(--primary)",
+                                borderColor: "rgba(255, 90, 54, 0.4)",
+                                background: "rgba(255, 90, 54, 0.12)",
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 5
+                              }}
+                              title="This poll is currently live on audience screen. Click to view results."
+                            >
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--primary)" }} />
+                              Live Now 🔴
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn-primary btn-xs"
+                              disabled={launchingTemplateId === t.id}
+                              onClick={() => handleLaunchTemplate(t)}
+                              style={{ fontSize: 12, padding: "5px 12px" }}
+                            >
+                              {launchingTemplateId === t.id ? <Loader2 size={12} className="spin" /> : "Launch Live 🚀"}
+                            </button>
+                          )
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -1555,6 +2304,426 @@ export default function DashboardPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Live Poll & Word Cloud Host Modal */}
+      {showPollModal && (
+        <div className="modal-overlay" onClick={closePollModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540, width: "92%" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <BarChart2 size={20} style={{ color: "var(--accent)" }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                  {editingTemplateId
+                    ? "Edit Poll Draft"
+                    : activePoll && modalPollTab === "active"
+                    ? "Active Live Poll"
+                    : "Live Polls & Saved Drafts"}
+                </h3>
+              </div>
+              <button className="modal-close-btn" onClick={closePollModal}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Poll Modal Navigation Tabs */}
+            <div className="poll-modal-tabs" style={{ marginTop: 14 }}>
+              {activePoll && (
+                <button
+                  type="button"
+                  className={`poll-modal-tab-btn ${modalPollTab === "active" ? "active" : ""}`}
+                  onClick={() => setModalPollTab("active")}
+                  style={{
+                    color: modalPollTab === "active" ? "var(--primary)" : undefined,
+                    fontWeight: modalPollTab === "active" ? 700 : undefined
+                  }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--primary)", display: "inline-block", marginRight: 5 }} />
+                  Live Results 🔴
+                </button>
+              )}
+
+              <button
+                type="button"
+                className={`poll-modal-tab-btn ${modalPollTab === "templates" ? "active" : ""}`}
+                onClick={() => {
+                  if (editingTemplateId) cancelEditingTemplate();
+                  setModalPollTab("templates");
+                }}
+              >
+                📁 Saved Drafts ({pollTemplates.length})
+              </button>
+
+              {editingTemplateId ? (
+                <button
+                  type="button"
+                  className="poll-modal-tab-btn active"
+                  style={{ background: "rgba(255, 90, 54, 0.12)", color: "var(--primary)", border: "1px solid rgba(255, 90, 54, 0.3)" }}
+                >
+                  ✏️ Edit Draft
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`poll-modal-tab-btn ${modalPollTab === "create" ? "active" : ""}`}
+                  onClick={() => {
+                    cancelEditingTemplate();
+                    setModalPollTab("create");
+                  }}
+                >
+                  ⚡ Create New Poll
+                </button>
+              )}
+            </div>
+
+            {modalPollTab === "active" && activePoll ? (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <span className="poll-type-badge">
+                    <Radio size={12} style={{ color: "var(--live)" }} />
+                    {activePoll.type === "WORD_CLOUD" ? "Live Word Cloud" : "Multiple Choice Poll"}
+                  </span>
+                  <span className="mono" style={{ fontSize: 13, color: "var(--text-dim)" }}>
+                    {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>
+                  {activePoll.question}
+                </div>
+
+                {activePoll.type === "CHOICE" ? (
+                  <div className="poll-options-grid">
+                    {activePoll.options.map((opt) => (
+                      <div key={opt.id} className="poll-opt-btn" style={{ cursor: "default" }}>
+                        <div
+                          className="poll-opt-progress-fill"
+                          style={{ width: `${opt.percentage || 0}%` }}
+                        />
+                        <div className="poll-opt-content">
+                          <span>{opt.text}</span>
+                          <span className="poll-opt-pct">
+                            {opt.votes} ({opt.percentage || 0}%)
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <WordCloudVisualizer
+                    words={activePoll.wordCloud || []}
+                    minHeight={300}
+                    showSummary={true}
+                  />
+                )}
+
+                <div style={{ marginTop: 22, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+                    Attendees can see and participate on the Ask page in real-time.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={handleEndPoll}
+                    disabled={endingPoll}
+                  >
+                    {endingPoll ? <Loader2 size={13} className="spin" /> : "End Active Poll"}
+                  </button>
+                </div>
+              </div>
+            ) : modalPollTab === "templates" ? (
+              <div style={{ maxHeight: 380, overflowY: "auto", paddingRight: 4, marginTop: 14 }}>
+                    {loadingTemplates ? (
+                      <LoadingSpinner text="Loading saved drafts..." />
+                    ) : pollTemplates.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "34px 12px", color: "var(--text-faint)" }}>
+                        <BarChart2 size={30} style={{ marginBottom: 8, opacity: 0.6 }} />
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>No saved poll drafts yet</div>
+                        <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "4px 0 14px" }}>
+                          Create a question in the "Create New Poll" tab and check "Save as template".
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setModalPollTab("create")}
+                        >
+                          Create a Poll
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {pollTemplates.map((t) => (
+                          <div
+                            key={t.id}
+                            style={{
+                              background: "var(--surface-2)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "var(--radius-sm)",
+                              padding: "12px 14px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 8
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <span className="poll-type-badge" style={{ fontSize: 10.5, padding: "2px 7px" }}>
+                                {t.type === "WORD_CLOUD" ? "Word Cloud" : "Multiple Choice"}
+                              </span>
+                              {t.title && (
+                                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                                  {t.title}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                              {t.question}
+                            </div>
+
+                            {t.type === "CHOICE" && t.options && t.options.length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                                {t.options.map((opt, oIdx) => (
+                                  <span key={oIdx} className="poll-opt-pill" style={{ fontSize: 11, padding: "2px 7px" }}>
+                                    {opt}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                title="Edit draft"
+                                onClick={() => startEditingTemplate(t)}
+                                style={{ padding: 4, color: "var(--text)" }}
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                title="Delete draft"
+                                disabled={deletingTemplateId === t.id}
+                                onClick={() => handleDeleteTemplate(t.id)}
+                                style={{ padding: 4, color: "var(--accent)" }}
+                              >
+                                {deletingTemplateId === t.id ? <Loader2 size={12} className="spin" /> : <Trash2 size={13} />}
+                              </button>
+                              {activePoll && activePoll.isActive && activePoll.question === t.question ? (
+                                <span
+                                  style={{
+                                    fontSize: 11.5,
+                                    padding: "4px 10px",
+                                    color: "var(--primary)",
+                                    background: "rgba(255, 90, 54, 0.12)",
+                                    border: "1px solid rgba(255, 90, 54, 0.3)",
+                                    borderRadius: "var(--radius-sm)",
+                                    fontWeight: 700,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 5
+                                  }}
+                                >
+                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--primary)", animation: "pulse 1.5s infinite" }} />
+                                  Live Now 🔴
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-xs"
+                                  disabled={launchingTemplateId === t.id}
+                                  onClick={() => handleLaunchTemplate(t)}
+                                  style={{ fontSize: 12, padding: "5px 12px" }}
+                                >
+                                  {launchingTemplateId === t.id ? <Loader2 size={12} className="spin" /> : "Launch to Audience 🚀"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <form onSubmit={handleLaunchPoll} style={{ marginTop: 10 }}>
+                    {editingTemplateId && (
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 12px",
+                        marginBottom: 14,
+                        background: "rgba(255, 90, 54, 0.1)",
+                        border: "1px solid rgba(255, 90, 54, 0.3)",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: 12.5,
+                        color: "var(--text)"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                          <Edit3 size={13} style={{ color: "var(--primary)" }} />
+                          <span>Editing saved draft</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={cancelEditingTemplate}
+                          style={{ padding: "2px 8px", fontSize: 11 }}
+                        >
+                          Cancel Edit
+                        </button>
+                      </div>
+                    )}
+
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text)" }}>
+                        Poll Type
+                      </label>
+                      <div className="chip-row">
+                        <button
+                          type="button"
+                          className={`chip ${pollType === "CHOICE" ? "active" : ""}`}
+                          onClick={() => setPollType("CHOICE")}
+                        >
+                          Multiple Choice Poll
+                        </button>
+                        <button
+                          type="button"
+                          className={`chip ${pollType === "WORD_CLOUD" ? "active" : ""}`}
+                          onClick={() => setPollType("WORD_CLOUD")}
+                        >
+                          Live Word Cloud
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 4, color: "var(--text-dim)" }}>
+                        Template Label / Topic (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Icebreaker, Wrap-up, Feedback"
+                        value={templateFormTitle}
+                        onChange={(e) => setTemplateFormTitle(e.target.value)}
+                        style={{ width: "100%", padding: "7px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13 }}
+                      />
+                    </div>
+
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text)" }}>
+                        {pollType === "CHOICE" ? "Poll Question" : "Word Cloud Prompt"}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={pollType === "CHOICE" ? "e.g. Which topic should we dive into next?" : "e.g. Where is everyone tuning in from?"}
+                        value={pollQuestion}
+                        onChange={(e) => setPollQuestion(e.target.value)}
+                        required
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 14 }}
+                      />
+                    </div>
+
+                    {pollType === "CHOICE" && (
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text)" }}>
+                          Options (Minimum 2)
+                        </label>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {pollOptions.map((opt, idx) => (
+                            <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <input
+                                type="text"
+                                placeholder={`Option ${idx + 1}`}
+                                value={opt}
+                                onChange={(e) => {
+                                  const updated = [...pollOptions];
+                                  updated[idx] = e.target.value;
+                                  setPollOptions(updated);
+                                }}
+                                required={idx < 2}
+                                style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13.5 }}
+                              />
+                              {pollOptions.length > 2 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                  style={{ padding: "6px 8px" }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {pollOptions.length < 5 && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setPollOptions([...pollOptions, ""])}
+                            style={{ marginTop: 8 }}
+                          >
+                            + Add Option
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {!editingTemplateId && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, marginTop: 10 }}>
+                        <input
+                          type="checkbox"
+                          id="saveAsTemplateCheck"
+                          checked={saveAsTemplate}
+                          onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                          style={{ cursor: "pointer", width: 16, height: 16 }}
+                        />
+                        <label htmlFor="saveAsTemplateCheck" style={{ fontSize: 13, color: "var(--text)", cursor: "pointer", userSelect: "none" }}>
+                          Save to Poll Library for future sessions
+                        </label>
+                      </div>
+                    )}
+
+                    <div className="modal-actions" style={{ marginTop: 18, gap: 10, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          if (editingTemplateId) cancelEditingTemplate();
+                          setShowPollModal(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={savingDraftOnly || !pollQuestion.trim()}
+                        onClick={handleSaveDraftOnly}
+                        title={editingTemplateId ? "Save changes to this template" : "Save to drafts without launching immediately"}
+                      >
+                        {savingDraftOnly ? (
+                          <Loader2 size={13} className="spin" />
+                        ) : editingTemplateId ? (
+                          "Update Draft ✨"
+                        ) : (
+                          "Save Draft Only"
+                        )}
+                      </button>
+                      {session && !isSessionCompleted && (
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-sm"
+                          disabled={submittingPoll || !pollQuestion.trim()}
+                        >
+                          {submittingPoll ? <Loader2 size={13} className="spin" /> : "Launch to Audience 🚀"}
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                )}
           </div>
         </div>
       )}

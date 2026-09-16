@@ -23,6 +23,11 @@ export function initializeSockets(io, prisma) {
         console.log(`Socket connected: ${socket.id} (${userLabel})`);
 
         const handleJoin = async (roomCode) => {
+            if (!roomCode) return;
+            // Avoid duplicate join if socket is already in the channel
+            if (socket.rooms && socket.rooms.has(roomCode)) {
+                return;
+            }
             try {
                 const room = await prisma.room.findFirst({
                     where: { roomCode },
