@@ -2199,11 +2199,24 @@ export default function DashboardPage() {
               </p>
               <div className="upgrade-modal-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
                 {/* 24h Room Pass */}
-                <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
                   <div>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: "var(--accent)", color: "#fff", padding: "2px 8px", borderRadius: 999 }}>Popular for Events</span>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginTop: 8 }}>24h Room Pass</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, margin: "6px 0", color: "var(--accent)" }}>{geoCurrency.formatted}<span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}> /pass</span></div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, background: "var(--accent)", color: "#fff", padding: "2px 8px", borderRadius: 999 }}>Popular for Events</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, background: "rgba(239, 68, 68, 0.12)", color: "#ef4444", padding: "2px 7px", borderRadius: 999, border: "1px solid rgba(239, 68, 68, 0.25)" }}>
+                        🔥 Limited Time
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginTop: 6 }}>24h Room Pass</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0" }}>
+                      <span style={{ fontSize: 26, fontWeight: 800, color: "var(--accent)", letterSpacing: "-0.02em" }}>
+                        {geoCurrency.formatted}
+                      </span>
+                      <span style={{ fontSize: 15, color: "var(--text-dim)", textDecoration: "line-through", fontWeight: 600, opacity: 0.7 }}>
+                        {geoCurrency.originalFormatted || (geoCurrency.isIndia ? "₹499" : "$9")}
+                      </span>
+                      <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500 }}> /pass</span>
+                    </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>1 room for 24 hours</li>
                       <li>Up to 500 messages / room</li>
@@ -2237,8 +2250,8 @@ export default function DashboardPage() {
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
                       <li>Up to 1,000 messages / room</li>
-                      <li>Live polls &amp; word clouds</li>
-                      <li>Unlimited poll templates</li>
+                      <li>Unlimited live polls &amp; word clouds</li>
+                      <li>Unlimited poll templates in library</li>
                       <li>60-min room timers</li>
                       <li>Scheduled start</li>
                       <li>90 days history retention</li>
@@ -2266,8 +2279,8 @@ export default function DashboardPage() {
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
                       <li>Up to 2,500 messages / room</li>
-                      <li>Live polls &amp; word clouds</li>
-                      <li>Unlimited poll templates</li>
+                      <li>Unlimited live polls &amp; word clouds</li>
+                      <li>Unlimited poll templates in library</li>
                       <li>120-min room timers</li>
                       <li>1 year history retention</li>
                       <li>Export (.txt &amp; CSV)</li>

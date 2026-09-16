@@ -425,12 +425,24 @@ export default function LandingPage() {
               </div>
 
               {/* 24h Room Pass */}
-              <div className="price-card featured" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div className="price-card featured" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
                 <span className="price-tag">Popular for Events</span>
                 <div>
-                  <div className="price-plan" style={{ color: "var(--accent)", fontWeight: 700 }}>24h Room Pass</div>
-                  <div className="price-amount">{geoCurrency.formatted}</div>
-                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>One-time pass per event</p>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    <div className="price-plan" style={{ color: "var(--accent)", fontWeight: 700, margin: 0 }}>24h Room Pass</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(239, 68, 68, 0.12)", color: "#ef4444", padding: "3px 9px", borderRadius: 999, border: "1px solid rgba(239, 68, 68, 0.25)" }}>
+                      🔥 Limited Time Offer
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: "38px", fontWeight: 800, color: "var(--text)", fontFamily: "var(--font-display)", letterSpacing: "-0.02em", lineHeight: 1 }}>
+                      {geoCurrency.formatted}
+                    </span>
+                    <span style={{ fontSize: "20px", color: "var(--text-dim)", textDecoration: "line-through", fontWeight: 600, opacity: 0.7 }}>
+                      {geoCurrency.originalFormatted || (geoCurrency.isIndia ? "₹499" : "$9")}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "12.5px", color: "var(--text-dim)", margin: "4px 0 0" }}>One-time pass per event · Launch pricing</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 1 room for 24 hours</li>
                     <li><Check size={15} /> Up to 500 messages / room</li>
@@ -465,8 +477,8 @@ export default function LandingPage() {
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> Unlimited rooms</li>
                     <li><Check size={15} /> Up to 1,000 messages / room</li>
-                    <li><Check size={15} /> Live polls &amp; word clouds</li>
-                    <li><Check size={15} /> Unlimited poll templates</li>
+                    <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Unlimited poll templates in library</li>
                     <li><Check size={15} /> 60-min room timers</li>
                     <li><Check size={15} /> Scheduled start</li>
                     <li><Check size={15} /> 90 days history retention</li>
@@ -495,8 +507,8 @@ export default function LandingPage() {
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> Unlimited rooms</li>
                     <li><Check size={15} /> Up to 2,500 messages / room</li>
-                    <li><Check size={15} /> Live polls &amp; word clouds</li>
-                    <li><Check size={15} /> Unlimited poll templates</li>
+                    <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Unlimited poll templates in library</li>
                     <li><Check size={15} /> 120-min room timers</li>
                     <li><Check size={15} /> 1 year history retention</li>
                     <li><Check size={15} /> Export (.txt &amp; CSV)</li>

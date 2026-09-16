@@ -16,8 +16,9 @@ export function detectGeoCurrencySync() {
       return {
         code: "INR",
         symbol: "₹",
-        price: 399,
-        formatted: "₹399",
+        price: 299,
+        formatted: "₹299",
+        originalFormatted: "₹499",
         isIndia: true,
       };
     } else {
@@ -26,6 +27,7 @@ export function detectGeoCurrencySync() {
         symbol: "$",
         price: 5,
         formatted: "$5",
+        originalFormatted: "$9",
         isIndia: false,
       };
     }
@@ -33,8 +35,9 @@ export function detectGeoCurrencySync() {
     return {
       code: "INR",
       symbol: "₹",
-      price: 399,
-      formatted: "₹399",
+      price: 299,
+      formatted: "₹299",
+      originalFormatted: "₹499",
       isIndia: true,
     };
   }
@@ -55,9 +58,9 @@ export function useGeoCurrency() {
           const country = data.country_code.toUpperCase();
           if (isMounted) {
             if (country === "IN") {
-              setGeo({ code: "INR", symbol: "₹", price: 399, formatted: "₹399", isIndia: true });
+              setGeo({ code: "INR", symbol: "₹", price: 299, formatted: "₹299", originalFormatted: "₹499", isIndia: true });
             } else {
-              setGeo({ code: "USD", symbol: "$", price: 5, formatted: "$5", isIndia: false });
+              setGeo({ code: "USD", symbol: "$", price: 5, formatted: "$5", originalFormatted: "$9", isIndia: false });
             }
           }
           return;
@@ -72,9 +75,9 @@ export function useGeoCurrency() {
             const country = data2.country.toUpperCase();
             if (isMounted) {
               if (country === "IN") {
-                setGeo({ code: "INR", symbol: "₹", price: 399, formatted: "₹399", isIndia: true });
+                setGeo({ code: "INR", symbol: "₹", price: 299, formatted: "₹299", originalFormatted: "₹499", isIndia: true });
               } else {
-                setGeo({ code: "USD", symbol: "$", price: 5, formatted: "$5", isIndia: false });
+                setGeo({ code: "USD", symbol: "$", price: 5, formatted: "$5", originalFormatted: "$9", isIndia: false });
               }
             }
           }

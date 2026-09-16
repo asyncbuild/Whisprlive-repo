@@ -457,7 +457,7 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
   }
 
   const isUSD = currency === "USD";
-  const amount = isUSD ? 500 : 39900; // $5 USD (500 cents) or ₹399 INR (39900 paise)
+  const amount = isUSD ? 500 : 29900; // $5 USD (500 cents) or ₹299 INR (29900 paise) - Limited time promotional price
   const orderCurrency = isUSD ? "USD" : "INR";
 
   try {
