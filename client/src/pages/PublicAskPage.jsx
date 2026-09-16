@@ -7,6 +7,7 @@ import {
 import { io } from "socket.io-client";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
+import WordCloudVisualizer from "../components/WordCloudVisualizer";
 import API from "../api/axios";
 import { useToast } from "../context/ToastContext";
 import { getClientDeviceModel } from "../utils/deviceInfo";
@@ -37,12 +38,6 @@ function WhatsAppIcon({ size = 15 }) {
   );
 }
 
-// Word cloud random palette generator
-const TAG_COLORS = [
-  "#2563EB", "#0284C7", "#0D9488", "#16A34A",
-  "#7C3AED", "#D97706", "#EA580C", "#DB2777"
-];
-
 export default function PublicAskPage() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
@@ -67,14 +62,14 @@ export default function PublicAskPage() {
   const [isVoting, setIsVoting] = useState(false);
 
   // Persistent Voter Fingerprint & Voted Records
-  const voterId = useMemo(() => {
+  const [voterId] = useState(() => {
     let vid = localStorage.getItem("whisprlive_voter_id");
     if (!vid) {
       vid = "vtr_" + Math.random().toString(36).slice(2, 11) + "_" + Date.now().toString(36);
       localStorage.setItem("whisprlive_voter_id", vid);
     }
     return vid;
-  }, []);
+  });
 
   const [votedMessageIds, setVotedMessageIds] = useState(() => {
     try {
@@ -144,7 +139,11 @@ export default function PublicAskPage() {
   const fetchActivePoll = async () => {
     try {
       const res = await API.get(`/api/rooms/public/${roomCode}/poll/active`);
-      setActivePoll(res.data?.poll || null);
+      const poll = res.data?.poll || null;
+      setActivePoll(poll);
+      if (poll && poll.isActive) {
+        setActiveTab("poll");
+      }
     } catch (err) {
       console.error("Failed to load active poll:", err);
     }
@@ -169,7 +168,6 @@ export default function PublicAskPage() {
 
     const joinRoomAndSync = () => {
       socket.emit("join_room", roomCode);
-      socket.emit("joinRoom", roomCode);
       fetchStatus();
       fetchPublicMessages();
       fetchActivePoll();
@@ -229,18 +227,25 @@ export default function PublicAskPage() {
     });
 
     socket.on("room_settings_updated", (data) => {
-      if (typeof data?.showPublicFeed === "boolean") {
-        setRoomInfo((prev) => (prev ? { ...prev, showPublicFeed: data.showPublicFeed } : prev));
-        if (data.showPublicFeed) {
-          fetchPublicMessages();
-        }
+      setRoomInfo((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        if (typeof data?.showPublicFeed === "boolean") updated.showPublicFeed = data.showPublicFeed;
+        if (typeof data?.isAccepting === "boolean") updated.isAccepting = data.isAccepting;
+        if (data?.activityType) updated.activityType = data.activityType;
+        return updated;
+      });
+      if (data?.showPublicFeed) {
+        fetchPublicMessages();
       }
     });
 
     // Real-time Live Poll & Word Cloud events
     socket.on("poll_created", (poll) => {
       setActivePoll(poll);
-      toast.info("📊 Host launched a new live poll!");
+      setActiveTab("poll");
+      const label = poll.type === "WORD_CLOUD" ? "Word Cloud" : "Live Poll";
+      toast.info(`📊 Host launched a new ${label}!`);
     });
 
     socket.on("poll_updated", (poll) => {
@@ -249,6 +254,7 @@ export default function PublicAskPage() {
 
     socket.on("poll_ended", () => {
       setActivePoll(null);
+      setActiveTab((prev) => (prev === "poll" ? "ask" : prev));
       toast.info("Active poll has ended.");
     });
 
@@ -477,7 +483,8 @@ export default function PublicAskPage() {
   }
 
   const isScheduled = untilStart > 0;
-  const isExpired = untilEnd <= 0 || roomInfo.status === "Expired" || roomInfo.isAccepting === false;
+  const isExpired = untilEnd <= 0 || roomInfo.status === "Expired";
+  const isAccepting = roomInfo.isAccepting !== false;
   const isActive = !isScheduled && !isExpired;
   const showFeedTab = roomInfo.showPublicFeed !== false;
   const hasVotedActivePoll = activePoll ? Boolean(votedPollMap[activePoll.id]) : false;
@@ -508,12 +515,20 @@ export default function PublicAskPage() {
         <div className="public-header">
           <span className="eyebrow">
             <Radio size={13} />
-            {isScheduled ? "Scheduled Room" : isActive ? "Live Q&A & Audience Engagement" : "Session Closed"}
+            {isScheduled
+              ? "Scheduled Room"
+              : isActive
+                ? activePoll
+                  ? activePoll.type === "WORD_CLOUD"
+                    ? "Live Word Cloud Active"
+                    : "Live Poll Active"
+                  : "Live Room"
+                : "Session Closed"}
           </span>
           <div className="public-title-box">
             <h1>{roomInfo.title}</h1>
           </div>
-          <p>Share questions, vote on top topics, and join live prompts 100% anonymously.</p>
+          <p>Share questions, vote on top topics, and join live polls 100% anonymously.</p>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
             <div className="timer-badge">
@@ -587,7 +602,7 @@ export default function PublicAskPage() {
                 onClick={() => setActiveTab("poll")}
               >
                 <span className="pulse-dot" />
-                <BarChart2 size={14} /> Live Poll
+                <BarChart2 size={14} /> {activePoll?.type === "WORD_CLOUD" ? "Live Word Cloud" : "Live Poll"}
               </button>
             )}
           </div>
@@ -609,29 +624,39 @@ export default function PublicAskPage() {
             {/* TAB 1: ASK QUESTION */}
             {activeTab === "ask" && (
               isActive ? (
-                <form className="ask-box" onSubmit={handleSubmit}>
-                  <textarea
-                    className="ask-textarea"
-                    placeholder="Share a question, suggestion, or honest feedback..."
-                    maxLength={300}
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                  />
-                  <div className="ask-foot">
-                    <span className="char-count mono">{text.length}/300</span>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      type="submit"
-                      disabled={!text.trim() || isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <>Sending... <Loader2 size={13} className="spin" /></>
-                      ) : (
-                        <>Send <Send size={14} /></>
-                      )}
-                    </button>
+                isAccepting ? (
+                  <form className="ask-box" onSubmit={handleSubmit}>
+                    <textarea
+                      className="ask-textarea"
+                      placeholder="Share a question, suggestion, or honest feedback..."
+                      maxLength={300}
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                    />
+                    <div className="ask-foot">
+                      <span className="char-count mono">{text.length}/300</span>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        type="submit"
+                        disabled={!text.trim() || isSubmitting}
+                      >
+                        {isSubmitting ? (
+                          <>Sending... <Loader2 size={13} className="spin" /></>
+                        ) : (
+                          <>Send <Send size={14} /></>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="empty-feed" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "40px 20px", textAlign: "center" }}>
+                    <MessageSquare size={36} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
+                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Questions Paused</h3>
+                    <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
+                      The host is not accepting questions right now. Waiting for the host to launch the next live activity...
+                    </p>
                   </div>
-                </form>
+                )
               ) : (
                 <div className="empty-feed" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "40px 20px" }}>
                   <Clock size={36} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
@@ -738,113 +763,103 @@ export default function PublicAskPage() {
             )}
 
             {/* TAB 3: LIVE POLL & WORD CLOUD */}
-            {activeTab === "poll" && activePoll && (
-              <div className="poll-card">
-                <div className="poll-badge-row">
-                  <span className="poll-type-badge">
-                    <Radio size={12} style={{ color: "var(--live)" }} />
-                    {activePoll.type === "WORD_CLOUD" ? "Live Word Cloud" : "Live Multiple Choice Poll"}
-                  </span>
-                  <span style={{ fontSize: 12, color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
-                    {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"}
-                  </span>
-                </div>
-
-                <h3 className="poll-question-title">{activePoll.question}</h3>
-
-                {activePoll.type === "CHOICE" ? (
-                  <div className="poll-options-grid">
-                    {activePoll.options.map((opt) => {
-                      const userPick = votedPollMap[activePoll.id] === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={`poll-opt-btn ${userPick ? "user-voted" : ""}`}
-                          disabled={hasVotedActivePoll || isVoting}
-                          onClick={() => handlePollVote(opt.id)}
-                        >
-                          <div
-                            className="poll-opt-progress-fill"
-                            style={{ width: `${opt.percentage || 0}%` }}
-                          />
-                          <div className="poll-opt-content">
-                            <span>
-                              {userPick && "✓ "}
-                              {opt.text}
-                            </span>
-                            <span className="poll-opt-pct">
-                              {opt.percentage || 0}%
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
+            {activeTab === "poll" && (
+              activePoll ? (
+                <div className="poll-card">
+                  <div className="poll-badge-row">
+                    <span className="poll-type-badge">
+                      <Radio size={12} style={{ color: "var(--live)" }} />
+                      {activePoll.type === "WORD_CLOUD" ? "Live Word Cloud" : "Live Multiple Choice Poll"}
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
+                      {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"}
+                    </span>
                   </div>
-                ) : (
-                  <div>
-                    {/* Interactive Word Cloud Visualizer */}
-                    <div className="wordcloud-canvas">
-                      {(!activePoll.wordCloud || activePoll.wordCloud.length === 0) ? (
-                        <p style={{ color: "var(--text-faint)", fontSize: 13.5 }}>
-                          No words submitted yet. Be the first to add your voice!
-                        </p>
+
+                  <h3 className="poll-question-title">{activePoll.question}</h3>
+
+                  {activePoll.type === "CHOICE" ? (
+                    <div className="poll-options-grid">
+                      {activePoll.options.map((opt) => {
+                        const userPick = votedPollMap[activePoll.id] === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            className={`poll-opt-btn ${userPick ? "user-voted" : ""}`}
+                            disabled={hasVotedActivePoll || isVoting}
+                            onClick={() => handlePollVote(opt.id)}
+                          >
+                            <div
+                              className="poll-opt-progress-fill"
+                              style={{ width: `${opt.percentage || 0}%` }}
+                            />
+                            <div className="poll-opt-content">
+                              <span>
+                                {userPick && "✓ "}
+                                {opt.text}
+                              </span>
+                              <span className="poll-opt-pct">
+                                {opt.percentage || 0}%
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Interactive Word Cloud Visualizer */}
+                      <WordCloudVisualizer
+                        words={activePoll.wordCloud || []}
+                        minHeight={250}
+                        style={{ marginBottom: 16 }}
+                      />
+
+                      {!hasVotedActivePoll ? (
+                        <form
+                          className="wordcloud-form"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (wordInput.trim()) {
+                              handlePollVote(null, wordInput.trim());
+                            }
+                          }}
+                        >
+                          <input
+                            type="text"
+                            className="wordcloud-input"
+                            placeholder="Type 1 or 2 words..."
+                            maxLength={30}
+                            value={wordInput}
+                            onChange={(e) => setWordInput(e.target.value)}
+                          />
+                          <button
+                            type="submit"
+                            className="btn btn-primary btn-sm"
+                            disabled={!wordInput.trim() || isVoting}
+                          >
+                            Submit Word
+                          </button>
+                        </form>
                       ) : (
-                        activePoll.wordCloud.map((w, idx) => {
-                          const maxCount = Math.max(...activePoll.wordCloud.map((x) => x.count), 1);
-                          const scale = 14 + Math.round((w.count / maxCount) * 18);
-                          const color = TAG_COLORS[idx % TAG_COLORS.length];
-                          return (
-                            <span
-                              key={w.text}
-                              className="wc-tag"
-                              style={{
-                                fontSize: `${scale}px`,
-                                color,
-                                border: `1px solid ${color}33`
-                              }}
-                            >
-                              {w.text} <small style={{ opacity: 0.7, fontSize: "0.75em" }}>({w.count})</small>
-                            </span>
-                          );
-                        })
+                        <p style={{ fontSize: 13, color: "var(--success)", fontWeight: 600, textAlign: "center", marginTop: 10 }}>
+                          ✓ Thank you! Your word is now live in the audience word cloud.
+                        </p>
                       )}
                     </div>
-
-                    {!hasVotedActivePoll ? (
-                      <form
-                        className="wordcloud-form"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (wordInput.trim()) {
-                            handlePollVote(null, wordInput.trim());
-                          }
-                        }}
-                      >
-                        <input
-                          type="text"
-                          className="wordcloud-input"
-                          placeholder="Type 1 or 2 words..."
-                          maxLength={30}
-                          value={wordInput}
-                          onChange={(e) => setWordInput(e.target.value)}
-                        />
-                        <button
-                          type="submit"
-                          className="btn btn-primary btn-sm"
-                          disabled={!wordInput.trim() || isVoting}
-                        >
-                          Submit Word
-                        </button>
-                      </form>
-                    ) : (
-                      <p style={{ fontSize: 13, color: "var(--success)", fontWeight: 600, textAlign: "center", marginTop: 10 }}>
-                        ✓ Thank you! Your word is now live in the audience word cloud.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              ) : (
+                <div className="empty-feed" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "48px 24px", textAlign: "center" }}>
+                  <Radio size={36} style={{ color: "var(--live)", marginBottom: 12 }} />
+                  <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Waiting for Host Activity</h3>
+                  <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6, maxWidth: 440, margin: "0 auto" }}>
+                    The host has not launched an active {roomInfo?.activityType === "WORD_CLOUD" ? "word cloud" : "poll"} yet.
+                    Keep this screen open—it will automatically sync the moment they launch!
+                  </p>
+                </div>
+              )
             )}
           </>
         )}

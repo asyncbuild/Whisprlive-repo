@@ -15,6 +15,7 @@ model User {
   roomPasses   Int      @default(0)
   createdAt    DateTime  @default(now())
   rooms        Room[]
+  pollTemplates PollTemplate[]
 }
 
 model Room {
@@ -27,6 +28,7 @@ model Room {
   expiresAt       DateTime
   isAccepting     Boolean   @default(true)
   showPublicFeed  Boolean   @default(true) // Host toggle: whether approved questions are visible to audience
+  activityType    String    @default("ALL") // "ALL" | "POLL" | "WORD_CLOUD" | "QA"
   isPassUsed      Boolean   @default(false)
   createdAt       DateTime  @default(now())
 
@@ -113,6 +115,20 @@ model Feedback {
   message   String
   email     String?
   createdAt DateTime @default(now())
+}
+
+model PollTemplate {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String?  // Optional label/topic tag
+  question  String
+  type      String   @default("CHOICE") // "CHOICE" | "WORD_CLOUD"
+  options   String[] // Array of option strings
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 
