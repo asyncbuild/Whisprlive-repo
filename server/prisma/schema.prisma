@@ -26,12 +26,14 @@ model Room {
   startsAt        DateTime @default(now())
   expiresAt       DateTime
   isAccepting     Boolean   @default(true)
+  showPublicFeed  Boolean   @default(true) // Host toggle: whether approved questions are visible to audience
   isPassUsed      Boolean   @default(false)
   createdAt       DateTime  @default(now())
 
   // Relations
   host            User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
   messages        Message[]
+  polls           Poll[]
 }
 
 model Message {
@@ -41,6 +43,8 @@ model Message {
   status      String   @default("accepted") // "accepted", "rejected", "pinned"
   upvotes     Int      @default(0)
   isAnswered  Boolean  @default(false)
+  isPinned    Boolean  @default(false)
+  hostReply   String?
 
   // Tracking Metadata
   device      String?  // e.g. "Mobile (Android 11)"
@@ -52,6 +56,46 @@ model Message {
 
   // Relations
   room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model Poll {
+  id          String         @id @default(uuid())
+  roomId      String
+  question    String
+  type        String         @default("CHOICE") // "CHOICE", "WORD_CLOUD"
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+
+  // Relations
+  room        Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  options     PollOption[]
+  responses   PollResponse[]
+}
+
+model PollOption {
+  id        String         @id @default(uuid())
+  pollId    String
+  text      String
+  votes     Int            @default(0)
+
+  // Relations
+  poll      Poll           @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  responses PollResponse[]
+}
+
+model PollResponse {
+  id        String       @id @default(uuid())
+  pollId    String
+  optionId  String?
+  word      String?      // for WORD_CLOUD response
+  voterId   String       // anonymous client fingerprint / ID
+  createdAt DateTime     @default(now())
+
+  // Relations
+  poll      Poll         @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option    PollOption?  @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, voterId])
 }
 
 model PlanWaitlist {
@@ -70,4 +114,5 @@ model Feedback {
   email     String?
   createdAt DateTime @default(now())
 }
+
 

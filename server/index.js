@@ -284,7 +284,7 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
 // Room & Session Routes
 // Create new session Route
 app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
-  const { title, durationMinutes, startsAt, usePass } = req.body;
+  const { title, durationMinutes, startsAt, usePass, showPublicFeed } = req.body;
   const parsedDuration = parseInt(durationMinutes, 10);
 
   if (isNaN(parsedDuration) || parsedDuration <= 0) {
@@ -367,6 +367,7 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
         startsAt: sessionStartTime,
         expiresAt,
         isPassUsed: isUsingPass,
+        showPublicFeed: typeof showPublicFeed === "boolean" ? showPublicFeed : true,
       },
     });
 
@@ -375,6 +376,7 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
       room: roomCode,
       shareableUrl: `/ask/${newRoom.roomCode}`,
       isPassUsed: isUsingPass,
+      showPublicFeed: newRoom.showPublicFeed,
     });
   } catch (err) {
     console.error("❌ Prisma Room Creation Error:", err);
@@ -623,6 +625,7 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
         startsAt: true,
         expiresAt: true,
         isAccepting: true,
+        showPublicFeed: true,
       }
     })
     if (!room) {
@@ -637,6 +640,7 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
       startsAt: room.startsAt,
       expiresAt: room.expiresAt,
       isAccepting: room.isAccepting,
+      showPublicFeed: room.showPublicFeed,
       status: isNotStarted ? 'Scheduled' : isExpired ? 'Expired' : 'Active',
       canSend
     })
@@ -888,6 +892,413 @@ app.patch("/api/rooms/:roomId/messages/:messageId/answered", verifyToken, async 
     res.status(500).json({ error: err.message })
   }
 })
+
+// Host updates room settings (e.g. toggle audience visibility of Q&A feed)
+app.patch("/api/rooms/:roomId/settings", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  const { showPublicFeed } = req.body;
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId, hostId: req.user.id }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+    const updated = await prisma.room.update({
+      where: { id: room.id },
+      data: {
+        showPublicFeed: typeof showPublicFeed === "boolean" ? showPublicFeed : room.showPublicFeed
+      }
+    });
+
+    io.to(roomId).emit("room_settings_updated", {
+      roomCode: roomId,
+      showPublicFeed: updated.showPublicFeed
+    });
+
+    res.json({ message: "Settings updated successfully", room: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: Fetch approved questions for audience feed (if enabled by host)
+app.get("/api/rooms/public/:roomId/messages", async (req, res) => {
+  const { roomId } = req.params;
+  if (roomId.toLowerCase() === "demo") {
+    return res.json({
+      showPublicFeed: true,
+      messages: [
+        {
+          id: "demo-q1",
+          content: "How does WhisprLive guarantee 100% attendee anonymity?",
+          upvotes: 14,
+          isAnswered: true,
+          isPinned: true,
+          hostReply: "Attendees never register or sign in. Messages are assigned random IDs and no personal info is ever stored or shared!",
+          createdAt: new Date(Date.now() - 3600000).toISOString()
+        },
+        {
+          id: "demo-q2",
+          content: "Can we use WhisprLive with large audiences over 500+ participants?",
+          upvotes: 9,
+          isAnswered: false,
+          isPinned: false,
+          hostReply: null,
+          createdAt: new Date(Date.now() - 1800000).toISOString()
+        },
+        {
+          id: "demo-q3",
+          content: "Is there support for interactive audience polls during the talk?",
+          upvotes: 6,
+          isAnswered: true,
+          isPinned: false,
+          hostReply: "Yes! Hosts can launch live multiple-choice polls and real-time word clouds at any point.",
+          createdAt: new Date(Date.now() - 900000).toISOString()
+        }
+      ]
+    });
+  }
+
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId },
+      select: { id: true, showPublicFeed: true }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+
+    if (!room.showPublicFeed) {
+      return res.json({ showPublicFeed: false, messages: [] });
+    }
+
+    const messages = await prisma.message.findMany({
+      where: {
+        roomId: room.id,
+        status: { not: "rejected" }
+      },
+      select: {
+        id: true,
+        content: true,
+        upvotes: true,
+        isAnswered: true,
+        isPinned: true,
+        hostReply: true,
+        createdAt: true,
+      },
+      orderBy: [
+        { isPinned: "desc" },
+        { upvotes: "desc" },
+        { createdAt: "desc" }
+      ]
+    });
+
+    res.json({ showPublicFeed: true, messages });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Host adds / updates an official direct answer / reply to a question
+app.patch("/api/rooms/:roomId/messages/:messageId/reply", verifyToken, async (req, res) => {
+  const { roomId, messageId } = req.params;
+  const { hostReply } = req.body;
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId, hostId: req.user.id }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+
+    const cleanReply = typeof hostReply === "string" ? hostReply.trim() : null;
+    const updatedMessage = await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        hostReply: cleanReply || null,
+        isAnswered: Boolean(cleanReply) ? true : undefined
+      }
+    });
+
+    io.to(roomId).emit("message_replied", {
+      messageId: updatedMessage.id,
+      hostReply: updatedMessage.hostReply,
+      isAnswered: updatedMessage.isAnswered
+    });
+
+    res.json({ message: "Host reply saved successfully", messageItem: updatedMessage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Host toggles pinning a question to the top
+app.patch("/api/rooms/:roomId/messages/:messageId/pin", verifyToken, async (req, res) => {
+  const { roomId, messageId } = req.params;
+  const { isPinned } = req.body;
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId, hostId: req.user.id }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+
+    const updatedMessage = await prisma.message.update({
+      where: { id: messageId },
+      data: { isPinned: Boolean(isPinned) }
+    });
+
+    io.to(roomId).emit("message_pinned", {
+      messageId: updatedMessage.id,
+      isPinned: updatedMessage.isPinned
+    });
+
+    res.json({ message: "Pin status updated successfully", messageItem: updatedMessage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper to format active poll with live aggregates (percentages / word clouds)
+async function formatActivePoll(pollId) {
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    include: {
+      options: {
+        orderBy: { id: "asc" }
+      },
+      responses: true
+    }
+  });
+  if (!poll) return null;
+
+  const totalVotes = poll.responses.length;
+  let formattedOptions = [];
+  if (poll.type === "CHOICE") {
+    formattedOptions = poll.options.map((opt) => {
+      const optVotes = poll.responses.filter((r) => r.optionId === opt.id).length;
+      const percentage = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+      return {
+        id: opt.id,
+        text: opt.text,
+        votes: optVotes,
+        percentage
+      };
+    });
+  }
+
+  let wordCloud = [];
+  if (poll.type === "WORD_CLOUD") {
+    const wordCounts = {};
+    poll.responses.forEach((r) => {
+      if (r.word) {
+        const clean = r.word.trim().toLowerCase();
+        wordCounts[clean] = (wordCounts[clean] || 0) + 1;
+      }
+    });
+    wordCloud = Object.entries(wordCounts)
+      .map(([text, count]) => ({ text, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  return {
+    id: poll.id,
+    roomId: poll.roomId,
+    question: poll.question,
+    type: poll.type,
+    isActive: poll.isActive,
+    totalVotes,
+    options: formattedOptions,
+    wordCloud,
+    createdAt: poll.createdAt
+  };
+}
+
+// Host creates a new Live Poll / Word Cloud prompt
+app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  const { question, type, options } = req.body;
+
+  if (!question || question.trim() === "") {
+    return res.status(400).json({ message: "Poll question/prompt is required" });
+  }
+  const pollType = type === "WORD_CLOUD" ? "WORD_CLOUD" : "CHOICE";
+
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId, hostId: req.user.id }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+
+    // Automatically deactivate previous active polls in this room
+    await prisma.poll.updateMany({
+      where: { roomId: room.id, isActive: true },
+      data: { isActive: false }
+    });
+
+    const newPoll = await prisma.poll.create({
+      data: {
+        roomId: room.id,
+        question: question.trim(),
+        type: pollType,
+        isActive: true,
+        options: pollType === "CHOICE" && Array.isArray(options) ? {
+          create: options.filter((o) => typeof o === "string" && o.trim() !== "").map((o) => ({
+            text: o.trim(),
+            votes: 0
+          }))
+        } : undefined
+      }
+    });
+
+    const formatted = await formatActivePoll(newPoll.id);
+    io.to(roomId).emit("poll_created", formatted);
+
+    res.status(201).json({ message: "Poll created successfully", poll: formatted });
+  } catch (err) {
+    console.error("Poll creation error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public / Host: Get current active poll for the room
+app.get("/api/rooms/public/:roomId/poll/active", async (req, res) => {
+  const { roomId } = req.params;
+  if (roomId.toLowerCase() === "demo") {
+    return res.json({
+      poll: {
+        id: "demo-poll",
+        roomId: "demo",
+        question: "How are you planning to use WhisprLive?",
+        type: "CHOICE",
+        isActive: true,
+        totalVotes: 42,
+        options: [
+          { id: "opt-1", text: "Conferences & Events", votes: 21, percentage: 50 },
+          { id: "opt-2", text: "Company All-Hands / Town Halls", votes: 13, percentage: 31 },
+          { id: "opt-3", text: "College Classes & Workshops", votes: 8, percentage: 19 }
+        ],
+        wordCloud: [],
+        createdAt: new Date().toISOString()
+      }
+    });
+  }
+
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId },
+      select: { id: true }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+
+    const activePoll = await prisma.poll.findFirst({
+      where: { roomId: room.id, isActive: true },
+      select: { id: true }
+    });
+
+    if (!activePoll) {
+      return res.json({ poll: null });
+    }
+
+    const formatted = await formatActivePoll(activePoll.id);
+    res.json({ poll: formatted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public Audience: Cast a vote or submit a word
+app.post("/api/rooms/public/:roomId/poll/:pollId/vote", async (req, res) => {
+  const { roomId, pollId } = req.params;
+  const { optionId, word, voterId } = req.body;
+
+  if (!voterId) {
+    return res.status(400).json({ message: "Voter ID is required" });
+  }
+
+  if (roomId.toLowerCase() === "demo" || pollId === "demo-poll") {
+    return res.json({ message: "Vote recorded (Demo)" });
+  }
+
+  try {
+    const poll = await prisma.poll.findUnique({
+      where: { id: pollId },
+      include: { room: true }
+    });
+
+    if (!poll || !poll.isActive || poll.room.roomCode !== roomId) {
+      return res.status(400).json({ message: "Poll is not active or unavailable" });
+    }
+
+    // Check if voter already participated
+    const existing = await prisma.pollResponse.findUnique({
+      where: {
+        pollId_voterId: {
+          pollId,
+          voterId
+        }
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({ message: "You have already participated in this poll" });
+    }
+
+    // Record response
+    await prisma.pollResponse.create({
+      data: {
+        pollId,
+        optionId: optionId || null,
+        word: word && typeof word === "string" ? word.trim().slice(0, 30) : null,
+        voterId
+      }
+    });
+
+    if (optionId) {
+      await prisma.pollOption.update({
+        where: { id: optionId },
+        data: { votes: { increment: 1 } }
+      }).catch(() => {});
+    }
+
+    const formatted = await formatActivePoll(pollId);
+    io.to(roomId).emit("poll_updated", formatted);
+
+    res.json({ message: "Vote recorded successfully", poll: formatted });
+  } catch (err) {
+    console.error("Poll vote error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Host ends active poll
+app.patch("/api/rooms/:roomId/polls/:pollId/end", verifyToken, async (req, res) => {
+  const { roomId, pollId } = req.params;
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId, hostId: req.user.id }
+    });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+
+    await prisma.poll.update({
+      where: { id: pollId },
+      data: { isActive: false }
+    });
+
+    io.to(roomId).emit("poll_ended", { pollId });
+    res.json({ message: "Poll ended successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 httpServer.listen(process.env.PORT || 3000, () => {
   console.log(`Server is running on port ${process.env.PORT || 3000}`)

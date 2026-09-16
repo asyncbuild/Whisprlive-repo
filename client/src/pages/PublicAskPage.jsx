@@ -1,10 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Clock, Send, Radio, Check, Loader2, Calendar } from "lucide-react";
+import {
+  Clock, Send, Radio, Check, Loader2, Calendar, ThumbsUp,
+  MessageSquare, BarChart2, Pin, Sparkles
+} from "lucide-react";
 import { io } from "socket.io-client";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import API from "../api/axios";
+import { useToast } from "../context/ToastContext";
+import { getClientDeviceModel } from "../utils/deviceInfo";
+import { trackEvent } from "../utils/analytics";
 
 function formatClock(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -16,10 +22,6 @@ function formatTargetTime(ts) {
   if (!ts) return "";
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
-
-import { useToast } from "../context/ToastContext";
-import { getClientDeviceModel } from "../utils/deviceInfo";
-import { trackEvent } from "../utils/analytics";
 
 function WhatsAppIcon({ size = 15 }) {
   return (
@@ -34,6 +36,12 @@ function WhatsAppIcon({ size = 15 }) {
     </svg>
   );
 }
+
+// Word cloud random palette generator
+const TAG_COLORS = [
+  "#2563EB", "#0284C7", "#0D9488", "#16A34A",
+  "#7C3AED", "#D97706", "#EA580C", "#DB2777"
+];
 
 export default function PublicAskPage() {
   const { roomCode } = useParams();
@@ -50,6 +58,40 @@ export default function PublicAskPage() {
   const [untilStart, setUntilStart] = useState(0);
   const [untilEnd, setUntilEnd] = useState(0);
 
+  // Audience Engagement & Interactive States
+  const [activeTab, setActiveTab] = useState("ask"); // "ask" | "feed" | "poll"
+  const [messages, setMessages] = useState([]);
+  const [feedSort, setFeedSort] = useState("top"); // "top" | "new"
+  const [activePoll, setActivePoll] = useState(null);
+  const [wordInput, setWordInput] = useState("");
+  const [isVoting, setIsVoting] = useState(false);
+
+  // Persistent Voter Fingerprint & Voted Records
+  const voterId = useMemo(() => {
+    let vid = localStorage.getItem("whisprlive_voter_id");
+    if (!vid) {
+      vid = "vtr_" + Math.random().toString(36).slice(2, 11) + "_" + Date.now().toString(36);
+      localStorage.setItem("whisprlive_voter_id", vid);
+    }
+    return vid;
+  }, []);
+
+  const [votedMessageIds, setVotedMessageIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("whisprlive_public_voted") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const [votedPollMap, setVotedPollMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("whisprlive_voted_polls") || "{}");
+    } catch {
+      return {};
+    }
+  });
+
   // 1. Fetch live session status from server
   const fetchStatus = async () => {
     if (roomCode?.toLowerCase() === "demo") {
@@ -59,6 +101,7 @@ export default function PublicAskPage() {
         expiresAt: new Date(Date.now() + 24 * 3600000).toISOString(),
         status: "Active",
         canSend: true,
+        showPublicFeed: true,
         isDemo: true
       });
       setUntilStart(0);
@@ -87,11 +130,33 @@ export default function PublicAskPage() {
     }
   };
 
+  // 2. Fetch public messages for audience feed
+  const fetchPublicMessages = async () => {
+    try {
+      const res = await API.get(`/api/rooms/public/${roomCode}/messages`);
+      setMessages(res.data?.messages || []);
+    } catch (err) {
+      console.error("Failed to load public messages:", err);
+    }
+  };
+
+  // 3. Fetch active live poll
+  const fetchActivePoll = async () => {
+    try {
+      const res = await API.get(`/api/rooms/public/${roomCode}/poll/active`);
+      setActivePoll(res.data?.poll || null);
+    } catch (err) {
+      console.error("Failed to load active poll:", err);
+    }
+  };
+
   useEffect(() => {
     fetchStatus();
+    fetchPublicMessages();
+    fetchActivePoll();
   }, [roomCode]);
 
-  // 2. Real-time WebSocket connection to receive live "session_ended" updates
+  // 4. Real-time WebSocket connection to receive live updates
   useEffect(() => {
     if (!roomCode) return;
 
@@ -106,6 +171,8 @@ export default function PublicAskPage() {
       socket.emit("join_room", roomCode);
       socket.emit("joinRoom", roomCode);
       fetchStatus();
+      fetchPublicMessages();
+      fetchActivePoll();
     };
 
     socket.on("connect", joinRoomAndSync);
@@ -118,10 +185,79 @@ export default function PublicAskPage() {
       }
     });
 
+    // Real-time audience feed & moderation events
+    socket.on("new_message", (newMsg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [
+          {
+            id: newMsg.id,
+            content: newMsg.content,
+            upvotes: newMsg.upvotes || 0,
+            isAnswered: newMsg.isAnswered || false,
+            isPinned: newMsg.isPinned || false,
+            hostReply: newMsg.hostReply || null,
+            createdAt: newMsg.createdAt || new Date().toISOString()
+          },
+          ...prev
+        ];
+      });
+    });
+
+    socket.on("message_upvoted", ({ messageId, upvotes }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, upvotes } : m))
+      );
+    });
+
+    socket.on("message_answered", ({ messageId, isAnswered }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isAnswered } : m))
+      );
+    });
+
+    socket.on("message_replied", ({ messageId, hostReply, isAnswered }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, hostReply, isAnswered: isAnswered ?? m.isAnswered } : m))
+      );
+    });
+
+    socket.on("message_pinned", ({ messageId, isPinned }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isPinned } : m))
+      );
+    });
+
+    socket.on("room_settings_updated", (data) => {
+      if (typeof data?.showPublicFeed === "boolean") {
+        setRoomInfo((prev) => (prev ? { ...prev, showPublicFeed: data.showPublicFeed } : prev));
+        if (data.showPublicFeed) {
+          fetchPublicMessages();
+        }
+      }
+    });
+
+    // Real-time Live Poll & Word Cloud events
+    socket.on("poll_created", (poll) => {
+      setActivePoll(poll);
+      toast.info("📊 Host launched a new live poll!");
+    });
+
+    socket.on("poll_updated", (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on("poll_ended", () => {
+      setActivePoll(null);
+      toast.info("Active poll has ended.");
+    });
+
     // Mobile visibility sync: Re-check status when user unlocks phone or switches back to tab
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         fetchStatus();
+        fetchPublicMessages();
+        fetchActivePoll();
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -133,7 +269,7 @@ export default function PublicAskPage() {
     };
   }, [roomCode]);
 
-  // 3. Real-time timer tick & periodic status fallback
+  // 5. Real-time timer tick & periodic status fallback
   useEffect(() => {
     if (!roomInfo) return;
 
@@ -149,30 +285,10 @@ export default function PublicAskPage() {
       setUntilEnd(diffEnd);
     }, 1000);
 
-    // Periodic 10s fallback status check while active to handle mobile backgrounding
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === "visible" && roomInfo.canSend) {
-        fetchStatus();
-      }
-    }, 10000);
-
-    return () => {
-      clearInterval(interval);
-      clearInterval(pollInterval);
-    };
+    return () => clearInterval(interval);
   }, [roomInfo]);
 
-  // Auto-sync status when countdown hits 0 so it unlocks or locks seamlessly without refresh
-  useEffect(() => {
-    if ((untilStart === 0 || untilEnd === 0) && roomInfo) {
-      if (untilEnd === 0) {
-        setRoomInfo((prev) => (prev ? { ...prev, status: "Expired", canSend: false, isAccepting: false } : prev));
-      }
-      fetchStatus();
-    }
-  }, [untilStart === 0, untilEnd === 0]);
-
-  // 4. Submit real anonymous message
+  // 6. Submit anonymous message
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!text.trim() || isSubmitting) return;
@@ -180,6 +296,16 @@ export default function PublicAskPage() {
     setIsSubmitting(true);
     if (roomCode?.toLowerCase() === "demo" || roomInfo?.isDemo) {
       setTimeout(() => {
+        const demoMsg = {
+          id: "demo-" + Date.now(),
+          content: text.trim(),
+          upvotes: 1,
+          isAnswered: false,
+          isPinned: false,
+          hostReply: null,
+          createdAt: new Date().toISOString()
+        };
+        setMessages((prev) => [demoMsg, ...prev]);
         setText("");
         setSent(true);
         setIsSubmitting(false);
@@ -209,7 +335,6 @@ export default function PublicAskPage() {
         err.response?.status === 403 ||
         err.response?.status === 400
       ) {
-        // Immediately lock the page into the Session Ended state
         setUntilEnd(0);
         setRoomInfo((prev) => (prev ? { ...prev, status: "Expired", canSend: false, isAccepting: false } : prev));
         toast.info(msg);
@@ -220,6 +345,113 @@ export default function PublicAskPage() {
       setIsSubmitting(false);
     }
   };
+
+  // 7. Toggle Upvote on Public Question
+  const handleToggleUpvote = async (messageId) => {
+    const isVoted = votedMessageIds.includes(messageId);
+    const nextVoted = isVoted
+      ? votedMessageIds.filter((id) => id !== messageId)
+      : [...votedMessageIds, messageId];
+
+    setVotedMessageIds(nextVoted);
+    try {
+      localStorage.setItem("whisprlive_public_voted", JSON.stringify(nextVoted));
+    } catch { }
+
+    const delta = isVoted ? -1 : 1;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, upvotes: Math.max(0, (m.upvotes || 0) + delta) } : m))
+    );
+
+    if (roomCode?.toLowerCase() === "demo") return;
+
+    try {
+      await API.patch(`/api/rooms/${roomCode}/messages/${messageId}/upvote`, {
+        action: isVoted ? "unvote" : "upvote"
+      });
+    } catch (err) {
+      console.error("Failed to sync upvote:", err);
+    }
+  };
+
+  // 8. Poll Voting Handler
+  const handlePollVote = async (optionId, word) => {
+    if (!activePoll || isVoting) return;
+    const pollId = activePoll.id;
+
+    if (votedPollMap[pollId]) {
+      toast.info("You've already participated in this poll.");
+      return;
+    }
+
+    setIsVoting(true);
+
+    const nextMap = { ...votedPollMap, [pollId]: optionId || word || true };
+    setVotedPollMap(nextMap);
+    try {
+      localStorage.setItem("whisprlive_voted_polls", JSON.stringify(nextMap));
+    } catch { }
+
+    if (roomCode?.toLowerCase() === "demo" || pollId === "demo-poll") {
+      setTimeout(() => {
+        setActivePoll((prev) => {
+          if (!prev) return prev;
+          if (prev.type === "CHOICE" && optionId) {
+            const total = prev.totalVotes + 1;
+            const nextOpts = prev.options.map((opt) => {
+              const count = opt.id === optionId ? opt.votes + 1 : opt.votes;
+              return { ...opt, votes: count, percentage: Math.round((count / total) * 100) };
+            });
+            return { ...prev, totalVotes: total, options: nextOpts };
+          } else if (prev.type === "WORD_CLOUD" && word) {
+            const clean = word.trim().toLowerCase();
+            const exists = prev.wordCloud.find((w) => w.text === clean);
+            const nextCloud = exists
+              ? prev.wordCloud.map((w) => (w.text === clean ? { ...w, count: w.count + 1 } : w))
+              : [...prev.wordCloud, { text: clean, count: 1 }];
+            return {
+              ...prev,
+              totalVotes: prev.totalVotes + 1,
+              wordCloud: nextCloud.sort((a, b) => b.count - a.count)
+            };
+          }
+          return prev;
+        });
+        setIsVoting(false);
+        setWordInput("");
+        toast.success("Vote recorded!");
+      }, 200);
+      return;
+    }
+
+    try {
+      const res = await API.post(`/api/rooms/public/${roomCode}/poll/${pollId}/vote`, {
+        optionId,
+        word,
+        voterId
+      });
+      if (res.data?.poll) {
+        setActivePoll(res.data.poll);
+      }
+      setWordInput("");
+      toast.success("Vote recorded!");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to record vote");
+    } finally {
+      setIsVoting(false);
+    }
+  };
+
+  // Sorted messages
+  const sortedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      if (feedSort === "top") {
+        return (b.upvotes || 0) - (a.upvotes || 0) || new Date(b.createdAt) - new Date(a.createdAt);
+      }
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  }, [messages, feedSort]);
 
   if (loading) {
     return (
@@ -244,10 +476,11 @@ export default function PublicAskPage() {
     );
   }
 
-  // Determine current stage: 'scheduled' | 'active' | 'ended'
   const isScheduled = untilStart > 0;
   const isExpired = untilEnd <= 0 || roomInfo.status === "Expired" || roomInfo.isAccepting === false;
   const isActive = !isScheduled && !isExpired;
+  const showFeedTab = roomInfo.showPublicFeed !== false;
+  const hasVotedActivePoll = activePoll ? Boolean(votedPollMap[activePoll.id]) : false;
 
   return (
     <div className="public-wrap">
@@ -268,21 +501,20 @@ export default function PublicAskPage() {
             gap: 8
           }}>
             <Radio size={15} style={{ color: "var(--live)", flexShrink: 0 }} />
-            <span><strong>Interactive Demo Room:</strong> Send a question or feedback below to see how fast WhisprLive works in real time!</span>
+            <span><strong>Interactive Demo Room:</strong> Send a question, upvote answers, and test live audience polls below!</span>
           </div>
         )}
 
         <div className="public-header">
           <span className="eyebrow">
             <Radio size={13} />
-            {isScheduled ? "Scheduled Room" : isActive ? "Live Q&A & Feedback Room" : "Session Closed"}
+            {isScheduled ? "Scheduled Room" : isActive ? "Live Q&A & Audience Engagement" : "Session Closed"}
           </span>
           <div className="public-title-box">
             <h1>{roomInfo.title}</h1>
           </div>
-          <p>Share your questions, ideas, or feedback. Your identity stays 100% anonymous.</p>
+          <p>Share questions, vote on top topics, and join live prompts 100% anonymously.</p>
 
-          {/* Dynamic timer badge based on room status */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
             <div className="timer-badge">
               <Clock size={14} />
@@ -295,7 +527,7 @@ export default function PublicAskPage() {
               )}
             </div>
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(`📢 Join *${roomInfo.title}* on WhisprLive — share anonymous questions & feedback:\n👉 ${window.location.href}`)}`}
+              href={`https://wa.me/?text=${encodeURIComponent(`📢 Join *${roomInfo.title}* on WhisprLive — share anonymous questions & live feedback:\n👉 ${window.location.href}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -321,10 +553,43 @@ export default function PublicAskPage() {
           </div>
         </div>
 
-
         {sent && (
           <div className="sent-toast">
             <Check size={15} /> Sent! Your submission is live on the host's screen.
+          </div>
+        )}
+
+        {/* Audience Segmented Navigation Tabs */}
+        {(showFeedTab || activePoll) && (
+          <div className="audience-tabs-bar">
+            <button
+              type="button"
+              className={`audience-tab-btn ${activeTab === "ask" ? "active" : ""}`}
+              onClick={() => setActiveTab("ask")}
+            >
+              <Send size={14} /> Ask a Question
+            </button>
+
+            {showFeedTab && (
+              <button
+                type="button"
+                className={`audience-tab-btn ${activeTab === "feed" ? "active" : ""}`}
+                onClick={() => setActiveTab("feed")}
+              >
+                <MessageSquare size={14} /> Live Q&A {messages.length > 0 && `(${messages.length})`}
+              </button>
+            )}
+
+            {activePoll && (
+              <button
+                type="button"
+                className={`audience-tab-btn ${activeTab === "poll" ? "active" : ""}`}
+                onClick={() => setActiveTab("poll")}
+              >
+                <span className="pulse-dot" />
+                <BarChart2 size={14} /> Live Poll
+              </button>
+            )}
           </div>
         )}
 
@@ -339,40 +604,249 @@ export default function PublicAskPage() {
               Submissions will unlock automatically in <strong>{formatClock(untilStart)}</strong>.
             </p>
           </div>
-        ) : isActive ? (
-          /* 2. ACTIVE LIVE ROOM STATE */
-          <form className="ask-box" onSubmit={handleSubmit}>
-            <textarea
-              className="ask-textarea"
-              placeholder="Share a question, suggestion, or honest feedback..."
-              maxLength={300}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div className="ask-foot">
-              <span className="char-count mono">{text.length}/300</span>
-              <button
-                className="btn btn-primary btn-sm"
-                type="submit"
-                disabled={!text.trim() || isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>Sending... <Loader2 size={13} className="spin" /></>
-                ) : (
-                  <>Send <Send size={14} /></>
-                )}
-              </button>
-            </div>
-          </form>
         ) : (
-          /* 3. EXPIRED / CLOSED STATE */
-          <div className="empty-feed" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "40px 20px" }}>
-            <Clock size={36} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Session Ended</h3>
-            <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
-              This room is now closed and is no longer accepting new submissions.
-            </p>
-          </div>
+          <>
+            {/* TAB 1: ASK QUESTION */}
+            {activeTab === "ask" && (
+              isActive ? (
+                <form className="ask-box" onSubmit={handleSubmit}>
+                  <textarea
+                    className="ask-textarea"
+                    placeholder="Share a question, suggestion, or honest feedback..."
+                    maxLength={300}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                  <div className="ask-foot">
+                    <span className="char-count mono">{text.length}/300</span>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      type="submit"
+                      disabled={!text.trim() || isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>Sending... <Loader2 size={13} className="spin" /></>
+                      ) : (
+                        <>Send <Send size={14} /></>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="empty-feed" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "40px 20px" }}>
+                  <Clock size={36} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Session Ended</h3>
+                  <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
+                    This room is now closed and is no longer accepting new submissions.
+                  </p>
+                </div>
+              )
+            )}
+
+            {/* TAB 2: LIVE AUDIENCE Q&A FEED */}
+            {activeTab === "feed" && showFeedTab && (
+              <div>
+                <div className="pub-feed-toolbar">
+                  <span style={{ fontWeight: 600, color: "var(--text-dim)" }}>
+                    {sortedMessages.length} {sortedMessages.length === 1 ? "Question" : "Questions"}
+                  </span>
+                  <div className="pub-sort-pill-group">
+                    <button
+                      type="button"
+                      className={`pub-sort-btn ${feedSort === "top" ? "active" : ""}`}
+                      onClick={() => setFeedSort("top")}
+                    >
+                      Top Voted
+                    </button>
+                    <button
+                      type="button"
+                      className={`pub-sort-btn ${feedSort === "new" ? "active" : ""}`}
+                      onClick={() => setFeedSort("new")}
+                    >
+                      Recent
+                    </button>
+                  </div>
+                </div>
+
+                {sortedMessages.length === 0 ? (
+                  <div className="empty-feed" style={{ padding: "40px 20px" }}>
+                    <MessageSquare size={36} style={{ color: "var(--text-faint)", marginBottom: 10 }} />
+                    <p style={{ color: "var(--text-dim)", fontSize: 14 }}>No questions submitted yet. Be the first to ask!</p>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ marginTop: 12 }}
+                      onClick={() => setActiveTab("ask")}
+                    >
+                      Ask a Question
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pub-feed-list">
+                    {sortedMessages.map((m) => {
+                      const isVoted = votedMessageIds.includes(m.id);
+                      return (
+                        <div key={m.id} className={`pub-q-card ${m.isPinned ? "is-pinned" : ""}`}>
+                          <div className="pub-q-top">
+                            <div className="pub-badges">
+                              {m.isPinned && (
+                                <span className="pinned-badge">
+                                  <Pin size={11} /> Pinned
+                                </span>
+                              )}
+                              {m.isAnswered && (
+                                <span className="answered-badge">
+                                  <Check size={11} /> Answered
+                                </span>
+                              )}
+                            </div>
+                            <span className="pub-q-time">
+                              {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+
+                          <div className="pub-q-content">{m.content}</div>
+
+                          {m.hostReply && (
+                            <div className="pub-host-reply">
+                              <div className="pub-host-reply-header">
+                                <Sparkles size={12} /> Host Answer
+                              </div>
+                              <div className="pub-host-reply-body">{m.hostReply}</div>
+                            </div>
+                          )}
+
+                          <div className="pub-q-footer">
+                            <button
+                              type="button"
+                              className={`pub-upvote-btn ${isVoted ? "voted" : ""}`}
+                              onClick={() => handleToggleUpvote(m.id)}
+                            >
+                              <ThumbsUp size={14} />
+                              <span>{m.upvotes || 0}</span>
+                            </button>
+                            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                              {isVoted ? "You upvoted this" : "Upvote to support"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: LIVE POLL & WORD CLOUD */}
+            {activeTab === "poll" && activePoll && (
+              <div className="poll-card">
+                <div className="poll-badge-row">
+                  <span className="poll-type-badge">
+                    <Radio size={12} style={{ color: "var(--live)" }} />
+                    {activePoll.type === "WORD_CLOUD" ? "Live Word Cloud" : "Live Multiple Choice Poll"}
+                  </span>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
+                    {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"}
+                  </span>
+                </div>
+
+                <h3 className="poll-question-title">{activePoll.question}</h3>
+
+                {activePoll.type === "CHOICE" ? (
+                  <div className="poll-options-grid">
+                    {activePoll.options.map((opt) => {
+                      const userPick = votedPollMap[activePoll.id] === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`poll-opt-btn ${userPick ? "user-voted" : ""}`}
+                          disabled={hasVotedActivePoll || isVoting}
+                          onClick={() => handlePollVote(opt.id)}
+                        >
+                          <div
+                            className="poll-opt-progress-fill"
+                            style={{ width: `${opt.percentage || 0}%` }}
+                          />
+                          <div className="poll-opt-content">
+                            <span>
+                              {userPick && "✓ "}
+                              {opt.text}
+                            </span>
+                            <span className="poll-opt-pct">
+                              {opt.percentage || 0}%
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div>
+                    {/* Interactive Word Cloud Visualizer */}
+                    <div className="wordcloud-canvas">
+                      {(!activePoll.wordCloud || activePoll.wordCloud.length === 0) ? (
+                        <p style={{ color: "var(--text-faint)", fontSize: 13.5 }}>
+                          No words submitted yet. Be the first to add your voice!
+                        </p>
+                      ) : (
+                        activePoll.wordCloud.map((w, idx) => {
+                          const maxCount = Math.max(...activePoll.wordCloud.map((x) => x.count), 1);
+                          const scale = 14 + Math.round((w.count / maxCount) * 18);
+                          const color = TAG_COLORS[idx % TAG_COLORS.length];
+                          return (
+                            <span
+                              key={w.text}
+                              className="wc-tag"
+                              style={{
+                                fontSize: `${scale}px`,
+                                color,
+                                border: `1px solid ${color}33`
+                              }}
+                            >
+                              {w.text} <small style={{ opacity: 0.7, fontSize: "0.75em" }}>({w.count})</small>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {!hasVotedActivePoll ? (
+                      <form
+                        className="wordcloud-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (wordInput.trim()) {
+                            handlePollVote(null, wordInput.trim());
+                          }
+                        }}
+                      >
+                        <input
+                          type="text"
+                          className="wordcloud-input"
+                          placeholder="Type 1 or 2 words..."
+                          maxLength={30}
+                          value={wordInput}
+                          onChange={(e) => setWordInput(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-sm"
+                          disabled={!wordInput.trim() || isVoting}
+                        >
+                          Submit Word
+                        </button>
+                      </form>
+                    ) : (
+                      <p style={{ fontSize: 13, color: "var(--success)", fontWeight: 600, textAlign: "center", marginTop: 10 }}>
+                        ✓ Thank you! Your word is now live in the audience word cloud.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
