@@ -1765,6 +1765,18 @@ app.put("/api/poll-templates/:id", verifyToken, async (req, res) => {
 app.delete("/api/poll-templates/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { plan: true, roomPasses: true }
+    });
+
+    const isPaidOrPass = (user?.plan && user.plan !== "SOLO") || (user?.roomPasses || 0) > 0;
+    if (!isPaidOrPass) {
+      return res.status(403).json({
+        message: "Deleting poll templates is reserved for paid plans or Room Pass holders. Upgrade to manage and delete templates."
+      });
+    }
+
     const template = await prisma.pollTemplate.findFirst({
       where: { id, userId: req.user.id }
     });

@@ -933,6 +933,11 @@ export default function DashboardPage() {
   };
 
   const handleDeleteTemplate = async (templateId) => {
+    if (isFreeSolo) {
+      toast.info("Deleting saved templates is reserved for upgraded plans. Upgrade or get a Room Pass to manage drafts.");
+      setShowUpgradeModal(true);
+      return;
+    }
     setDeletingTemplateId(templateId);
     try {
       await API.delete(`/api/poll-templates/${templateId}`);
@@ -2069,15 +2074,17 @@ export default function DashboardPage() {
                         >
                           <Edit3 size={14} />
                         </button>
-                        <button
-                          className="icon-btn"
-                          title="Delete draft"
-                          disabled={deletingTemplateId === t.id}
-                          onClick={() => handleDeleteTemplate(t.id)}
-                          style={{ padding: 6, color: "var(--accent)" }}
-                        >
-                          {deletingTemplateId === t.id ? <Loader2 size={13} className="spin" /> : <Trash2 size={14} />}
-                        </button>
+                        {!isFreeSolo && (
+                          <button
+                            className="icon-btn"
+                            title="Delete draft"
+                            disabled={deletingTemplateId === t.id}
+                            onClick={() => handleDeleteTemplate(t.id)}
+                            style={{ padding: 6, color: "var(--accent)" }}
+                          >
+                            {deletingTemplateId === t.id ? <Loader2 size={13} className="spin" /> : <Trash2 size={14} />}
+                          </button>
+                        )}
 
                         {session && !isSessionCompleted ? (
                           activePoll && activePoll.isActive && activePoll.question === t.question ? (
@@ -2683,16 +2690,18 @@ export default function DashboardPage() {
                               >
                                 <Edit3 size={13} />
                               </button>
-                              <button
-                                type="button"
-                                className="icon-btn"
-                                title="Delete draft"
-                                disabled={deletingTemplateId === t.id}
-                                onClick={() => handleDeleteTemplate(t.id)}
-                                style={{ padding: 4, color: "var(--accent)" }}
-                              >
-                                {deletingTemplateId === t.id ? <Loader2 size={12} className="spin" /> : <Trash2 size={13} />}
-                              </button>
+                              {!isFreeSolo && (
+                                <button
+                                  type="button"
+                                  className="icon-btn"
+                                  title="Delete draft"
+                                  disabled={deletingTemplateId === t.id}
+                                  onClick={() => handleDeleteTemplate(t.id)}
+                                  style={{ padding: 4, color: "var(--accent)" }}
+                                >
+                                  {deletingTemplateId === t.id ? <Loader2 size={12} className="spin" /> : <Trash2 size={13} />}
+                                </button>
+                              )}
                               {activePoll && activePoll.isActive && activePoll.question === t.question ? (
                                 <span
                                   style={{
