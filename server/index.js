@@ -91,8 +91,17 @@ app.post("/api/auth/send-signup-otp", authLimiter, async (req, res) => {
   if (!username || !email || !password) {
     return res.status(400).json({ message: "All fields are required" });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ message: "Password must be at least 6 characters" });
+  if (password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters long" });
+  }
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+  if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+    return res.status(400).json({
+      message: "Password is not strong enough. It must contain at least 8 characters, including uppercase, lowercase, numbers, and a special character."
+    });
   }
   const cleanEmail = email.toLowerCase().trim();
   const cleanUsername = username.trim();
@@ -100,7 +109,11 @@ app.post("/api/auth/send-signup-otp", authLimiter, async (req, res) => {
   try {
     const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existingUser) {
-      return res.status(400).json({ message: "An account with this email already exists. Please sign in." });
+      // If user already has a regular password, prevent duplicate signup
+      if (existingUser.passwordHash && !existingUser.passwordHash.startsWith("GOOGLE_AUTH_")) {
+        return res.status(400).json({ message: "An account with this email already exists. Please sign in." });
+      }
+      // If user signed up with Google, let them proceed through OTP verification to link a password!
     }
 
     // Generate random 6-digit code
@@ -221,37 +234,61 @@ app.post("/api/auth/verify-signup-otp", authLimiter, async (req, res) => {
   }
 
   try {
-    const newUser = await prisma.user.create({
-      data: {
-        username: record.username,
-        email: cleanEmail,
-        passwordHash: record.hashedPassword,
-        plan: "SOLO",
-        roomPasses: 0
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        plan: true,
-        roomPasses: true,
-        createdAt: true
-      }
+    let user = await prisma.user.findUnique({
+      where: { email: cleanEmail }
     });
+
+    if (user) {
+      // User registered with Google previously — link their new password
+      user = await prisma.user.update({
+        where: { email: cleanEmail },
+        data: {
+          passwordHash: record.hashedPassword,
+          username: record.username || user.username
+        },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          plan: true,
+          roomPasses: true,
+          createdAt: true
+        }
+      });
+    } else {
+      // Fresh user registration
+      user = await prisma.user.create({
+        data: {
+          username: record.username,
+          email: cleanEmail,
+          passwordHash: record.hashedPassword,
+          plan: "SOLO",
+          roomPasses: 0
+        },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          plan: true,
+          roomPasses: true,
+          createdAt: true
+        }
+      });
+    }
 
     signupOtpStore.delete(cleanEmail);
 
     const secret = process.env.JWT_SECRET || "Deepesh@#$123";
     const token = jwt.sign(
-      { id: newUser.id, email: newUser.email, username: newUser.username },
+      { id: user.id, email: user.email, username: user.username },
       secret,
       { expiresIn: "30d" }
     );
 
-    res.status(201).json({
-      message: "Account verified and created successfully!",
+    res.status(200).json({
+      message: "Account verified successfully!",
       token,
-      user: newUser
+      user
     });
   } catch (err) {
     console.error("verify-signup-otp error:", err);
@@ -303,13 +340,22 @@ app.post("/signin", authLimiter, async (req, res) => {
   }
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } })
+    const cleanEmail = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (!user) {
-      return res.status(400).json({ message: "User does not exist, Please Signup" })
+      return res.status(400).json({ message: "User does not exist. Please sign up." });
     }
-    const isMatch = await bcrypt.compare(password, user.passwordHash)
+
+    // Check if account was created via Google OAuth and has no password yet
+    if (user.passwordHash && user.passwordHash.startsWith("GOOGLE_AUTH_")) {
+      return res.status(400).json({
+        message: "This account was registered using Google Sign-In. Please click 'Continue with Google' to sign in, or use the Signup tab to add an email password."
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid email or password" })
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
     const secret = process.env.JWT_SECRET || "Deepesh@#$123";

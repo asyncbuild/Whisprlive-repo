@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import API from '../api/axios';
 import Brand from '../components/Brand';
-import { ArrowRight, Loader2, ShieldCheck, RefreshCw } from 'lucide-react';
+import { ArrowRight, Loader2, ShieldCheck, RefreshCw, Eye, EyeOff, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import AuthGoogleButton from '../components/AuthGoogleButton';
@@ -24,6 +24,51 @@ export default function AuthPage({ mode }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Compute password strength metrics for signup
+  const passwordStrength = useMemo(() => {
+    const pass = formData.password || '';
+    if (!pass) {
+      return {
+        score: 0,
+        label: '',
+        color: '',
+        bars: 0,
+        tip: '',
+        isStrong: false,
+        criteria: { minLength: false, hasUpper: false, hasLower: false, hasNumber: false, hasSpecial: false }
+      };
+    }
+
+    const criteria = {
+      minLength: pass.length >= 8,
+      hasUpper: /[A-Z]/.test(pass),
+      hasLower: /[a-z]/.test(pass),
+      hasNumber: /\d/.test(pass),
+      hasSpecial: /[^a-zA-Z0-9]/.test(pass)
+    };
+
+    let metCount = 0;
+    if (criteria.minLength) metCount++;
+    if (criteria.hasUpper && criteria.hasLower) metCount++;
+    if (criteria.hasNumber) metCount++;
+    if (criteria.hasSpecial) metCount++;
+
+    const isStrong = criteria.minLength && criteria.hasUpper && criteria.hasLower && criteria.hasNumber && criteria.hasSpecial;
+
+    if (!criteria.minLength || metCount <= 1) {
+      return { score: 1, label: 'Weak', color: '#EF4444', bars: 1, tip: 'Requires 8+ chars & variety', isStrong: false, criteria };
+    }
+    if (metCount === 2) {
+      return { score: 2, label: 'Fair', color: '#F59E0B', bars: 2, tip: 'Add missing requirements below', isStrong: false, criteria };
+    }
+    if (metCount === 3 || !isStrong) {
+      return { score: 3, label: 'Good', color: '#3B82F6', bars: 3, tip: 'Almost strong! Fulfill all rules below', isStrong: false, criteria };
+    }
+    return { score: 4, label: 'Strong', color: '#10B981', bars: 4, tip: 'Strong password!', isStrong: true, criteria };
+  }, [formData.password]);
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
@@ -54,8 +99,8 @@ export default function AuthPage({ mode }) {
     setError('');
 
     if (isSignup) {
-      if (formData.password.length < 6) {
-        setError('Password must be at least 6 characters.');
+      if (!passwordStrength.isStrong) {
+        setError('Please create a strong password that fulfills all requirements below before continuing.');
         return;
       }
       if (formData.password !== formData.confirmPassword) {
@@ -224,27 +269,168 @@ export default function AuthPage({ mode }) {
 
               <div className="field">
                 <label>Password</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    style={{ paddingRight: '40px', width: '100%' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex="-1"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      color: 'var(--text-faint)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-faint)')}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+
+                {isSignup && formData.password.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: 'flex', gap: 4, height: 4, marginBottom: 6 }}>
+                      {[1, 2, 3, 4].map((bar) => (
+                        <div
+                          key={bar}
+                          style={{
+                            flex: 1,
+                            height: '100%',
+                            borderRadius: 2,
+                            backgroundColor:
+                              bar <= passwordStrength.bars ? passwordStrength.color : 'var(--border)',
+                            transition: 'background-color 0.25s ease'
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 11,
+                        color: 'var(--text-faint)',
+                        marginBottom: 8
+                      }}
+                    >
+                      <span>
+                        Strength:{' '}
+                        <span style={{ color: passwordStrength.color, fontWeight: 600 }}>
+                          {passwordStrength.label}
+                        </span>
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: passwordStrength.isStrong ? 'var(--success)' : 'var(--text-faint)'
+                        }}
+                      >
+                        {passwordStrength.isStrong ? '✓ Ready to continue' : 'Strong password required'}
+                      </span>
+                    </div>
+
+                    {/* Requirements checklist */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                        gap: '6px',
+                        background: 'var(--surface-2)',
+                        padding: '8px 10px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: 11
+                      }}
+                    >
+                      {[
+                        { met: passwordStrength.criteria.minLength, label: '8+ characters' },
+                        { met: passwordStrength.criteria.hasUpper, label: 'Uppercase (A-Z)' },
+                        { met: passwordStrength.criteria.hasLower, label: 'Lowercase (a-z)' },
+                        { met: passwordStrength.criteria.hasNumber, label: 'Number (0-9)' },
+                        { met: passwordStrength.criteria.hasSpecial, label: 'Symbol (!@#$...)' }
+                      ].map((req, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            color: req.met ? 'var(--success)' : 'var(--text-faint)',
+                            transition: 'color 0.2s ease',
+                            fontWeight: req.met ? 600 : 400
+                          }}
+                        >
+                          {req.met ? (
+                            <Check size={13} strokeWidth={2.5} style={{ color: 'var(--success)' }} />
+                          ) : (
+                            <span style={{ display: 'inline-block', width: 13, textAlign: 'center', fontSize: 10 }}>•</span>
+                          )}
+                          <span>{req.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {isSignup && (
                 <div className="field">
                   <label>Confirm password</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      style={{ paddingRight: '40px', width: '100%' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      tabIndex="-1"
+                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        color: 'var(--text-faint)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-faint)')}
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                    <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
+                      Passwords do not match
+                    </div>
+                  )}
                 </div>
               )}
 
