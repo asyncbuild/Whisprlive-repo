@@ -4,7 +4,7 @@ import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
   MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
-  BarChart2, Pin, MessageSquare, ThumbsUp, Edit3
+  BarChart2, Pin, MessageSquare, ThumbsUp, Edit3, ArrowRight
 } from "lucide-react";
 import { io } from "socket.io-client";
 import API from "../api/axios";
@@ -1042,27 +1042,40 @@ export default function DashboardPage() {
       <div className="dash-top">
         <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <Brand onClick={() => handleProtectedNavigation(() => navigate("/"))} />
-          <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {/* Active Plan Badge */}
             <span
+              className="plan-badge"
               style={{
                 fontSize: 11,
                 fontWeight: 700,
                 padding: "4px 10px",
                 borderRadius: "999px",
-                background: (currentUser?.plan === "STUDIO") ? "var(--accent-soft)" : (currentUser?.plan === "HOST") ? "var(--live-soft)" : "var(--surface-2)",
-                color: (currentUser?.plan === "STUDIO") ? "var(--accent)" : (currentUser?.plan === "HOST") ? "var(--live)" : "var(--text-dim)",
+                background: (currentUser?.plan === "STUDIO")
+                  ? "var(--accent-soft)"
+                  : (currentUser?.plan === "HOST")
+                    ? "var(--live-soft)"
+                    : "var(--surface-2)",
+                color: (currentUser?.plan === "STUDIO")
+                  ? "var(--accent)"
+                  : (currentUser?.plan === "HOST")
+                    ? "var(--live)"
+                    : "var(--text)",
                 border: "1px solid var(--border)",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 5,
+                gap: 4,
                 textTransform: "uppercase",
-                letterSpacing: "0.03em"
+                letterSpacing: "0.04em",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                lineHeight: 1
               }}
             >
               {currentUser?.plan === "STUDIO" && <Crown size={12} />}
               {currentUser?.plan === "HOST" && <Sparkles size={12} />}
-              {currentUser?.plan || "SOLO"} PLAN
+              <span>{currentUser?.plan || "SOLO"}</span>
+              <span className="plan-text-suffix"> PLAN</span>
             </span>
 
             {currentUser?.roomPasses > 0 && (
@@ -1119,20 +1132,42 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 3 Tabs: New session | Active session | Past sessions */}
+        {/* 4 Tabs: New session | Active session | Past sessions | Poll Library */}
         <div className="tabs">
           <button className={`tab ${tab === "new" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("new"))}>
-            New session
+            <span className="tab-full">New session</span>
+            <span className="tab-short">New</span>
           </button>
           <button className={`tab ${tab === "active" ? "active" : ""}`} onClick={() => setTab("active")}>
-            Active session {session && !isSessionCompleted && <span className="live-dot" style={{ display: "inline-block", marginLeft: 6 }} />}
-            {session && isSessionCompleted && <span className="ended-dot" style={{ display: "inline-block", marginLeft: 6 }} />}
+            <span className="tab-full">Active session</span>
+            <span className="tab-short">Active</span>
+            {session && !isSessionCompleted && <span className="live-dot" style={{ display: "inline-block", marginLeft: 4 }} />}
+            {session && isSessionCompleted && <span className="ended-dot" style={{ display: "inline-block", marginLeft: 4 }} />}
           </button>
           <button className={`tab ${tab === "past" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("past"))}>
-            Past sessions
+            <span className="tab-full">Past sessions</span>
+            <span className="tab-short">Past</span>
           </button>
           <button className={`tab ${tab === "polls" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("polls"))}>
-            <BarChart2 size={13} style={{ marginRight: 5 }} /> Poll Library
+            <BarChart2 size={13} style={{ marginRight: 4, color: tab === "polls" ? "var(--accent)" : "var(--text-dim)" }} />
+            <span className="tab-full">Poll Library</span>
+            <span className="tab-short">Polls</span>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                padding: "1px 5px",
+                borderRadius: 999,
+                background: tab === "polls" ? "var(--accent)" : "var(--accent-soft)",
+                color: tab === "polls" ? "#fff" : "var(--accent)",
+                marginLeft: 4,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                lineHeight: 1.2
+              }}
+            >
+              New
+            </span>
           </button>
         </div>
 
@@ -1271,6 +1306,81 @@ export default function DashboardPage() {
                   </label>
                 </div>
               </div>
+            </div>
+
+            {/* Polls & Word Cloud Discovery Card for New Users */}
+            <div
+              style={{
+                marginTop: 20,
+                background: "linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(248, 250, 252, 0.95) 100%)",
+                border: "1px solid rgba(37, 99, 235, 0.2)",
+                borderRadius: "var(--radius-lg)",
+                padding: "18px 22px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+                flexWrap: "wrap"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 1 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    background: "var(--accent)",
+                    color: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)"
+                  }}
+                >
+                  <BarChart2 size={22} />
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
+                      Interactive Live Polls &amp; Word Clouds
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: 999,
+                        background: "var(--accent-soft)",
+                        color: "var(--accent)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em"
+                      }}
+                    >
+                      New Feature
+                    </span>
+                  </div>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-dim)", lineHeight: 1.4 }}>
+                    Prepare audience questions and word cloud prompts in advance so you can launch them with 1 click during your live sessions.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleProtectedNavigation(() => setTab("polls"))}
+                style={{
+                  fontWeight: 600,
+                  padding: "8px 16px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  whiteSpace: "nowrap"
+                }}
+              >
+                <BarChart2 size={14} /> Open Poll Library <ArrowRight size={14} />
+              </button>
             </div>
           </div>
         )}
