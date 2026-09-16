@@ -407,7 +407,9 @@ export default function LandingPage() {
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> Unlimited sessions</li>
                     <li><Check size={15} /> Up to 100 questions / session</li>
-                    <li><Check size={15} /> Anonymous questions</li>
+                    <li><Check size={15} /> Anonymous Q&amp;A &amp; live upvotes</li>
+                    <li><Check size={15} /> Live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Up to 2 saved templates in library</li>
                     <li><Check size={15} /> 15-min timers</li>
                     <li><Check size={15} /> 7 days history retention</li>
                   </ul>
@@ -432,6 +434,8 @@ export default function LandingPage() {
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> 1 room for 24 hours</li>
                     <li><Check size={15} /> Up to 500 messages / room</li>
+                    <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Unlimited poll templates in library</li>
                     <li><Check size={15} /> Scheduled start supported</li>
                     <li><Check size={15} /> 30 days history retention</li>
                     <li><Check size={15} /> Export transcript (.txt)</li>
@@ -461,6 +465,8 @@ export default function LandingPage() {
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> Unlimited rooms</li>
                     <li><Check size={15} /> Up to 1,000 messages / room</li>
+                    <li><Check size={15} /> Live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Unlimited poll templates</li>
                     <li><Check size={15} /> 60-min room timers</li>
                     <li><Check size={15} /> Scheduled start</li>
                     <li><Check size={15} /> 90 days history retention</li>
@@ -489,6 +495,8 @@ export default function LandingPage() {
                   <ul className="price-list" style={{ marginTop: "20px" }}>
                     <li><Check size={15} /> Unlimited rooms</li>
                     <li><Check size={15} /> Up to 2,500 messages / room</li>
+                    <li><Check size={15} /> Live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Unlimited poll templates</li>
                     <li><Check size={15} /> 120-min room timers</li>
                     <li><Check size={15} /> 1 year history retention</li>
                     <li><Check size={15} /> Export (.txt &amp; CSV)</li>

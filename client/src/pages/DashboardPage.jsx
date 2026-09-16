@@ -241,6 +241,7 @@ export default function DashboardPage() {
   })();
   const username = currentUser?.username || currentUser?.email || "Host";
   const isSolo = !currentUser?.plan || currentUser?.plan === "SOLO";
+  const isFreeSolo = isSolo && (currentUser?.roomPasses || 0) <= 0;
   // Handle Post-Payment Success and initial user sync
   useEffect(() => {
     if (refreshUser) refreshUser();
@@ -767,16 +768,20 @@ export default function DashboardPage() {
 
       // If user checked "Save as template"
       if (saveAsTemplate) {
-        API.post("/api/poll-templates", {
-          title: templateFormTitle.trim() || undefined,
-          question: pollQuestion.trim(),
-          type: pollType,
-          options: pollOptions.filter((o) => o.trim() !== "")
-        }).then((tplRes) => {
-          if (tplRes.data?.template) {
-            setPollTemplates((prev) => [tplRes.data.template, ...prev]);
-          }
-        }).catch(() => {});
+        if (isFreeSolo && pollTemplates.length >= 2) {
+          toast.info("Live poll launched! (Template saving skipped: Free Solo limit of 2 saved templates reached)");
+        } else {
+          API.post("/api/poll-templates", {
+            title: templateFormTitle.trim() || undefined,
+            question: pollQuestion.trim(),
+            type: pollType,
+            options: pollOptions.filter((o) => o.trim() !== "")
+          }).then((tplRes) => {
+            if (tplRes.data?.template) {
+              setPollTemplates((prev) => [tplRes.data.template, ...prev]);
+            }
+          }).catch(() => {});
+        }
       }
 
       setPollQuestion("");
@@ -840,6 +845,11 @@ export default function DashboardPage() {
   };
 
   const openCreatePollModal = () => {
+    if (isFreeSolo && pollTemplates.length >= 2) {
+      toast.info("Free Solo plan includes up to 2 saved templates. Upgrade or get a Room Pass to save unlimited templates!");
+      setShowUpgradeModal(true);
+      return;
+    }
     cancelEditingTemplate();
     setModalPollTab("create");
     setShowPollModal(true);
@@ -894,6 +904,11 @@ export default function DashboardPage() {
         cancelEditingTemplate();
         setModalPollTab("templates");
       } else {
+        if (isFreeSolo && pollTemplates.length >= 2) {
+          toast.info("Free Solo plan includes up to 2 saved templates. Upgrade or get a Room Pass to save unlimited templates!");
+          setShowUpgradeModal(true);
+          return;
+        }
         const res = await API.post("/api/poll-templates", {
           title: templateFormTitle.trim() || undefined,
           question: pollQuestion.trim(),
@@ -1931,7 +1946,58 @@ export default function DashboardPage() {
           <div className="poll-library-view">
             <div className="poll-library-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
               <div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Poll & Word Cloud Templates</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Poll & Word Cloud Templates</h3>
+                  {isFreeSolo ? (
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        padding: "3px 9px",
+                        borderRadius: 999,
+                        background: pollTemplates.length >= 2 ? "rgba(239, 68, 68, 0.1)" : "var(--surface-2)",
+                        color: pollTemplates.length >= 2 ? "#ef4444" : "var(--text-dim)",
+                        border: "1px solid var(--border)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}
+                    >
+                      {pollTemplates.length}/2 Templates used
+                      {pollTemplates.length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowUpgradeModal(true)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--accent)",
+                            fontWeight: 700,
+                            padding: 0,
+                            cursor: "pointer",
+                            fontSize: 11.5
+                          }}
+                        >
+                          · Upgrade for Unlimited →
+                        </button>
+                      )}
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        padding: "3px 9px",
+                        borderRadius: 999,
+                        background: "rgba(37, 99, 235, 0.1)",
+                        color: "var(--accent)",
+                        border: "1px solid rgba(37, 99, 235, 0.2)"
+                      }}
+                    >
+                      ✨ Unlimited Templates
+                    </span>
+                  )}
+                </div>
                 <p style={{ fontSize: 13.5, color: "var(--text-dim)", margin: "4px 0 0" }}>
                   Prepare your interactive questions beforehand. Launch any draft into an active room with 1 click.
                 </p>
@@ -2122,7 +2188,7 @@ export default function DashboardPage() {
             </div>
             <div style={{ padding: "20px 0 10px" }}>
               <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 20 }}>
-                Unlock longer room timers, higher participant limits, and message exports.
+                Unlock longer room timers, unlimited saved poll templates, and message exports.
               </p>
               <div className="upgrade-modal-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
                 {/* 24h Room Pass */}
@@ -2134,6 +2200,8 @@ export default function DashboardPage() {
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>1 room for 24 hours</li>
                       <li>Up to 500 messages / room</li>
+                      <li>Unlimited live polls &amp; word clouds</li>
+                      <li>Unlimited poll templates in library</li>
                       <li>Scheduled start supported</li>
                       <li>30 days history retention</li>
                       <li>Export responses</li>
@@ -2162,6 +2230,8 @@ export default function DashboardPage() {
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
                       <li>Up to 1,000 messages / room</li>
+                      <li>Live polls &amp; word clouds</li>
+                      <li>Unlimited poll templates</li>
                       <li>60-min room timers</li>
                       <li>Scheduled start</li>
                       <li>90 days history retention</li>
@@ -2189,6 +2259,8 @@ export default function DashboardPage() {
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
                       <li>Unlimited rooms</li>
                       <li>Up to 2,500 messages / room</li>
+                      <li>Live polls &amp; word clouds</li>
+                      <li>Unlimited poll templates</li>
                       <li>120-min room timers</li>
                       <li>1 year history retention</li>
                       <li>Export (.txt &amp; CSV)</li>

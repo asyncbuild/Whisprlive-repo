@@ -1690,6 +1690,25 @@ app.post("/api/poll-templates", verifyToken, async (req, res) => {
     : [];
 
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { plan: true, roomPasses: true }
+    });
+
+    const isPaidOrPass = (user?.plan && user.plan !== "SOLO") || (user?.roomPasses || 0) > 0;
+    const maxTemplates = isPaidOrPass ? Infinity : (PLAN_LIMITS.SOLO.maxPollTemplates || 2);
+
+    if (maxTemplates !== Infinity) {
+      const templateCount = await prisma.pollTemplate.count({
+        where: { userId: req.user.id }
+      });
+      if (templateCount >= maxTemplates) {
+        return res.status(403).json({
+          message: `Free Solo plan includes up to ${maxTemplates} saved templates in your library. Upgrade or get a Room Pass to save unlimited poll templates.`
+        });
+      }
+    }
+
     const template = await prisma.pollTemplate.create({
       data: {
         userId: req.user.id,
