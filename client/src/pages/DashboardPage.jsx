@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2, Download,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
+  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Plus, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
   BarChart2, Pin, MessageSquare, ThumbsUp, Edit3, ArrowRight
 } from "lucide-react";
 import { io } from "socket.io-client";
+import QRCode from "qrcode";
 import API from "../api/axios";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -109,7 +110,97 @@ export default function DashboardPage() {
   const [editingTemplateId, setEditingTemplateId] = useState(null);
 
   // Modal states
+  const [sessionQrUrl, setSessionQrUrl] = useState("");
   const [showQrModal, setShowQrModal] = useState(false);
+
+  // Generate Branded QR Code with Light Full-Square Logo Watermark
+  useEffect(() => {
+    if (!session?.link) {
+      setSessionQrUrl("");
+      return;
+    }
+
+    const fullUrl = session.link.startsWith("http") ? session.link : `http://${session.link}`;
+    QRCode.toDataURL(fullUrl, {
+      errorCorrectionLevel: "H",
+      margin: 2,
+      width: 440,
+      color: { dark: "#000000", light: "#00000000" } // Pure black modules over transparent background
+    })
+      .then((qrData) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 440;
+        canvas.height = 440;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setSessionQrUrl(qrData);
+          return;
+        }
+
+        const qrImg = new Image();
+        const logoImg = new Image();
+
+        let qrLoaded = false;
+        let logoLoaded = false;
+
+        const renderComposite = () => {
+          if (!qrLoaded) return;
+
+          // 1. Fill clean white base
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, 440, 440);
+
+          // 2. Draw branded logo watermark across the entire square (clearly visible while preserving scan contrast)
+          if (logoLoaded && logoImg.width && logoImg.height) {
+            ctx.save();
+            ctx.globalAlpha = 0.38; // Increased opacity so the logo watermark is clearly visible
+            const maxDimension = 360;
+            let drawW = maxDimension;
+            let drawH = maxDimension;
+            const aspect = logoImg.width / logoImg.height;
+            if (aspect > 1) {
+              drawW = maxDimension;
+              drawH = maxDimension / aspect;
+            } else {
+              drawH = maxDimension;
+              drawW = maxDimension * aspect;
+            }
+            const drawX = (440 - drawW) / 2;
+            const drawY = (440 - drawH) / 2;
+            ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
+            ctx.restore();
+          }
+
+          // 3. Draw transparent QR code pattern on top
+          ctx.drawImage(qrImg, 0, 0, 440, 440);
+
+          setSessionQrUrl(canvas.toDataURL("image/png"));
+        };
+
+        qrImg.onload = () => {
+          qrLoaded = true;
+          renderComposite();
+        };
+        qrImg.onerror = () => {
+          setSessionQrUrl(qrData);
+        };
+
+        logoImg.onload = () => {
+          logoLoaded = true;
+          renderComposite();
+        };
+        logoImg.onerror = () => {
+          logoLoaded = false;
+          renderComposite();
+        };
+
+        qrImg.src = qrData;
+        logoImg.src = "/Logo Bgless.png";
+      })
+      .catch((err) => {
+        console.error("Failed to generate QR code:", err);
+      });
+  }, [session?.link]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [waitlistPlan, setWaitlistPlan] = useState("HOST");
@@ -1307,16 +1398,16 @@ export default function DashboardPage() {
                 )}
 
                 {/* Audience Feed Visibility Setting */}
-                <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
+                <div className="new-session-toggle-row" style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
                       Audience Q&A Feed Visibility
                     </div>
-                    <div style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+                    <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.4, marginTop: 2 }}>
                       Allow participants to view approved questions and upvote in real-time. (Can also be toggled anytime during live session)
                     </div>
                   </div>
-                  <label className="toggle-switch-btn" title="Toggle Audience Live Feed">
+                  <label className="toggle-switch-btn" title="Toggle Audience Live Feed" style={{ flex: "none", marginLeft: 8 }}>
                     <input
                       type="checkbox"
                       checked={showPublicFeed}
@@ -1416,7 +1507,7 @@ export default function DashboardPage() {
                   You don't have an ongoing live room right now.
                 </p>
                 <button className="btn btn-primary" onClick={() => setTab("new")}>
-                  <PlusCircle size={15} /> Create a new session
+                  <Plus size={16} strokeWidth={2.5} /> Create a new session
                 </button>
               </div>
             ) : (
@@ -1492,17 +1583,16 @@ export default function DashboardPage() {
                       <div
                         className="qr-box"
                         onClick={() => setShowQrModal(true)}
-                        title="Click to view large QR code"
+                        title="Click to view large branded QR code"
                       >
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(`http://${session.link}`)}`}
-                          alt="QR code to join session"
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                            if (e.target.nextSibling) e.target.nextSibling.style.display = "flex";
-                          }}
-                        />
-                        <div className="qr-fallback" style={{ display: "none" }}><QrCode size={20} /></div>
+                        {sessionQrUrl ? (
+                          <img
+                            src={sessionQrUrl}
+                            alt="QR code to join session"
+                          />
+                        ) : (
+                          <div className="qr-fallback"><QrCode size={20} /></div>
+                        )}
                       </div>
                       <span className="url">{session.link}</span>
                     </div>
@@ -1663,9 +1753,9 @@ export default function DashboardPage() {
                 {/* Audience Feed Visibility Live Bar */}
                 <div className="host-feed-toggle-bar">
                   <div className="host-toggle-label">
-                    <Eye size={18} style={{ color: showPublicFeed ? "var(--accent)" : "var(--text-faint)" }} />
-                    <div>
-                      <div>
+                    <Eye size={18} style={{ color: showPublicFeed ? "var(--accent)" : "var(--text-faint)", flex: "none", marginTop: 2 }} />
+                    <div className="host-toggle-label-content">
+                      <div className="host-toggle-title">
                         Audience Live Q&A Feed:{" "}
                         {showPublicFeed ? (
                           <strong style={{ color: "var(--accent)" }}>Visible to Attendees</strong>
@@ -1673,7 +1763,7 @@ export default function DashboardPage() {
                           <strong style={{ color: "var(--text-dim)" }}>Hidden (Private to Host)</strong>
                         )}
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 400 }}>
+                      <div className="host-toggle-desc">
                         {showPublicFeed
                           ? "Attendees can see approved questions, upvote them, and view your answers."
                           : "Attendees can only see their question input box without seeing other participants' questions."}
@@ -2011,7 +2101,7 @@ export default function DashboardPage() {
                 className="btn btn-primary btn-sm"
                 onClick={openCreatePollModal}
               >
-                <PlusCircle size={14} /> Create New Template
+                <Plus size={15} strokeWidth={2.5} /> Create New Template
               </button>
             </div>
 
@@ -2021,15 +2111,9 @@ export default function DashboardPage() {
               <div className="empty-feed" style={{ padding: "60px 20px", textAlign: "center" }}>
                 <BarChart2 size={34} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
                 <h4>No saved poll templates yet</h4>
-                <p style={{ color: "var(--text-dim)", fontSize: 13.5, maxWidth: 420, margin: "6px auto 16px" }}>
+                <p style={{ color: "var(--text-dim)", fontSize: 13.5, maxWidth: 420, margin: "6px auto" }}>
                   Create multiple-choice questions or word cloud prompts now so you don't have to type them live during your presentations.
                 </p>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={openCreatePollModal}
-                >
-                  <PlusCircle size={14} /> Create Your First Template
-                </button>
               </div>
             ) : (
               <div className="poll-templates-grid">
@@ -2131,51 +2215,108 @@ export default function DashboardPage() {
       {/* QR Code Big Popup Modal */}
       {showQrModal && session && (
         <div className="modal-overlay" onClick={() => setShowQrModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>Scan QR Code to Join</h3>
+          <div className="modal-content qr-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="modal-head qr-modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 10, marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <img src="/Logo Bgless.png" alt="WhisprLive" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
+                  Whispr<span style={{ color: "var(--accent)" }}>Live</span> Join Scanner
+                </h3>
+              </div>
               <button className="modal-close-btn" onClick={() => setShowQrModal(false)}>
                 <X size={16} />
               </button>
             </div>
             <div className="qr-modal-body">
-              <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 8 }}>
-                {session.title}
-              </p>
-              <div className="qr-big-box">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data=${encodeURIComponent(`http://${session.link}`)}`}
-                  alt="Session QR Code"
-                />
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-dim)", marginBottom: 3 }}>
+                {session.title || "Live Q&A"}
               </div>
-              <div className="link-box" style={{ width: "100%", marginTop: 0, justifyContent: "center" }}>
+
+              {/* Room Code Badge */}
+              <div style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "3px 10px",
+                borderRadius: 999,
+                background: "rgba(37, 99, 235, 0.08)",
+                border: "1px solid rgba(37, 99, 235, 0.16)",
+                fontSize: 12,
+                marginBottom: 6
+              }}>
+                <span style={{ color: "var(--text-dim)" }}>Room Code:</span>
+                <strong className="mono" style={{ color: "var(--accent)", letterSpacing: "0.08em", fontSize: 13 }}>
+                  {session.roomCode || session.id}
+                </strong>
+              </div>
+
+              {/* Branded Scanner Viewport with Viewfinder HUD & Sweeping Laser */}
+              <div className="branded-scanner-card">
+                <div className="branded-scanner-viewport">
+                  {/* Viewfinder HUD Corner Brackets */}
+                  <div className="scanner-corner corner-tl" />
+                  <div className="scanner-corner corner-tr" />
+                  <div className="scanner-corner corner-bl" />
+                  <div className="scanner-corner corner-br" />
+
+                  {/* Sweeping Laser Beam Effect */}
+                  <div className="scanner-laser-curtain">
+                    <div className="scanner-laser-trail" />
+                    <div className="scanner-laser-line" />
+                  </div>
+
+                  {/* High-contrast QR with Watermarked Logo */}
+                  {sessionQrUrl ? (
+                    <img
+                      src={sessionQrUrl}
+                      alt="WhisprLive Branded QR Code"
+                      className="scanner-qr-image"
+                    />
+                  ) : (
+                    <div className="scanner-qr-loading">
+                      <Loader2 size={30} className="spin" style={{ color: "var(--accent)" }} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="scanner-hud-footer">
+                  <span className="scanner-target-hint">
+                    <QrCode size={13} style={{ color: "var(--accent)" }} />
+                    Point phone camera to scan & join
+                  </span>
+                </div>
+              </div>
+
+              <div className="link-box" style={{ width: "100%", marginTop: 0, justifyContent: "center", fontSize: 13 }}>
                 <span className="url">{session.link}</span>
               </div>
-              <div className="modal-actions" style={{ justifyContent: "center", marginTop: 16, gap: 10, flexWrap: "wrap" }}>
+
+              <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "8px 0 0" }}>
+                Scan with any phone camera to participate anonymously
+              </p>
+
+              <div className="modal-actions" style={{ justifyContent: "center", marginTop: 14, gap: 10, flexWrap: "wrap" }}>
                 <a
                   href={`https://wa.me/?text=${encodeURIComponent(`📢 Join our live Q&A session: *${session.title || "Live Q&A"}*\n\nAsk your questions anonymously here:\n👉 http://${session.link}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn"
+                  className="btn btn-sm"
                   style={{
                     background: "linear-gradient(135deg, #25D366 0%, #128C7E 100%)",
                     color: "#fff",
                     border: "none",
                     fontWeight: 600,
-                    fontSize: 13.5,
+                    fontSize: 13,
                     boxShadow: "0 3px 10px rgba(37, 211, 102, 0.3)",
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 7
+                    gap: 6
                   }}
                 >
-                  <WhatsAppIcon size={17} /> Share on WhatsApp
+                  <WhatsAppIcon size={16} /> Share on WhatsApp
                 </a>
-                <button className="btn btn-primary" onClick={copyLink}>
-                  {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied Link" : "Copy Link"}
-                </button>
-                <button className="btn btn-ghost" onClick={() => setShowQrModal(false)}>
-                  Close
+                <button className="btn btn-primary btn-sm" onClick={copyLink}>
+                  {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied Link" : "Copy Link"}
                 </button>
               </div>
             </div>
@@ -2512,7 +2653,7 @@ export default function DashboardPage() {
       {/* Live Poll & Word Cloud Host Modal */}
       {showPollModal && (
         <div className="modal-overlay" onClick={closePollModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540, width: "92%" }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540, width: "92%", maxHeight: "90vh" }}>
             <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <BarChart2 size={20} style={{ color: "var(--accent)" }} />
@@ -2615,13 +2756,14 @@ export default function DashboardPage() {
                 ) : (
                   <WordCloudVisualizer
                     words={activePoll.wordCloud || []}
-                    minHeight={300}
+                    minHeight={160}
+                    maxHeight={160}
                     showSummary={true}
                   />
                 )}
 
-                <div style={{ marginTop: 22, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+                <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
                     Attendees can see and participate on the Ask page in real-time.
                   </span>
                   <button
@@ -2629,6 +2771,7 @@ export default function DashboardPage() {
                     className="btn btn-danger btn-sm"
                     onClick={handleEndPoll}
                     disabled={endingPoll}
+                    style={{ whiteSpace: "nowrap", flexShrink: 0 }}
                   >
                     {endingPoll ? <Loader2 size={13} className="spin" /> : "End Active Poll"}
                   </button>

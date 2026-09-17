@@ -2041,9 +2041,30 @@ body {
   box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .25);
   max-width: 440px;
   width: 100%;
-  padding: 28px 26px;
+  max-height: 90vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+  padding: 24px 24px;
   position: relative;
   animation: modalScale .22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }
 
 .modal-head {
@@ -2803,19 +2824,41 @@ body {
     min-width: 0;
   }
 
-  .wordcloud-form {
-    flex-direction: column;
-    align-items: stretch;
+
+  .host-feed-toggle-bar,
+  .new-session-toggle-row {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    flex-wrap: nowrap !important;
   }
 
-  .wordcloud-form .btn {
-    width: 100%;
-    justify-content: center;
+  .host-toggle-title {
+    font-size: 12.5px;
+    line-height: 1.3;
   }
 
-  .host-feed-toggle-bar {
-    padding: 10px 12px;
-    gap: 8px;
+  .host-toggle-desc {
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 1px;
+  }
+
+  .toggle-switch-btn {
+    width: 40px;
+    height: 22px;
+    flex: none;
+    margin-left: 6px;
+  }
+
+  .toggle-slider:before {
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+  }
+
+  input:checked + .toggle-slider:before {
+    transform: translateX(18px);
   }
 }
 
@@ -3198,27 +3241,130 @@ body {
   transform: scale(1.08);
 }
 
+/* Audience Tab 2-line Label */
+.tab-label-multiline {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 .wordcloud-form {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
 }
 
 .wordcloud-input {
-  flex: 1;
-  height: 44px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 14px;
-  font-size: 14px;
-  background: var(--surface);
-  color: var(--text);
-  outline: none;
+  width: 100% !important;
+  min-height: 52px !important;
+  height: 52px !important;
+  border: 1.5px solid #CBD5E1 !important;
+  border-radius: 12px !important;
+  padding: 0 16px !important;
+  font-size: 15.5px !important;
+  font-weight: 500 !important;
+  background: #FFFFFF !important;
+  color: var(--text) !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 1.5px 4px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.2s ease !important;
+  text-align: left !important;
+}
+
+.wordcloud-input::placeholder {
+  color: #94A3B8 !important;
+  font-weight: 400 !important;
 }
 
 .wordcloud-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.15) !important;
+  background: #ffffff !important;
+}
+
+.wordcloud-submit-btn,
+.wordcloud-form .btn {
+  width: 100% !important;
+  min-height: 50px !important;
+  height: 50px !important;
+  border-radius: 12px !important;
+  font-size: 15.5px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.18) !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 600px) {
+  .audience-tabs-bar {
+    gap: 4px !important;
+    padding: 4px !important;
+  }
+
+  .audience-tab-btn {
+    padding: 6px 5px !important;
+    font-size: 11.5px !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+  }
+
+  .audience-tab-btn .tab-label-multiline {
+    font-size: 10.5px !important;
+    line-height: 1.15 !important;
+  }
+
+  .audience-tab-btn .pulse-dot {
+    width: 6px !important;
+    height: 6px !important;
+  }
+
+  .wordcloud-form {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .wordcloud-input {
+    width: 100% !important;
+    min-height: 52px !important;
+    height: 52px !important;
+    font-size: 16px !important; /* Prevents auto-zoom on iOS Safari */
+    text-align: left !important;
+    border-radius: 12px !important;
+    padding: 0 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .wordcloud-submit-btn,
+  .wordcloud-form .btn {
+    width: 100% !important;
+    min-height: 50px !important;
+    height: 50px !important;
+    border-radius: 12px !important;
+    font-size: 15.5px !important;
+    justify-content: center !important;
+  }
+
+  .poll-card {
+    padding: 20px 16px !important;
+  }
+
+  .poll-question-title {
+    font-size: 17px !important;
+    margin-bottom: 14px !important;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
 }
 
 /* Host Dashboard Enhancements */
@@ -3226,22 +3372,44 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 18px;
+  gap: 14px;
+  padding: 12px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .host-toggle-label {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+
+.host-toggle-label-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.host-toggle-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.host-toggle-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-top: 2px;
+  line-height: 1.4;
 }
 
 .toggle-switch-btn {
@@ -3249,6 +3417,9 @@ body {
   display: inline-block;
   width: 44px;
   height: 24px;
+  flex: none;
+  margin-left: 8px;
+  align-self: center;
 }
 
 .toggle-switch-btn input {
@@ -3390,3 +3561,365 @@ input:checked + .toggle-slider:before {
   color: var(--text);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
+
+/* ==========================================================================
+   Branded QR Join Scanner with Animated Laser & HUD
+   ========================================================================== */
+
+.branded-scanner-card {
+  width: 100%;
+  max-width: 300px;
+  margin: 4px auto 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 10px 8px;
+  box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(37, 99, 235, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.branded-scanner-viewport {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  background: #FFFFFF;
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06), 0 8px 24px -6px rgba(37, 99, 235, 0.15);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 4 Viewfinder Corner Brackets */
+.scanner-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.scanner-corner.corner-tl {
+  top: 7px;
+  left: 7px;
+  border-top: 3px solid #2563EB;
+  border-left: 3px solid #2563EB;
+  border-top-left-radius: 7px;
+  filter: drop-shadow(-1px -1px 3px rgba(37, 99, 235, 0.4));
+}
+
+.scanner-corner.corner-tr {
+  top: 7px;
+  right: 7px;
+  border-top: 3px solid #2563EB;
+  border-right: 3px solid #2563EB;
+  border-top-right-radius: 7px;
+  filter: drop-shadow(1px -1px 3px rgba(37, 99, 235, 0.4));
+}
+
+.scanner-corner.corner-bl {
+  bottom: 7px;
+  left: 7px;
+  border-bottom: 3px solid #7C3AED;
+  border-left: 3px solid #7C3AED;
+  border-bottom-left-radius: 7px;
+  filter: drop-shadow(-1px 1px 3px rgba(124, 58, 237, 0.4));
+}
+
+.scanner-corner.corner-br {
+  bottom: 7px;
+  right: 7px;
+  border-bottom: 3px solid #7C3AED;
+  border-right: 3px solid #7C3AED;
+  border-bottom-right-radius: 7px;
+  filter: drop-shadow(1px 1px 3px rgba(124, 58, 237, 0.4));
+}
+
+/* Sweeping Laser Beam */
+.scanner-laser-curtain {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 44px;
+  pointer-events: none;
+  z-index: 4;
+  animation: laserCurtainSweep 2.8s ease-in-out infinite alternate;
+}
+
+.scanner-laser-trail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0) 0%, rgba(59, 130, 246, 0.12) 80%, rgba(99, 102, 241, 0.22) 100%);
+}
+
+.scanner-laser-line {
+  position: absolute;
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  height: 2.5px;
+  background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.4) 10%, #3B82F6 40%, #8B5CF6 60%, rgba(59, 130, 246, 0.4) 90%, transparent 100%);
+  box-shadow: 0 0 10px 2px rgba(59, 130, 246, 0.75), 0 0 4px #93C5FD;
+  border-radius: 2px;
+}
+
+.scanner-qr-image {
+  width: 224px;
+  height: 224px;
+  display: block;
+  border-radius: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.scanner-qr-loading {
+  width: 224px;
+  height: 224px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scanner-hud-footer {
+  margin-top: 8px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scanner-target-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.scanner-target-hint svg {
+  color: var(--accent);
+}
+
+@keyframes laserCurtainSweep {
+  0% {
+    top: 6px;
+    opacity: 0.8;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    top: calc(100% - 50px);
+    opacity: 0.8;
+  }
+}
+
+/* ==========================================================================
+   LAPTOP SCREEN RATIO & PROPORTIONS OPTIMIZATION
+   Applies exclusively to laptop screens (992px to 1536px width, or viewports
+   with height <= 860px at standard laptop viewports).
+   Leaves mobile (< 768px) and large desktop (> 1536px & > 860px) untouched.
+   ========================================================================== */
+
+@media screen and (min-width: 992px) and (max-width: 1536px),
+       screen and (min-width: 992px) and (max-height: 860px) {
+  /* Clean responsive base font size for laptop viewports */
+  html {
+    font-size: 15px;
+  }
+
+  /* Perfectly centered container spanning the 100% full viewport width */
+  .container {
+    max-width: 1140px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 0 32px;
+  }
+
+  /* Compact Landing Page Nav & Hero for Laptops */
+  .nav-inner {
+    height: 62px;
+  }
+
+  .hero {
+    padding: 42px 0 36px;
+  }
+
+  .hero-grid {
+    gap: 36px;
+  }
+
+  .eyebrow {
+    margin-bottom: 14px;
+    font-size: 12px;
+    padding: 5px 12px;
+  }
+
+  .hero h1 {
+    font-size: 42px;
+    line-height: 1.15;
+  }
+
+  .hero-sub {
+    font-size: 15px;
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+
+  .hero-cta {
+    margin-top: 22px;
+    gap: 10px;
+  }
+
+  .hero-cta .btn {
+    padding: 10px 20px;
+    font-size: 13.5px;
+  }
+
+  /* Compact Dashboard Topbar & Body for Laptops */
+  .dash-top {
+    height: 58px;
+  }
+
+  .dash-body {
+    padding: 22px 0 45px;
+  }
+
+  .dash-head {
+    margin-bottom: 16px;
+  }
+
+  .dash-head h1 {
+    font-size: 24px;
+  }
+
+  .dash-head p {
+    font-size: 13.5px !important;
+  }
+
+  .tabs {
+    margin-bottom: 20px;
+  }
+
+  .tab {
+    padding: 9px 4px;
+    font-size: 13.5px;
+  }
+
+  /* Compact Cards & Inputs */
+  .new-session-card {
+    padding: 20px 24px;
+    margin-bottom: 18px;
+    border-radius: var(--radius-md);
+  }
+
+  .ns-title-field label,
+  .duration-field label {
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .ns-title-field input {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .duration-pill {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+
+  .link-box {
+    padding: 12px 16px;
+    margin-top: 12px;
+  }
+
+  .messages-head {
+    margin-bottom: 12px;
+  }
+
+  .messages-card {
+    border-radius: var(--radius-md);
+  }
+
+  .btn {
+    padding: 10px 20px;
+    font-size: 13.5px;
+  }
+
+  .btn-sm {
+    padding: 7px 13px;
+    font-size: 12.5px;
+  }
+
+  /* Compact Clean QR Join Modal & Viewport for Laptops */
+  .modal-overlay {
+    padding: 12px;
+  }
+
+  .modal-content {
+    max-height: 92vh;
+    padding: 18px 22px;
+    border-radius: var(--radius-md);
+  }
+
+  .qr-modal-content {
+    padding: 16px 20px !important;
+    max-height: 94vh !important;
+    max-width: 390px !important;
+  }
+
+  .qr-modal-head {
+    padding-bottom: 8px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .branded-scanner-card {
+    max-width: 240px;
+    padding: 8px 8px 6px;
+    margin: 3px auto 8px;
+  }
+
+  .branded-scanner-viewport {
+    width: 185px;
+    height: 185px;
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .scanner-qr-image {
+    width: 173px;
+    height: 173px;
+  }
+
+  .scanner-qr-loading {
+    width: 173px;
+    height: 173px;
+  }
+
+  .scanner-laser-curtain {
+    height: 32px;
+  }
+
+  .scanner-hud-footer {
+    margin-top: 5px;
+  }
+
+  .modal-actions {
+    margin-top: 12px !important;
+    gap: 10px !important;
+  }
+}

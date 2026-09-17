@@ -602,7 +602,15 @@ export default function PublicAskPage() {
                 onClick={() => setActiveTab("poll")}
               >
                 <span className="pulse-dot" />
-                <BarChart2 size={14} /> {activePoll?.type === "WORD_CLOUD" ? "Live Word Cloud" : "Live Poll"}
+                <BarChart2 size={13} style={{ flexShrink: 0 }} />
+                {activePoll?.type === "WORD_CLOUD" ? (
+                  <span className="tab-label-multiline" style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.15, fontSize: 11, textAlign: "left" }}>
+                    <span>Live Word</span>
+                    <span>Cloud</span>
+                  </span>
+                ) : (
+                  <span>Live Poll</span>
+                )}
               </button>
             )}
           </div>
@@ -812,13 +820,14 @@ export default function PublicAskPage() {
                       {/* Interactive Word Cloud Visualizer */}
                       <WordCloudVisualizer
                         words={activePoll.wordCloud || []}
-                        minHeight={250}
+                        minHeight={190}
                         style={{ marginBottom: 16 }}
                       />
 
                       {!hasVotedActivePoll ? (
                         <form
                           className="wordcloud-form"
+                          style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", marginTop: 14 }}
                           onSubmit={(e) => {
                             e.preventDefault();
                             if (wordInput.trim()) {
@@ -831,15 +840,46 @@ export default function PublicAskPage() {
                             className="wordcloud-input"
                             placeholder="Type 1 or 2 words..."
                             maxLength={30}
+                            autoComplete="off"
                             value={wordInput}
                             onChange={(e) => setWordInput(e.target.value)}
+                            style={{
+                              width: "100%",
+                              height: 52,
+                              minHeight: 52,
+                              borderRadius: 12,
+                              border: "1.5px solid #CBD5E1",
+                              background: "#FFFFFF",
+                              padding: "0 16px",
+                              fontSize: 15.5,
+                              color: "var(--text)",
+                              boxSizing: "border-box",
+                              boxShadow: "0 1.5px 4px rgba(0, 0, 0, 0.04)",
+                              outline: "none"
+                            }}
                           />
                           <button
                             type="submit"
-                            className="btn btn-primary btn-sm"
+                            className="btn btn-primary wordcloud-submit-btn"
                             disabled={!wordInput.trim() || isVoting}
+                            style={{
+                              width: "100%",
+                              height: 50,
+                              minHeight: 50,
+                              borderRadius: 12,
+                              fontSize: 15.5,
+                              fontWeight: 600,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              boxShadow: "0 2px 8px rgba(37, 99, 235, 0.2)"
+                            }}
                           >
-                            Submit Word
+                            {isVoting ? (
+                              <>Submitting... <Loader2 size={14} className="spin" /></>
+                            ) : (
+                              "Submit Word"
+                            )}
                           </button>
                         </form>
                       ) : (

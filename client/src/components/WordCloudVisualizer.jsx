@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Cloud } from "lucide-react";
 
 // Curated organic jewel-tone color palette matching reference word cloud
 const CLOUD_COLORS = [
@@ -48,6 +49,7 @@ const CLOUD_COLORS_DARK = [
 export default function WordCloudVisualizer({
   words = [],
   minHeight = 280,
+  maxHeight = null,
   interactive = true,
   showSummary = true,
   isDark = false,
@@ -189,39 +191,40 @@ export default function WordCloudVisualizer({
       <div
         className="wordcloud-empty-canvas"
         style={{
-          minHeight,
+          minHeight: maxHeight ? Math.min(minHeight, maxHeight) : Math.min(minHeight, 200),
+          height: maxHeight ? maxHeight : "auto",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: isDark ? "rgba(255,255,255,0.02)" : "var(--surface-2)",
+          background: isDark ? "rgba(255,255,255,0.02)" : "linear-gradient(180deg, #F8FAFC 0%, var(--surface-2) 100%)",
           borderRadius: "var(--radius-md)",
-          padding: "32px 20px",
+          padding: "20px 16px",
           textAlign: "center",
-          border: "1px dashed var(--border)",
+          border: "1px solid var(--border)",
           ...style
         }}
       >
         <div
           style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: "50%",
-            background: "rgba(255, 90, 54, 0.1)",
-            color: "var(--primary)",
+            background: "rgba(37, 99, 235, 0.08)",
+            border: "1px solid rgba(37, 99, 235, 0.16)",
+            color: "var(--accent)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 10,
-            fontSize: 20
+            marginBottom: 10
           }}
         >
-          ☁️
+          <Cloud size={22} strokeWidth={2} />
         </div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
           No audience words submitted yet
         </div>
-        <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "4px 0 0", maxWidth: 320 }}>
+        <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "5px 0 0", maxWidth: 320, lineHeight: 1.5 }}>
           Words will appear live in an interactive visual cloud as attendees submit them.
         </p>
       </div>
@@ -269,19 +272,20 @@ export default function WordCloudVisualizer({
           style={{
             position: "relative",
             width: "100%",
-            minHeight,
+            minHeight: maxHeight ? Math.min(minHeight, maxHeight) : minHeight,
+            height: maxHeight ? maxHeight : "auto",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "8px 12px"
+            padding: "4px 8px"
           }}
         >
           <svg
             viewBox="0 0 640 340"
             style={{
               width: "100%",
-              height: "100%",
-              maxHeight: Math.max(minHeight, 340),
+              height: maxHeight ? `${maxHeight}px` : "100%",
+              maxHeight: maxHeight || Math.max(minHeight, 340),
               overflow: "visible",
               userSelect: "none"
             }}
