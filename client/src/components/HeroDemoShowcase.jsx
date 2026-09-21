@@ -648,13 +648,15 @@ export default function HeroDemoShowcase() {
 
             </div>
 
-            {/* Virtual Touch Pointer with Animated Click Ripple */}
+            {/* Virtual Touch Indicator with Smooth Tap Wave */}
             {cursorPos.visible && (
               <div
                 className={`demo-virtual-cursor ${cursorPos.active ? "clicked" : ""}`}
                 style={{ left: `${cursorPos.x}%`, top: `${cursorPos.y}%` }}
               >
-                <div className="cursor-dot" />
+                <div className="cursor-touch-ring">
+                  <div className="touch-inner-dot" />
+                </div>
                 <div className="cursor-ripple" />
               </div>
             )}

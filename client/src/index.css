@@ -825,39 +825,58 @@ body {
   opacity: 0.6;
 }
 
-/* Touch Pointer */
+/* Minimalist iOS/Screen Touch Indicator */
 .demo-virtual-cursor {
   position: absolute;
-  width: 26px;
-  height: 26px;
-  margin-left: -13px;
-  margin-top: -13px;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -12px;
   pointer-events: none;
   z-index: 100;
-  transition: left 0.4s ease, top 0.4s ease;
+  transition: left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.cursor-dot {
-  width: 22px;
-  height: 22px;
+.cursor-touch-ring {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: rgba(37, 99, 235, 0.65);
-  border: 2px solid #FFFFFF;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  transition: transform 0.15s ease;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), inset 0 0 4px rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, border-color 0.15s ease;
 }
 
-.demo-virtual-cursor.clicked .cursor-dot {
+.touch-inner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.demo-virtual-cursor.clicked .cursor-touch-ring {
   transform: scale(0.8);
-  background: rgba(37, 99, 235, 0.9);
+  background: rgba(255, 90, 54, 0.35);
+  border-color: #FF5A36;
+}
+
+.demo-virtual-cursor.clicked .touch-inner-dot {
+  background: #FF5A36;
+  transform: scale(1.15);
 }
 
 .cursor-ripple {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid var(--accent);
   transform: translate(-50%, -50%) scale(0);
@@ -871,12 +890,16 @@ body {
 
 @keyframes cursorRippleWave {
   0% {
-    transform: translate(-50%, -50%) scale(0.5);
+    transform: translate(-50%, -50%) scale(0.6);
     opacity: 1;
+    border-color: #FF5A36;
+    background: rgba(255, 90, 54, 0.2);
   }
   100% {
-    transform: translate(-50%, -50%) scale(3.5);
+    transform: translate(-50%, -50%) scale(3);
     opacity: 0;
+    border-color: var(--accent);
+    background: transparent;
   }
 }
 
