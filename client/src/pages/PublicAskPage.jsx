@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Clock, Send, Radio, Check, Loader2, Calendar, ThumbsUp,
@@ -362,7 +362,9 @@ export default function PublicAskPage() {
     setVotedMessageIds(nextVoted);
     try {
       localStorage.setItem("whisprlive_public_voted", JSON.stringify(nextVoted));
-    } catch { }
+    } catch {
+      // Ignore storage errors in private browsing
+    }
 
     const delta = isVoted ? -1 : 1;
     setMessages((prev) =>
@@ -396,7 +398,9 @@ export default function PublicAskPage() {
     setVotedPollMap(nextMap);
     try {
       localStorage.setItem("whisprlive_voted_polls", JSON.stringify(nextMap));
-    } catch { }
+    } catch {
+      // Ignore storage errors in private browsing
+    }
 
     if (roomCode?.toLowerCase() === "demo" || pollId === "demo-poll") {
       setTimeout(() => {

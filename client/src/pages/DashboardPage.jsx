@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Link2, Play, Trash2, Download,
+  Link2, Play, Trash2,
   Clock, User, LogOut, Radio, Check, Copy,
-  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, PlusCircle, Plus, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
-  BarChart2, Pin, MessageSquare, ThumbsUp, Edit3, ArrowRight
+  MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, Plus, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
+  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download
 } from "lucide-react";
 import { io } from "socket.io-client";
 import QRCode from "qrcode";
@@ -317,7 +317,7 @@ export default function DashboardPage() {
   const [votedIds, setVotedIds] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("whisprlive_voted_messages") || "[]");
-    } catch (e) {
+    } catch {
       return [];
     }
   });
@@ -326,7 +326,7 @@ export default function DashboardPage() {
   const currentUser = user || (() => {
     try {
       return JSON.parse(localStorage.getItem("whisprlive_user"));
-    } catch (e) {
+    } catch {
       return null;
     }
   })();
@@ -635,7 +635,7 @@ export default function DashboardPage() {
           const text = await err.response.data.text();
           const parsed = JSON.parse(text);
           toast.error(parsed.error || parsed.message || "Failed to export session");
-        } catch (e) {
+        } catch {
           toast.error("Failed to export session");
         }
       } else {

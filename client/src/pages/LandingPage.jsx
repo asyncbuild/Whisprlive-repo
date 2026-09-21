@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X, Bell, Loader2, ShieldCheck, Smartphone, Users, MessageCircle, ChevronDown
@@ -36,7 +36,6 @@ export default function LandingPage() {
   const { user, token, refreshUser } = useAuth();
   const { toast } = useToast();
   const isLoggedIn = Boolean(token);
-  const currentPlan = user?.plan || "SOLO";
   const geoCurrency = useGeoCurrency();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,9 +48,12 @@ export default function LandingPage() {
   const [displayTotal, setDisplayTotal] = useState("...");
   const [demoQr, setDemoQr] = useState("");
   const [openFaq, setOpenFaq] = useState(0);
-  const refs = { home: useRef(null), about: useRef(null), pricing: useRef(null), liveMock: useRef(null) };
+  const homeRef = useRef(null);
+  const aboutRef = useRef(null);
+  const pricingRef = useRef(null);
+  const liveMockRef = useRef(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     document.title = "WhisprLive | Anonymous Live Q&A & QR Code Audience Interaction";
     const description = "Real-time anonymous live Q&A and audience polling for events, webinars, and town halls. Instant access via QR code with pay-per-event passes and UPI support.";
     let meta = document.querySelector('meta[name="description"]');
@@ -69,7 +71,7 @@ export default function LandingPage() {
     }).then(setDemoQr).catch(() => setDemoQr(""));
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let isMounted = true;
     // Rapidly change random number under 500 every 45ms while waiting for real backend stats
     const interval = setInterval(() => {
@@ -138,7 +140,8 @@ export default function LandingPage() {
 
   const scrollTo = (key) => {
     setMenuOpen(false);
-    refs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const targetMap = { home: homeRef, about: aboutRef, pricing: pricingRef, liveMock: liveMockRef };
+    targetMap[key]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleCheckout = async (planType) => {
@@ -254,7 +257,7 @@ export default function LandingPage() {
         )}
       </nav>
 
-      <div ref={refs.home}>
+      <div ref={homeRef}>
         <section className="hero">
           <div className="container hero-grid">
             <div>
@@ -315,7 +318,7 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <div ref={refs.liveMock} className="hero-demo-stage">
+            <div ref={liveMockRef} className="hero-demo-stage">
               <LiveMockCard />
               <div className="demo-qr-card">
                 <div className="demo-qr-copy">
@@ -340,7 +343,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <div ref={refs.about}>
+      <div ref={aboutRef}>
         <section className="section">
           <div className="container">
             <div className="about-head-grid">
@@ -390,7 +393,7 @@ export default function LandingPage() {
         </section>
       </div>
 
-      <div ref={refs.pricing}>
+      <div ref={pricingRef}>
         <section className="section">
           <div className="container">
             <div className="section-head">

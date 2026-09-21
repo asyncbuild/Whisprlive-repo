@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Brand from '../components/Brand';
 import { ArrowLeft, AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';

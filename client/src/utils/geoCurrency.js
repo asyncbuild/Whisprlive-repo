@@ -31,7 +31,7 @@ export function detectGeoCurrencySync() {
         isIndia: false,
       };
     }
-  } catch (e) {
+  } catch {
     return {
       code: "INR",
       symbol: "₹",
@@ -65,7 +65,7 @@ export function useGeoCurrency() {
           }
           return;
         }
-      } catch (err) {
+      } catch {
         // Fallback to secondary IP geolocation API
         try {
           const res2 = await fetch("https://api.country.is", { cache: "no-store" });
@@ -81,7 +81,7 @@ export function useGeoCurrency() {
               }
             }
           }
-        } catch (e) {
+        } catch {
           // Fallback to sync browser check
         }
       }
