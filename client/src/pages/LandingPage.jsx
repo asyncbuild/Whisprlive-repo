@@ -6,7 +6,8 @@ import {
 import QRCode from "qrcode";
 import API from "../api/axios";
 import Brand from "../components/Brand";
-import LiveMockCard from "../components/LiveMockCard";
+import HeroDemoShowcase from "../components/HeroDemoShowcase";
+import ThemeToggle from "../components/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
 
 import { useToast } from "../context/ToastContext";
@@ -227,6 +228,7 @@ export default function LandingPage() {
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
           </div>
           <div className="nav-actions">
+            <ThemeToggle />
             {isLoggedIn ? (
               <button className="btn btn-primary btn-sm" onClick={() => navigate("/dashboard")}>
                 Go to app <ArrowRight size={14} />
@@ -247,6 +249,10 @@ export default function LandingPage() {
             <a className="nav-link" onClick={() => scrollTo("home")}>Home</a>
             <a className="nav-link" onClick={() => scrollTo("about")}>About</a>
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--border)", marginTop: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-dim)" }}>Theme Appearance</span>
+              <ThemeToggle showLabel={true} />
+            </div>
             {!isLoggedIn && (
               <div className="mobile-menu-auth">
                 <button className="btn btn-ghost btn-sm btn-block" onClick={() => { setMenuOpen(false); navigate("/signin"); }}>Sign in</button>
@@ -319,7 +325,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div ref={liveMockRef} className="hero-demo-stage">
-              <LiveMockCard />
+              <HeroDemoShowcase />
               <div className="demo-qr-card">
                 <div className="demo-qr-copy">
                   <span className="section-eyebrow">Try it from your phone</span>

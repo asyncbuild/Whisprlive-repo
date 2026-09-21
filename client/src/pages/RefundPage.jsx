@@ -1,5 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
 import Brand from '../components/Brand';
+import ThemeToggle from '../components/ThemeToggle';
 import { ArrowLeft, AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 export default function RefundPage() {
@@ -10,9 +11,12 @@ export default function RefundPage() {
       <nav className="nav">
         <div className="container nav-inner">
           <Brand onClick={() => navigate('/')} />
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
-            <ArrowLeft size={15} /> Back to Home
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <ThemeToggle />
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
+              <ArrowLeft size={15} /> Back to Home
+            </button>
+          </div>
         </div>
       </nav>
 

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { trackPageView } from './utils/analytics';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
@@ -33,10 +34,11 @@ function RouteTracker() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <div className="whisprlive-root">
-          <Router>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <div className="whisprlive-root">
+            <Router>
             <RouteTracker />
             <Routes>
               <Route path="/" element={<LandingPage />} />
@@ -70,5 +72,6 @@ export default function App() {
         </div>
       </ToastProvider>
     </AuthProvider>
+  </ThemeProvider>
   );
 }

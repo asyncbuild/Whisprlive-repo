@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Cloud } from "lucide-react";
+import { useTheme } from "../context/ThemeContext";
 
 // Curated organic jewel-tone color palette matching reference word cloud
 const CLOUD_COLORS = [
@@ -52,10 +53,12 @@ export default function WordCloudVisualizer({
   maxHeight = null,
   interactive = true,
   showSummary = true,
-  isDark = false,
+  isDark: propIsDark,
   className = "",
   style = {}
 }) {
+  const { isDark: themeIsDark } = useTheme();
+  const isDark = propIsDark !== undefined ? propIsDark : themeIsDark;
   const [hoveredWord, setHoveredWord] = useState(null);
 
   const totalResponses = useMemo(() => {

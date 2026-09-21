@@ -8,6 +8,7 @@ import { io } from "socket.io-client";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
+import ThemeToggle from "../components/ThemeToggle";
 import API from "../api/axios";
 import { useToast } from "../context/ToastContext";
 import { getClientDeviceModel } from "../utils/deviceInfo";
@@ -466,7 +467,10 @@ export default function PublicAskPage() {
   if (loading) {
     return (
       <div className="public-wrap">
-        <Brand onClick={() => navigate("/")} />
+        <div style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: 640 }}>
+          <Brand onClick={() => navigate("/")} />
+          <ThemeToggle />
+        </div>
         <div style={{ marginTop: 60 }}>
           <LoadingSpinner text="Connecting to live AMA room..." />
         </div>
@@ -477,7 +481,10 @@ export default function PublicAskPage() {
   if (error || !roomInfo) {
     return (
       <div className="public-wrap">
-        <Brand onClick={() => navigate("/")} />
+        <div style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: 640 }}>
+          <Brand onClick={() => navigate("/")} />
+          <ThemeToggle />
+        </div>
         <div className="public-card" style={{ marginTop: 40, textAlign: "center" }}>
           <h2>Room Unavailable</h2>
           <p style={{ color: "var(--text-dim)", marginTop: 8 }}>{error}</p>
@@ -495,7 +502,10 @@ export default function PublicAskPage() {
 
   return (
     <div className="public-wrap">
-      <div style={{ marginBottom: 30 }}><Brand onClick={() => navigate("/")} /></div>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: 640 }}>
+        <Brand onClick={() => navigate("/")} />
+        <ThemeToggle />
+      </div>
       <div className="public-card">
         {roomCode?.toLowerCase() === "demo" && (
           <div style={{

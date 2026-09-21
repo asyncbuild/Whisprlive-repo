@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Brand from '../components/Brand';
+import ThemeToggle from '../components/ThemeToggle';
 import { ArrowLeft, Mail, MapPin, Clock, MessageSquare } from 'lucide-react';
 
 export default function ContactPage() {
@@ -11,9 +12,12 @@ export default function ContactPage() {
       <nav className="nav">
         <div className="container nav-inner">
           <Brand onClick={() => navigate('/')} />
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
-            <ArrowLeft size={15} /> Back to Home
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <ThemeToggle />
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
+              <ArrowLeft size={15} /> Back to Home
+            </button>
+          </div>
         </div>
       </nav>
 

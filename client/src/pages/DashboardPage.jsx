@@ -12,6 +12,7 @@ import API from "../api/axios";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
+import ThemeToggle from "../components/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
@@ -1226,6 +1227,8 @@ export default function DashboardPage() {
               <span className="username-text">{username}</span>
             </div>
 
+            <ThemeToggle />
+
             <button className="icon-btn" onClick={() => handleProtectedNavigation(handleLogout)} title="Sign out">
               <LogOut size={15} />
             </button>
@@ -2250,7 +2253,7 @@ export default function DashboardPage() {
                 </strong>
               </div>
 
-              {/* Branded Scanner Viewport with Viewfinder HUD & Sweeping Laser */}
+              {/* Branded QR Viewport with Viewfinder HUD */}
               <div className="branded-scanner-card">
                 <div className="branded-scanner-viewport">
                   {/* Viewfinder HUD Corner Brackets */}
@@ -2258,12 +2261,6 @@ export default function DashboardPage() {
                   <div className="scanner-corner corner-tr" />
                   <div className="scanner-corner corner-bl" />
                   <div className="scanner-corner corner-br" />
-
-                  {/* Sweeping Laser Beam Effect */}
-                  <div className="scanner-laser-curtain">
-                    <div className="scanner-laser-trail" />
-                    <div className="scanner-laser-line" />
-                  </div>
 
                   {/* High-contrast QR with Watermarked Logo */}
                   {sessionQrUrl ? (

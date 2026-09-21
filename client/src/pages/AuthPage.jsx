@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import API from '../api/axios';
 import Brand from '../components/Brand';
+import ThemeToggle from '../components/ThemeToggle';
 import { ArrowRight, Loader2, ShieldCheck, RefreshCw, Eye, EyeOff, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -189,9 +190,12 @@ export default function AuthPage({ mode }) {
 
   return (
     <div className="auth-wrap">
-      <button className="icon-btn auth-back" onClick={() => navigate('/')} title="Back to home">
-        <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} />
-      </button>
+      <div style={{ position: 'fixed', top: 20, left: 20, right: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pointerEvents: 'none', zIndex: 10 }}>
+        <button className="icon-btn" style={{ pointerEvents: 'auto' }} onClick={() => navigate('/')} title="Back to home">
+          <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} />
+        </button>
+        <ThemeToggle style={{ pointerEvents: 'auto' }} />
+      </div>
 
       <div className="auth-card">
         {/* STEP 1: FORM (SIGNIN or SIGNUP FORM) */}
