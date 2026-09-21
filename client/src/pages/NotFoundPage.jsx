@@ -20,14 +20,14 @@ export default function NotFoundPage() {
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)", color: "var(--text)" }}>
       {/* Top Navigation */}
       <nav className="nav">
-        <div className="container nav-inner" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 70 }}>
+        <div className="container nav-inner">
           <Brand onClick={() => navigate("/")} />
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="nav-actions">
             <ThemeToggle />
-            <Link to="/" className="btn btn-ghost btn-sm">
+            <Link to="/" className="btn btn-ghost btn-sm nav-hide-mobile">
               Home
             </Link>
-            <Link to="/signup" className="btn btn-primary btn-sm">
+            <Link to="/signup" className="btn btn-primary btn-sm" style={{ whiteSpace: "nowrap" }}>
               Get started
             </Link>
           </div>
