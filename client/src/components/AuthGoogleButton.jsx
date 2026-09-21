@@ -3,12 +3,14 @@ import { GoogleLogin } from "@react-oauth/google";
 import API from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { useTheme } from "../context/ThemeContext";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 export default function AuthGoogleButton({ onLoading }) {
   const { login } = useAuth();
   const { toast } = useToast();
+  const { theme, isDark } = useTheme();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
@@ -45,13 +47,14 @@ export default function AuthGoogleButton({ onLoading }) {
   return (
     <div style={{ display: "flex", justifyContent: "center", margin: "20px 0" }}>
       <GoogleLogin
+        key={theme}
         onSuccess={handleGoogleSuccess}
         onError={() => {
           toast.error("Google Login Failed");
           setLoading(false);
           if (onLoading) onLoading(false);
         }}
-        theme="outline"
+        theme={isDark ? "filled_black" : "outline"}
         size="large"
         shape="rectangular"
         width="320"
