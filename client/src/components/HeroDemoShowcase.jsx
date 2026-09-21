@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Play, Pause, RotateCcw, Send, ThumbsUp, Radio,
   QrCode, Check, BarChart2, Sparkles, Pin, ShieldCheck,
   User, LogOut, Copy, Crown, Clock, CheckCircle2, ChevronRight, MessageSquare, Zap, ArrowRight, Share2
 } from "lucide-react";
+import QRCode from "qrcode";
 
 const DEMO_STEPS = [
   { id: "dashboard", label: "Dashboard", icon: Zap, mode: "host" },
   { id: "audience-join", label: "QR Join", icon: QrCode, mode: "audience" },
   { id: "live-qa", label: "Live Q&A", icon: MessageSquare, mode: "audience" },
-  { id: "live-poll", label: "Live Polls", icon: BarChart2, mode: "audience" },
+  { id: "live-poll", label: "Polls", icon: BarChart2, mode: "audience" },
   { id: "spotlight", label: "Spotlight", icon: Pin, mode: "host" }
 ];
 
 export default function HeroDemoShowcase() {
+  const navigate = useNavigate();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [typedQuestion, setTypedQuestion] = useState("");
@@ -24,9 +27,93 @@ export default function HeroDemoShowcase() {
   const [isPinned, setIsPinned] = useState(true);
   const [cursorPos, setCursorPos] = useState({ x: 50, y: 50, active: false, visible: false });
   const [stepProgress, setStepProgress] = useState(0);
+  const [staticQrUrl, setStaticQrUrl] = useState("");
 
   const stepDuration = 5600;
   const progressTimerRef = useRef(null);
+
+  // Generate real static branded QR code linking to /try with full logo watermark background (exact match to Dashboard room scanners)
+  useEffect(() => {
+    const targetUrl = `${window.location.origin}/try`;
+    QRCode.toDataURL(targetUrl, {
+      errorCorrectionLevel: "H",
+      margin: 2,
+      width: 440,
+      color: { dark: "#000000", light: "#00000000" } // Pure black modules over transparent background
+    })
+      .then((qrData) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 440;
+        canvas.height = 440;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setStaticQrUrl(qrData);
+          return;
+        }
+
+        const qrImg = new Image();
+        const logoImg = new Image();
+        let qrLoaded = false;
+        let logoLoaded = false;
+
+        const renderComposite = () => {
+          if (!qrLoaded) return;
+
+          // 1. Fill clean white base
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, 440, 440);
+
+          // 2. Draw branded logo watermark across the entire square
+          if (logoLoaded && logoImg.width && logoImg.height) {
+            ctx.save();
+            ctx.globalAlpha = 0.38;
+            const maxDimension = 360;
+            let drawW = maxDimension;
+            let drawH = maxDimension;
+            const aspect = logoImg.width / logoImg.height;
+            if (aspect > 1) {
+              drawW = maxDimension;
+              drawH = maxDimension / aspect;
+            } else {
+              drawH = maxDimension;
+              drawW = maxDimension * aspect;
+            }
+            const drawX = (440 - drawW) / 2;
+            const drawY = (440 - drawH) / 2;
+            ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
+            ctx.restore();
+          }
+
+          // 3. Draw transparent QR code pattern on top
+          ctx.drawImage(qrImg, 0, 0, 440, 440);
+
+          setStaticQrUrl(canvas.toDataURL("image/png"));
+        };
+
+        qrImg.onload = () => {
+          qrLoaded = true;
+          renderComposite();
+        };
+        qrImg.onerror = () => {
+          setStaticQrUrl(qrData);
+        };
+
+        logoImg.onload = () => {
+          logoLoaded = true;
+          renderComposite();
+        };
+        logoImg.onerror = () => {
+          logoLoaded = false;
+          renderComposite();
+        };
+
+        qrImg.src = qrData;
+        logoImg.src = "/Logo Bgless.png";
+      })
+      .catch((err) => {
+        console.error("Failed to generate demo QR code:", err);
+      });
+  }, []);
 
   // Auto-play orchestration
   useEffect(() => {
@@ -258,8 +345,8 @@ export default function HeroDemoShowcase() {
                       {/* Room Code & Link Box */}
                       <div className="link-box" style={{ padding: "7px 9px", margin: "6px 0", fontSize: 11 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
-                          <div className="qr-box" style={{ width: 22, height: 22, flexShrink: 0, padding: 2 }}>
-                            <img src="/Logo Bgless.png" alt="QR" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                          <div className="qr-box" style={{ width: 22, height: 22, flexShrink: 0, padding: 1, background: "#FFFFFF", borderRadius: 4 }}>
+                            <img src={staticQrUrl || "/Logo Bgless.png"} alt="QR" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 2 }} />
                           </div>
                           <span className="url" style={{ fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             whisprlive.com/ask/WHISPR-782
@@ -328,28 +415,41 @@ export default function HeroDemoShowcase() {
                       </div>
                     </div>
 
-                    {/* QR Code Graphic Frame */}
-                    <div className="branded-scanner-card" style={{ maxWidth: 160, padding: "8px", margin: "8px auto" }}>
-                      <div className="branded-scanner-viewport" style={{ width: 124, height: 124, padding: 6 }}>
+                    {/* QR Code Graphic Frame with Real Scannable Static QR */}
+                    <div
+                      className="branded-scanner-card"
+                      style={{ maxWidth: 160, padding: "8px", margin: "8px auto", cursor: "pointer", transition: "transform 0.2s ease, box-shadow 0.2s ease" }}
+                      onClick={() => navigate("/try")}
+                      title="Click to try WhisprLive"
+                    >
+                      <div className="branded-scanner-viewport" style={{ width: 124, height: 124, padding: 4, background: "#FFFFFF", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                         <div className="scanner-corner corner-tl" style={{ width: 10, height: 10 }} />
                         <div className="scanner-corner corner-tr" style={{ width: 10, height: 10 }} />
                         <div className="scanner-corner corner-bl" style={{ width: 10, height: 10 }} />
                         <div className="scanner-corner corner-br" style={{ width: 10, height: 10 }} />
-                        <img
-                          src="/Logo Bgless.png"
-                          alt="WhisprLive"
-                          style={{ width: 26, height: 26, position: "absolute", zIndex: 3, background: "#fff", borderRadius: 6, padding: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}
-                        />
-                        <div className="qr-matrix-mock" />
+                        {staticQrUrl ? (
+                          <img
+                            src={staticQrUrl}
+                            alt="Scan to try WhisprLive"
+                            style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 4 }}
+                          />
+                        ) : (
+                          <div className="qr-matrix-mock" />
+                        )}
                       </div>
                       <div className="scanner-hud-footer" style={{ marginTop: 4 }}>
                         <span className="scanner-target-hint" style={{ fontSize: 9.5 }}>
-                          <QrCode size={10} /> Scan with phone camera
+                          <QrCode size={10} /> Scan to try WhisprLive
                         </span>
                       </div>
                     </div>
 
-                    <button type="button" className="btn btn-primary btn-block btn-sm" style={{ padding: "9px", fontSize: 12, borderRadius: 999 }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block btn-sm"
+                      style={{ padding: "9px", fontSize: 12, borderRadius: 999 }}
+                      onClick={() => navigate("/try")}
+                    >
                       Join Room Instantly <ChevronRight size={13} />
                     </button>
                   </div>

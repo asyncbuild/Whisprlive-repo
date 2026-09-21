@@ -1423,35 +1423,9 @@ export default function DashboardPage() {
             </div>
 
             {/* Polls & Word Cloud Discovery Card for New Users */}
-            <div
-              style={{
-                marginTop: 20,
-                background: "linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(248, 250, 252, 0.95) 100%)",
-                border: "1px solid rgba(37, 99, 235, 0.2)",
-                borderRadius: "var(--radius-lg)",
-                padding: "18px 22px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 16,
-                flexWrap: "wrap"
-              }}
-            >
+            <div className="new-feature-banner">
               <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 1 }}>
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 12,
-                    background: "var(--accent)",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)"
-                  }}
-                >
+                <div className="new-feature-icon-box">
                   <BarChart2 size={22} />
                 </div>
                 <div>
@@ -1459,18 +1433,7 @@ export default function DashboardPage() {
                     <span style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
                       Interactive Live Polls &amp; Word Clouds
                     </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: "2px 7px",
-                        borderRadius: 999,
-                        background: "var(--accent-soft)",
-                        color: "var(--accent)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em"
-                      }}
-                    >
+                    <span className="new-feature-badge">
                       New Feature
                     </span>
                   </div>

@@ -13,6 +13,8 @@ import ContactPage from './pages/ContactPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RefundPage from './pages/RefundPage';
+import WelcomePage from './pages/WelcomePage';
+import NotFoundPage from './pages/NotFoundPage';
 import FeedbackWidget from './components/FeedbackWidget';
 
 // Protected Route Guard for the Host Dashboard
@@ -45,6 +47,10 @@ export default function App() {
               <Route path="/signup" element={<AuthPage mode="signup" />} />
               <Route path="/signin" element={<AuthPage mode="signin" />} />
 
+              {/* Discovery & Motivating Onboarding */}
+              <Route path="/try" element={<WelcomePage />} />
+              <Route path="/welcome" element={<WelcomePage />} />
+
               {/* Compliance & Policy Pages */}
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
@@ -64,8 +70,8 @@ export default function App() {
               {/* Dynamic route for the public audience link */}
               <Route path="/ask/:roomCode" element={<PublicAskPage />} />
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {/* Custom 404 Not Found Page */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
             <FeedbackWidget />
           </Router>
