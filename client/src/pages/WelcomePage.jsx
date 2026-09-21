@@ -205,6 +205,7 @@ export default function WelcomePage() {
           {/* Bottom Motivation Call to Action */}
           <div
             style={{
+              marginTop: 36,
               background: "linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%)",
               border: "1px solid var(--border)",
               borderRadius: "var(--radius-lg)",
