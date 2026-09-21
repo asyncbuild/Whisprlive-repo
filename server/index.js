@@ -376,20 +376,39 @@ app.post("/signin", authLimiter, async (req, res) => {
 
 //Google Signin/signup route
 app.post("/api/auth/google", authLimiter, async (req, res) => {
-  const { credential } = req.body;
-  if (!credential) {
+  const { credential, accessToken } = req.body;
+  if (!credential && !accessToken) {
     return res.status(400).json({
-      message: "Google credential is required"
+      message: "Google credential or access token is required"
     })
   }
   try {
-    //verify google token
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID
-    })
-    const payload = ticket.getPayload();
-    const { email, name, sub: googleId } = payload;
+    let email, name, googleId;
+
+    if (accessToken) {
+      // Fetch user profile from Google userinfo API using access token
+      const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!userinfoRes.ok) {
+        throw new Error("Failed to fetch Google user profile with access token");
+      }
+      const userinfo = await userinfoRes.json();
+      email = userinfo.email;
+      name = userinfo.name;
+      googleId = userinfo.sub;
+    } else {
+      // Verify Google ID token
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID
+      });
+      const payload = ticket.getPayload();
+      email = payload.email;
+      name = payload.name;
+      googleId = payload.sub;
+    }
+
     if (!email) {
       return res.status(400).json({
         message: "Google signin failed : Email is required"
