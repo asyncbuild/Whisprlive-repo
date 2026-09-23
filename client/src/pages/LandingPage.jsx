@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Menu, X, Bell, Loader2, ShieldCheck, Smartphone, Users, MessageCircle, ChevronDown
+  ArrowRight, ArrowUpRight, Link2, Clock, Check, Radio, Zap, Bell, Loader2, ShieldCheck, Smartphone, Users, MessageCircle, ChevronDown
 } from "lucide-react";
 import QRCode from "qrcode";
 import API from "../api/axios";
@@ -228,7 +228,7 @@ export default function LandingPage() {
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
           </div>
           <div className="nav-actions">
-            <ThemeToggle />
+            <ThemeToggle className="nav-hide-mobile" />
             {isLoggedIn ? (
               <button className="btn btn-primary btn-sm" onClick={() => navigate("/dashboard")}>
                 Go to app <ArrowRight size={14} />
@@ -239,28 +239,33 @@ export default function LandingPage() {
                 <button className="btn btn-primary btn-sm" onClick={() => navigate("/signup")}>Get started</button>
               </>
             )}
-            <button className="icon-btn nav-menu-btn" onClick={() => setMenuOpen((v) => !v)}>
-              {menuOpen ? <X size={17} /> : <Menu size={17} />}
+            <button
+              className={`icon-btn nav-menu-btn ${menuOpen ? "is-open" : ""}`}
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Toggle navigation menu"
+              aria-expanded={menuOpen}
+            >
+              <div className="hamburger-icon">
+                <span className="hamburger-line line-1" />
+                <span className="hamburger-line line-2" />
+                <span className="hamburger-line line-3" />
+              </div>
             </button>
           </div>
         </div>
-        {menuOpen && (
+        <div className={`mobile-menu-dropdown-wrap ${menuOpen ? "is-open" : ""}`}>
           <div className="container mobile-menu-dropdown">
             <a className="nav-link" onClick={() => scrollTo("home")}>Home</a>
             <a className="nav-link" onClick={() => scrollTo("about")}>About</a>
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--border)", marginTop: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-dim)" }}>Theme Appearance</span>
-              <ThemeToggle showLabel={true} />
-            </div>
-            {!isLoggedIn && (
-              <div className="mobile-menu-auth">
-                <button className="btn btn-ghost btn-sm btn-block" onClick={() => { setMenuOpen(false); navigate("/signin"); }}>Sign in</button>
-                <button className="btn btn-primary btn-sm btn-block" onClick={() => { setMenuOpen(false); navigate("/signup"); }}>Get started</button>
-              </div>
+            {isLoggedIn && (
+              <a className="nav-link" onClick={() => { setMenuOpen(false); navigate("/dashboard"); }}>Dashboard</a>
             )}
+            <div className="mobile-menu-theme-item">
+              <ThemeToggle variant="wide-slider" />
+            </div>
           </div>
-        )}
+        </div>
       </nav>
 
       <div ref={homeRef}>

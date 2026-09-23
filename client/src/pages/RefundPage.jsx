@@ -14,7 +14,7 @@ export default function RefundPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <ThemeToggle />
             <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
-              <ArrowLeft size={15} /> Back to Home
+              <ArrowLeft size={15} /> <span className="hide-mobile-xs">Back to Home</span><span className="show-mobile-xs">Home</span>
             </button>
           </div>
         </div>

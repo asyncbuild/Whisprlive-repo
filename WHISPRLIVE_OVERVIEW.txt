@@ -1,0 +1,123 @@
+================================================================================
+WHISPRLIVE — Real-Time Audience Interaction, Q&A, Polls & Word Clouds
+================================================================================
+
+1. WHAT IS WHISPRLIVE?
+--------------------------------------------------------------------------------
+WhisprLive is a modern, real-time audience engagement and interactive presentation
+platform designed for keynote speakers, educators, workshop hosts, webinar leaders,
+and conference organizers. 
+
+It allows hosts to run seamless, anonymous Q&A sessions, live multiple-choice
+polls, and dynamic word clouds without requiring attendees to install an app,
+sign up, or remember logins. Attendees simply scan a QR code or enter a short 
+room code to participate instantly from any mobile browser or desktop.
+
+Website / App Concept: "Turn passive listeners into active participants."
+
+
+2. HOW IT WORKS (USER FLOW)
+--------------------------------------------------------------------------------
+A. For the Host:
+   1. Signs up or logs in using Google One-Tap or Email OTP verification.
+   2. Creates a new session (instant start or scheduled for an event).
+   3. Shares the generated 8-character Room Code, direct link, or QR code.
+   4. Moderates incoming audience questions in real-time (pin, reply, mark answered).
+   5. Launches live polls or word clouds from their pre-saved Poll Library with 1 click.
+   6. Exports session transcripts and attendee feedback when the session ends.
+
+B. For the Audience / Attendees:
+   1. Scans the host's QR code or visits the short link (/ask/<roomCode>).
+   2. Submits questions anonymously or with a custom display name.
+   3. Upvotes the best questions to bring top inquiries to the host's attention.
+   4. Votes in live multiple-choice polls or submits keywords into real-time word clouds.
+   5. No app download, registration, or credit card required.
+
+
+3. KEY FEATURES & CAPABILITIES
+--------------------------------------------------------------------------------
+
+[A] LIVE ANONYMOUS Q&A & MODERATION
+   • Real-Time WebSocket Streaming: Messages and upvotes update instantly (<50ms).
+   • Upvoting Engine: Attendees upvote relevant questions; host can sort by "Top" or "New".
+   • Host Reply System: Hosts can reply directly to questions on the live feed.
+   • Question Pinning: Pin important announcements or active discussion topics to the top.
+   • Public / Private Feed Toggle: Hosts can switch between showing approved questions
+     to the audience or keeping the question stream host-private.
+   • Answered Status: Mark questions as answered live with clear visual indicators.
+   • Audience Insights: Hosts see approximate device type and location metadata for moderation.
+
+[B] LIVE POLLS & DYNAMIC WORD CLOUDS
+   • Multiple-Choice Polls: Create questions with custom options; votes render as real-time
+     animated percentage progress bars.
+   • Live Word Clouds: Attendees submit single or short keyword responses; keywords render
+     as a dynamic cloud with font weights scaled by submission frequency.
+   • Real-Time Audience Feedback: Live vote counts and responsive visual breakdowns.
+   • 1-Click Launch: Launch any question during a session; attendees' screens update automatically.
+
+[C] PRE-SAVED POLL TEMPLATES & LIBRARY
+   • Pre-Event Planning: Build, draft, and organize interactive questions before an event starts.
+   • Poll Library Tab: Manage questions with custom category labels (e.g. Icebreaker, Feedback).
+   • Instant Push: Launch any saved draft directly into an active presentation room.
+
+[D] SESSION TIMERS & ROOM CONTROLS
+   • Flexible Room Timers: 15-minute free sessions up to 24-hour event passes.
+   • Scheduled Starts: Plan sessions in advance with custom start times and countdown clocks.
+   • QR Code Modal & WhatsApp Sharing: 1-click WhatsApp share button and high-res downloadable QR.
+
+[E] DATA RETENTION & TRANSCRIPT EXPORT
+   • Past Sessions Archive: Revisit past events and review all submitted messages and responses.
+   • Transcript Export: 1-click download of all questions, answers, and timestamps (.txt format).
+
+[F] ENTERPRISE-GRADE SECURITY & PERFORMANCE
+   • Secure OTP Authentication: Fast email verification powered by Resend API.
+   • Google OAuth Integration: Frictionless 1-click Google Sign-in.
+   • Multi-Layer Rate Limiting: Built-in protection against spam submissions, brute-force logins,
+     and payment abuse.
+   • Duplicate Vote Prevention: Local device tracking prevents multi-voting manipulation.
+
+
+4. PRICING & PLAN TIERS
+--------------------------------------------------------------------------------
+
+1. SOLO (FREE FOREVER) — ₹0 / $0
+   • Ideal for quick standups, class discussions, and product demos.
+   • Unlimited sessions (15-minute room timer per session).
+   • Up to 100 questions / session.
+   • Anonymous Q&A, upvoting, host replies & pinning.
+   • Live polls & word clouds in sessions.
+   • Up to 2 pre-saved templates in Poll Library.
+   • 7 days past history retention.
+
+2. 24H ROOM PASS (EVENT PASS) — ₹299 (Promotional Price) / $5 USD
+   • Ideal for conferences, workshops, webinars, and single-day events.
+   • 1 dedicated room open for 24 continuous hours.
+   • Up to 500 messages / room.
+   • Unlimited live polls & word clouds.
+   • Unlimited pre-saved templates in Poll Library (create, edit, delete).
+   • Scheduled start supported (pre-configure event days ahead).
+   • 30 days history retention & transcript export (.txt).
+
+3. HOST PLAN (MONTHLY SUBSCRIPTION - COMING SOON) — ₹349/mo / $9/mo
+   • Ideal for regular presenters, educators, and community organizers.
+   • Unlimited rooms with 60-minute duration timers.
+   • Up to 1,000 messages / room.
+   • Unlimited live polls, word clouds & library templates.
+   • Scheduled starts & 90 days history retention with data export.
+
+4. STUDIO PLAN (MONTHLY SUBSCRIPTION - COMING SOON) — ₹799/mo / $19/mo
+   • Ideal for large auditoriums, summits, and institutional conferences.
+   • 120-minute room timers per session.
+   • Up to 2,500 messages / room.
+   • Unlimited live polls, word clouds & library templates.
+   • 1 year history retention & (.txt / .csv) full data exports.
+
+
+5. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+• Frontend : React 18, Vite, React Router 6, Lucide Icons, Canvas Confetti, Vanilla CSS (Dark/Light Design System)
+• Backend  : Node.js, Express, Socket.IO (WebSockets), JWT Authentication, Bcrypt
+• Database : PostgreSQL managed via Prisma ORM
+• Payments : Razorpay Gateway (INR/USD Geo-Currency detection)
+• Email    : Resend API for transactional OTP delivery
+================================================================================

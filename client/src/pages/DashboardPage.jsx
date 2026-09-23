@@ -1152,12 +1152,12 @@ export default function DashboardPage() {
   return (
     <div className="dash-shell">
       <div className="dash-top">
-        <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+        <div className="container dash-top-container">
           <Brand onClick={() => handleProtectedNavigation(() => navigate("/"))} />
-          <div className="dash-user" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="dash-user">
             {/* Active Plan Badge */}
             <span
-              className="plan-badge"
+              className={`plan-badge ${(!currentUser?.plan || currentUser?.plan === "SOLO") ? "plan-badge-solo" : ""}`}
               style={{
                 fontSize: 11,
                 fontWeight: 700,
@@ -1174,7 +1174,6 @@ export default function DashboardPage() {
                     ? "var(--live)"
                     : "var(--text)",
                 border: "1px solid var(--border)",
-                display: "inline-flex",
                 alignItems: "center",
                 gap: 4,
                 textTransform: "uppercase",
@@ -1192,6 +1191,7 @@ export default function DashboardPage() {
 
             {currentUser?.roomPasses > 0 && (
               <span
+                className="room-passes-badge"
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
@@ -1207,29 +1207,28 @@ export default function DashboardPage() {
                   letterSpacing: "0.03em"
                 }}
               >
-                <Ticket size={12} /> {currentUser.roomPasses} Room Pass{currentUser.roomPasses > 1 ? "es" : ""}
+                <Ticket size={12} /> <span className="room-pass-text-full">{currentUser.roomPasses} Room Pass{currentUser.roomPasses > 1 ? "es" : ""}</span><span className="room-pass-text-short">{currentUser.roomPasses} Pass{currentUser.roomPasses > 1 ? "es" : ""}</span>
               </span>
             )}
 
             {/* Upgrade Button (visible only if free tier) */}
             {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
               <button
-                className="btn btn-primary btn-sm"
-                style={{ padding: "5px 12px", fontSize: 12 }}
+                className="btn btn-primary btn-sm dash-upgrade-btn"
                 onClick={openUpgradeModal}
               >
                 <Sparkles size={12} /> Upgrade
               </button>
             )}
 
-            <div className="user-pill">
+            <div className="user-pill" title={`Signed in as ${username}`}>
               <span className="avatar"><User size={13} /></span>
               <span className="username-text">{username}</span>
             </div>
 
             <ThemeToggle />
 
-            <button className="icon-btn" onClick={() => handleProtectedNavigation(handleLogout)} title="Sign out">
+            <button className="icon-btn" onClick={() => handleProtectedNavigation(handleLogout)} title="Sign out" aria-label="Sign out">
               <LogOut size={15} />
             </button>
           </div>
