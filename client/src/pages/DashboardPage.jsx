@@ -1411,7 +1411,7 @@ export default function DashboardPage() {
                 </div>
 
                 {startMode === "schedule" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, width: "100%" }}>
                     <input
                       type="time"
                       className="time-input"
@@ -1424,26 +1424,26 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 )}
+              </div>
 
-                {/* Audience Feed Visibility Setting */}
-                <div className="new-session-toggle-row" style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
-                      Audience Q&A Feed Visibility
-                    </div>
-                    <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.4, marginTop: 2 }}>
-                      Allow participants to view approved questions and upvote in real-time. (Can also be toggled anytime during live session)
-                    </div>
+              {/* Audience Feed Visibility Setting - Full Width */}
+              <div className="new-session-toggle-row">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
+                    Audience Q&A Feed Visibility
                   </div>
-                  <label className="toggle-switch-btn" title="Toggle Audience Live Feed" style={{ flex: "none", marginLeft: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={showPublicFeed}
-                      onChange={(e) => setShowPublicFeed(e.target.checked)}
-                    />
-                    <span className="toggle-slider" />
-                  </label>
+                  <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.4, marginTop: 2 }}>
+                    Allow participants to view approved questions and upvote in real-time. (Can also be toggled anytime during live session)
+                  </div>
                 </div>
+                <label className="toggle-switch-btn" title="Toggle Audience Live Feed" style={{ flex: "none", marginLeft: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={showPublicFeed}
+                    onChange={(e) => setShowPublicFeed(e.target.checked)}
+                  />
+                  <span className="toggle-slider" />
+                </label>
               </div>
             </div>
 

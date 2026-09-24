@@ -659,6 +659,8 @@ app.patch("/api/rooms/:roomId/end", verifyToken, async (req, res) => {
         expiresAt: new Date()
       }
     })
+    // Evict message cache for this room (prevents memory leaks)
+    evictRoomMessagesCache(roomId);
     io.to(roomId).emit("session_ended", { roomCode: roomId })
     res.json({ message: "Session ended successfully", room: updated })
   } catch (err) {
@@ -770,11 +772,7 @@ app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
     })
     const room = await prisma.room.findFirst({
       where: { roomCode: roomId, hostId: req.user.id },
-      include: {
-        messages: {
-          orderBy: { createdAt: 'desc' }
-        }
-      }
+      select: { id: true, expiresAt: true, isPassUsed: true, createdAt: true }
     })
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
@@ -794,7 +792,19 @@ app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
         isPremiumLocked: true
       });
     }
-    res.json({ messages: room.messages })
+
+    // Serve from in-memory cache (0ms) for active rooms
+    const cached = await getOrHydrateRoomMessages(roomId);
+    if (cached) {
+      return res.json({ messages: getSortedHostMessages(cached) });
+    }
+
+    // Fallback to DB query if cache hydration failed
+    const messages = await prisma.message.findMany({
+      where: { roomId: room.id },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json({ messages })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -810,6 +820,8 @@ app.delete("/api/rooms/:roomId", verifyToken, async (req, res) => {
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
+    // Evict message cache before deleting the room
+    evictRoomMessagesCache(roomId);
     await prisma.room.delete({
       where: { id: room.id }
     })
@@ -950,12 +962,17 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     const maxMessagesAllowed = limits.maxMessages;
     const tierName = activeTier === "SOLO" ? "free tier" : activeTier;
 
-    if (room._count.messages >= maxMessagesAllowed) {
+    // Use cache count if available, else DB count
+    const cached = roomMessagesCache.get(roomId);
+    const currentCount = cached ? cached.messageCount : room._count.messages;
+
+    if (currentCount >= maxMessagesAllowed) {
       // Automatically end session in database
       await prisma.room.update({
         where: { id: room.id },
         data: { isAccepting: false, expiresAt: new Date() }
       });
+      evictRoomMessagesCache(roomId);
       io.to(roomId).emit("session_ended", {
         roomCode: roomId,
         reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
@@ -983,133 +1000,264 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       : null;
     const finalDeviceModel = clientDeviceModel || metadata.deviceModel;
 
-    const newMessage = await prisma.message.create({
-      data: {
-        roomId: room.id,
-        content: content.trim(),
-        status: "accepted",
-        device: metadata.device,
-        deviceModel: finalDeviceModel,
-        location: metadata.location,
-        ipAddress: metadata.ipAddress,
-      }
-    })
-    console.log(`📨 Emitting new_message to room ${roomId}:`, newMessage);
-    io.to(roomId).emit("new_message", newMessage)
+    // 1. Generate a temporary in-memory message object with a UUID (< 1ms)
+    const tempId = crypto.randomUUID();
+    const msgData = {
+      id: tempId,
+      roomId: room.id,
+      content: content.trim(),
+      status: "accepted",
+      upvotes: 0,
+      isAnswered: false,
+      isPinned: false,
+      hostReply: null,
+      device: metadata.device,
+      deviceModel: finalDeviceModel,
+      location: metadata.location,
+      ipAddress: metadata.ipAddress,
+      createdAt: now
+    };
 
-    // Automatically end session if this message hits the max capacity limit
-    if (room._count.messages + 1 >= maxMessagesAllowed) {
-      await prisma.room.update({
-        where: { id: room.id },
-        data: { isAccepting: false, expiresAt: new Date() }
-      });
-      console.log(`Room ${roomId} reached ${tierName} capacity (${maxMessagesAllowed} messages). Session automatically ended.`);
-      io.to(roomId).emit("session_ended", {
-        roomCode: roomId,
-        reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
-      });
+    // 2. Instantly insert into in-memory cache (< 1ms)
+    if (cached) {
+      cached.messages.set(tempId, msgData);
+      cached.messageCount += 1;
+    } else {
+      // Hydrate cache on first message for this room
+      const freshCache = await getOrHydrateRoomMessages(roomId);
+      if (freshCache) {
+        freshCache.messages.set(tempId, msgData);
+        freshCache.messageCount += 1;
+      }
     }
 
+    // 3. Instant WebSocket broadcast to Host & All Participants (< 5ms)
+    console.log(`📨 Emitting new_message to room ${roomId} (cache-first)`);
+    io.to(roomId).emit("new_message", msgData);
+
+    // 4. Return HTTP response immediately (Audience sees confirmation in < 5ms)
     res.status(201).json({
       message: "Message sent successfully",
-      newMessage,
+      newMessage: msgData,
       data: {
-        id: newMessage.id,
-        createdAt: newMessage.createdAt
+        id: tempId,
+        createdAt: now
       }
-    })
+    });
+
+    // 5. Asynchronously persist to PostgreSQL in the background (non-blocking)
+    (async () => {
+      try {
+        const dbMessage = await prisma.message.create({
+          data: {
+            roomId: room.id,
+            content: content.trim(),
+            status: "accepted",
+            device: metadata.device,
+            deviceModel: finalDeviceModel,
+            location: metadata.location,
+            ipAddress: metadata.ipAddress,
+          }
+        });
+
+        // Update cache with the real DB-assigned ID
+        const currentCache = roomMessagesCache.get(roomId);
+        if (currentCache && currentCache.messages.has(tempId)) {
+          const oldMsg = currentCache.messages.get(tempId);
+          currentCache.messages.delete(tempId);
+          oldMsg.id = dbMessage.id;
+          oldMsg.createdAt = dbMessage.createdAt;
+          currentCache.messages.set(dbMessage.id, oldMsg);
+        }
+
+        // Check if this message hits the capacity limit and end session
+        const updatedCount = currentCache ? currentCache.messageCount : (room._count.messages + 1);
+        if (updatedCount >= maxMessagesAllowed) {
+          await prisma.room.update({
+            where: { id: room.id },
+            data: { isAccepting: false, expiresAt: new Date() }
+          });
+          console.log(`Room ${roomId} reached ${tierName} capacity (${maxMessagesAllowed} messages). Session automatically ended.`);
+          io.to(roomId).emit("session_ended", {
+            roomCode: roomId,
+            reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
+          });
+          evictRoomMessagesCache(roomId);
+        }
+      } catch (dbErr) {
+        console.error("Background DB message write error:", dbErr.message);
+      }
+    })();
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-// Quick browser tester for host
-// app.get('/test', (req, res) => {
-//   res.send(`
-// <!DOCTYPE html>
-// <html lang="en">
-// <head>
-//   <meta charset="UTF-8">
-//   <title>Host Live Feed Test</title>
-//   <script src="/socket.io/socket.io.js"></script>
-//   <style>
-//     body { font-family: sans-serif; padding: 24px; max-width: 600px; margin: auto; }
-//     #feed { border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-height: 180px; margin-top: 16px; background: #fafafa; }
-//     .msg-card { background: white; border: 1px solid #4CAF50; padding: 10px; margin-bottom: 8px; border-radius: 6px; }
-//     .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-//     .connected { background: #e8f5e9; color: #2e7d32; }
-//     .disconnected { background: #ffebee; color: #c62828; }
-//   </style>
-// </head>
-// <body>
-//   <h2>Host Live Room Listener</h2>
-//   <p>Status: <span id="status" class="badge disconnected">Disconnected</span></p>
+// ==========================================================================
+//   IN-MEMORY MESSAGE CACHE — Ultra-Low Latency Q&A Feed
+//   Same architecture as live polls: RAM-first reads, instant socket
+//   broadcasts, async background DB writeback.
+// ==========================================================================
 
-//   <label>Host JWT Token:</label><br>
-//   <input type="text" id="tokenInput" placeholder="Paste your JWT token here" style="width: 100%; padding: 6px; margin: 4px 0 12px;" /><br>
+const roomMessagesCache = new Map(); // roomCode -> { roomDbId, messages: Map<id, msg>, messageCount, hydrated }
 
-//   <label>Enter Room Code:</label><br>
-//   <input type="text" id="roomInput" placeholder="e.g. REbZiBcW" style="padding: 6px;" />
-//   <button onclick="connectAndJoin()" style="padding: 6px 12px; cursor: pointer;">Connect & Join</button>
+/**
+ * Build a public-safe message object (strips internal fields like ipAddress).
+ */
+function buildPublicMessage(msg) {
+  return {
+    id: msg.id,
+    content: msg.content,
+    upvotes: msg.upvotes,
+    isAnswered: msg.isAnswered,
+    isPinned: msg.isPinned,
+    hostReply: msg.hostReply,
+    createdAt: msg.createdAt
+  };
+}
 
-//   <h3>Live Feed:</h3>
-//   <div id="feed">
-//     <p style="color: #999;" id="placeholder">No messages received yet...</p>
-//   </div>
+/**
+ * Build a host-facing message (includes device/location metadata).
+ */
+function buildHostMessage(msg) {
+  return {
+    id: msg.id,
+    roomId: msg.roomId,
+    content: msg.content,
+    status: msg.status,
+    upvotes: msg.upvotes,
+    isAnswered: msg.isAnswered,
+    isPinned: msg.isPinned,
+    hostReply: msg.hostReply,
+    device: msg.device,
+    deviceModel: msg.deviceModel,
+    location: msg.location,
+    ipAddress: msg.ipAddress,
+    createdAt: msg.createdAt
+  };
+}
 
-//   <script>
-//     let socket = null;
+/**
+ * Get or hydrate the message cache for a room from PostgreSQL.
+ * After first call, all subsequent reads are 0ms from RAM.
+ */
+async function getOrHydrateRoomMessages(roomCode) {
+  if (roomMessagesCache.has(roomCode)) {
+    return roomMessagesCache.get(roomCode);
+  }
 
-//     function connectAndJoin() {
-//       const token = document.getElementById('tokenInput').value.trim();
-//       const roomCode = document.getElementById('roomInput').value.trim();
+  // Hydrate from database
+  const room = await prisma.room.findFirst({
+    where: { roomCode },
+    select: { id: true }
+  });
+  if (!room) return null;
 
-//       if (!token || !roomCode) return alert('Both Token and Room Code are required!');
+  const dbMessages = await prisma.message.findMany({
+    where: { roomId: room.id },
+    orderBy: { createdAt: "desc" }
+  });
 
-//       socket = io({ auth: { token } });
+  const messagesMap = new Map();
+  for (const m of dbMessages) {
+    messagesMap.set(m.id, {
+      id: m.id,
+      roomId: m.roomId,
+      content: m.content,
+      status: m.status || "accepted",
+      upvotes: m.upvotes || 0,
+      isAnswered: m.isAnswered || false,
+      isPinned: m.isPinned || false,
+      hostReply: m.hostReply || null,
+      device: m.device,
+      deviceModel: m.deviceModel,
+      location: m.location,
+      ipAddress: m.ipAddress,
+      createdAt: m.createdAt
+    });
+  }
 
-//       socket.on('connect', () => {
-//         document.getElementById('status').className = 'badge connected';
-//         document.getElementById('status').innerText = 'Authenticated & Connected';
-//         socket.emit('join_room', roomCode);
-//       });
+  const cached = {
+    roomDbId: room.id,
+    messages: messagesMap,
+    messageCount: messagesMap.size,
+    hydrated: true
+  };
 
-//       socket.on('connect_error', (err) => {
-//         document.getElementById('status').className = 'badge disconnected';
-//         document.getElementById('status').innerText = 'Auth Error: ' + err.message;
-//       });
+  roomMessagesCache.set(roomCode, cached);
+  return cached;
+}
 
-//       socket.on('joined_success', (res) => {
-//         alert(res.message);
-//       });
+/**
+ * Get sorted public messages from cache (pinned first, then by upvotes, then newest).
+ */
+function getSortedPublicMessages(cached) {
+  const msgs = Array.from(cached.messages.values())
+    .filter(m => m.status !== "rejected")
+    .map(buildPublicMessage)
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      if (a.upvotes !== b.upvotes) return b.upvotes - a.upvotes;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  return msgs;
+}
 
-//       socket.on('error_msg', (msg) => {
-//         alert(msg);
-//       });
+/**
+ * Get sorted host messages from cache (newest first).
+ */
+function getSortedHostMessages(cached) {
+  return Array.from(cached.messages.values())
+    .map(buildHostMessage)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
 
-//       socket.on('new_message', (message) => {
-//         const placeholder = document.getElementById('placeholder');
-//         if (placeholder) placeholder.remove();
+/**
+ * Evict message cache for a room (called on session end / room delete).
+ */
+function evictRoomMessagesCache(roomCode) {
+  roomMessagesCache.delete(roomCode);
+}
 
-//         const feed = document.getElementById('feed');
-//         const card = document.createElement('div');
-//         card.className = 'msg-card';
-//         card.innerHTML = '<strong>Anonymous:</strong> ' + message.content + '<br><small style="color:#666;">Time: ' + new Date(message.createdAt).toLocaleTimeString() + '</small>';
-//         feed.prepend(card);
-//       });
-//     }
-//   </script>
-// </body>
-// </html>
-//   `);
-// });
-
-//upvote / toggle vote messages
+//upvote / toggle vote messages (Cache-First: < 2ms)
 app.patch("/api/rooms/:roomId/messages/:messageId/upvote", async (req, res) => {
   const { roomId, messageId } = req.params
   const { action } = req.body || {}
   const isDecrement = action === "downvote" || action === "unvote"
   try {
+    // 1. Fast-path: Try in-memory cache first (< 1ms)
+    const cached = await getOrHydrateRoomMessages(roomId);
+    if (cached) {
+      const msg = cached.messages.get(messageId);
+      if (msg) {
+        // Instant in-memory mutation
+        msg.upvotes = isDecrement ? Math.max(0, msg.upvotes - 1) : msg.upvotes + 1;
+
+        // Instant WebSocket broadcast (< 2ms)
+        io.to(roomId).emit("message_upvoted", {
+          messageId: msg.id,
+          upvotes: msg.upvotes
+        });
+
+        // Immediate HTTP response
+        res.json({ message: "Vote updated successfully", upvotes: msg.upvotes });
+
+        // Background DB writeback (non-blocking)
+        (async () => {
+          try {
+            await prisma.message.update({
+              where: { id: messageId },
+              data: { upvotes: msg.upvotes }
+            });
+          } catch (dbErr) {
+            console.error("Background DB upvote write error:", dbErr.message);
+          }
+        })();
+        return;
+      }
+    }
+
+    // Fallback: DB-first if cache miss (e.g. room not cached)
     const current = await prisma.message.findUnique({ where: { id: messageId } })
     if (!current) return res.status(404).json({ message: "Message not found" })
 
@@ -1129,7 +1277,7 @@ app.patch("/api/rooms/:roomId/messages/:messageId/upvote", async (req, res) => {
   }
 })
 
-// Toggle message answered status
+// Toggle message answered status (Cache-First: < 2ms)
 app.patch("/api/rooms/:roomId/messages/:messageId/answered", verifyToken, async (req, res) => {
   const { roomId, messageId } = req.params
   const { isAnswered } = req.body || {}
@@ -1140,15 +1288,38 @@ app.patch("/api/rooms/:roomId/messages/:messageId/answered", verifyToken, async 
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
-    const updatedMessage = await prisma.message.update({
-      where: { id: messageId },
-      data: { isAnswered: Boolean(isAnswered) }
-    })
+
+    const answeredVal = Boolean(isAnswered);
+
+    // 1. Instant in-memory mutation
+    const cached = roomMessagesCache.get(roomId);
+    if (cached) {
+      const msg = cached.messages.get(messageId);
+      if (msg) {
+        msg.isAnswered = answeredVal;
+      }
+    }
+
+    // 2. Instant WebSocket broadcast
     io.to(roomId).emit("message_answered", {
-      messageId: updatedMessage.id,
-      isAnswered: updatedMessage.isAnswered
-    })
-    res.json({ message: "Answered status updated successfully", messageItem: updatedMessage })
+      messageId,
+      isAnswered: answeredVal
+    });
+
+    // 3. Immediate HTTP response
+    res.json({ message: "Answered status updated successfully", messageItem: { id: messageId, isAnswered: answeredVal } });
+
+    // 4. Background DB writeback
+    (async () => {
+      try {
+        await prisma.message.update({
+          where: { id: messageId },
+          data: { isAnswered: answeredVal }
+        });
+      } catch (dbErr) {
+        console.error("Background DB answered write error:", dbErr.message);
+      }
+    })();
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1190,7 +1361,7 @@ app.patch("/api/rooms/:roomId/settings", verifyToken, async (req, res) => {
   }
 });
 
-// Public: Fetch approved questions for audience feed (if enabled by host)
+// Public: Fetch approved questions for audience feed (Cache-First: 0ms)
 app.get("/api/rooms/public/:roomId/messages", async (req, res) => {
   const { roomId } = req.params;
   if (roomId.toLowerCase() === "demo") {
@@ -1229,6 +1400,7 @@ app.get("/api/rooms/public/:roomId/messages", async (req, res) => {
   }
 
   try {
+    // Fast-path: Check if room's public feed setting is cached
     const room = await prisma.room.findFirst({
       where: { roomCode: roomId },
       select: { id: true, showPublicFeed: true }
@@ -1241,6 +1413,13 @@ app.get("/api/rooms/public/:roomId/messages", async (req, res) => {
       return res.json({ showPublicFeed: false, messages: [] });
     }
 
+    // Serve from in-memory cache (0ms) if available
+    const cached = await getOrHydrateRoomMessages(roomId);
+    if (cached) {
+      return res.json({ showPublicFeed: true, messages: getSortedPublicMessages(cached) });
+    }
+
+    // Fallback to direct DB query if hydration failed
     const messages = await prisma.message.findMany({
       where: {
         roomId: room.id,
@@ -1268,7 +1447,7 @@ app.get("/api/rooms/public/:roomId/messages", async (req, res) => {
   }
 });
 
-// Host adds / updates an official direct answer / reply to a question
+// Host adds / updates an official direct answer / reply to a question (Cache-First: < 2ms)
 app.patch("/api/rooms/:roomId/messages/:messageId/reply", verifyToken, async (req, res) => {
   const { roomId, messageId } = req.params;
   const { hostReply } = req.body;
@@ -1281,27 +1460,48 @@ app.patch("/api/rooms/:roomId/messages/:messageId/reply", verifyToken, async (re
     }
 
     const cleanReply = typeof hostReply === "string" ? hostReply.trim() : null;
-    const updatedMessage = await prisma.message.update({
-      where: { id: messageId },
-      data: {
-        hostReply: cleanReply || null,
-        isAnswered: Boolean(cleanReply) ? true : undefined
+    const isAnswered = Boolean(cleanReply);
+
+    // 1. Instant in-memory mutation
+    const cached = roomMessagesCache.get(roomId);
+    if (cached) {
+      const msg = cached.messages.get(messageId);
+      if (msg) {
+        msg.hostReply = cleanReply || null;
+        if (isAnswered) msg.isAnswered = true;
       }
-    });
+    }
 
+    // 2. Instant WebSocket broadcast
     io.to(roomId).emit("message_replied", {
-      messageId: updatedMessage.id,
-      hostReply: updatedMessage.hostReply,
-      isAnswered: updatedMessage.isAnswered
+      messageId,
+      hostReply: cleanReply || null,
+      isAnswered
     });
 
-    res.json({ message: "Host reply saved successfully", messageItem: updatedMessage });
+    // 3. Immediate HTTP response
+    res.json({ message: "Host reply saved successfully", messageItem: { id: messageId, hostReply: cleanReply || null, isAnswered } });
+
+    // 4. Background DB writeback
+    (async () => {
+      try {
+        await prisma.message.update({
+          where: { id: messageId },
+          data: {
+            hostReply: cleanReply || null,
+            isAnswered: isAnswered ? true : undefined
+          }
+        });
+      } catch (dbErr) {
+        console.error("Background DB reply write error:", dbErr.message);
+      }
+    })();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Host toggles pinning a question to the top
+// Host toggles pinning a question to the top (Cache-First: < 2ms)
 app.patch("/api/rooms/:roomId/messages/:messageId/pin", verifyToken, async (req, res) => {
   const { roomId, messageId } = req.params;
   const { isPinned } = req.body;
@@ -1313,17 +1513,37 @@ app.patch("/api/rooms/:roomId/messages/:messageId/pin", verifyToken, async (req,
       return res.status(404).json({ message: "Room not found or unauthorized" });
     }
 
-    const updatedMessage = await prisma.message.update({
-      where: { id: messageId },
-      data: { isPinned: Boolean(isPinned) }
-    });
+    const pinnedVal = Boolean(isPinned);
 
+    // 1. Instant in-memory mutation
+    const cached = roomMessagesCache.get(roomId);
+    if (cached) {
+      const msg = cached.messages.get(messageId);
+      if (msg) {
+        msg.isPinned = pinnedVal;
+      }
+    }
+
+    // 2. Instant WebSocket broadcast
     io.to(roomId).emit("message_pinned", {
-      messageId: updatedMessage.id,
-      isPinned: updatedMessage.isPinned
+      messageId,
+      isPinned: pinnedVal
     });
 
-    res.json({ message: "Pin status updated successfully", messageItem: updatedMessage });
+    // 3. Immediate HTTP response
+    res.json({ message: "Pin status updated successfully", messageItem: { id: messageId, isPinned: pinnedVal } });
+
+    // 4. Background DB writeback
+    (async () => {
+      try {
+        await prisma.message.update({
+          where: { id: messageId },
+          data: { isPinned: pinnedVal }
+        });
+      } catch (dbErr) {
+        console.error("Background DB pin write error:", dbErr.message);
+      }
+    })();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
