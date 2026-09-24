@@ -55,6 +55,16 @@ export default function LandingPage() {
   const liveMockRef = useRef(null);
 
   useEffect(() => {
+    if (showWaitlistModal) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [showWaitlistModal]);
+
+  useEffect(() => {
     document.title = "WhisprLive | Anonymous Live Q&A & QR Code Audience Interaction";
     const description = "Real-time anonymous live Q&A and audience polling for events, webinars, and town halls. Instant access via QR code with pay-per-event passes and UPI support.";
     let meta = document.querySelector('meta[name="description"]');

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { MessageSquarePlus, X, Send, Loader2, Sparkles, Bug, Lightbulb, MessageCircle } from "lucide-react";
 import API from "../api/axios";
 import { useToast } from "../context/ToastContext";
@@ -12,6 +12,16 @@ export default function FeedbackWidget() {
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState(user?.email || "");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

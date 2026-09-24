@@ -213,8 +213,34 @@ export default function DashboardPage() {
   const [pastMessages, setPastMessages] = useState([]);
   const [loadingMessagesCode, setLoadingMessagesCode] = useState(null);
   const [pastModalQuery, setPastModalQuery] = useState("");
-  const [pendingAction, setPendingAction] = useState(null);
   const [upgradingPlan, setUpgradingPlan] = useState(null);
+
+  // Lock background scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(
+      showUpgradeModal ||
+      showWaitlistModal ||
+      showLeaveModal ||
+      showMessagesModal ||
+      showQrModal ||
+      showPollModal
+    );
+
+    if (isAnyModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [
+    showUpgradeModal,
+    showWaitlistModal,
+    showLeaveModal,
+    showMessagesModal,
+    showQrModal,
+    showPollModal
+  ]);
 
   const openWaitlist = (planName) => {
     setWaitlistPlan(planName);
@@ -2654,7 +2680,8 @@ export default function DashboardPage() {
                   setModalPollTab("templates");
                 }}
               >
-                📁 Saved Drafts ({pollTemplates.length})
+                <span className="poll-tab-icon">📁</span>
+                <span className="poll-tab-label">Saved Drafts ({pollTemplates.length})</span>
               </button>
 
               {editingTemplateId ? (
@@ -2663,7 +2690,8 @@ export default function DashboardPage() {
                   className="poll-modal-tab-btn active"
                   style={{ background: "rgba(255, 90, 54, 0.12)", color: "var(--primary)", border: "1px solid rgba(255, 90, 54, 0.3)" }}
                 >
-                  ✏️ Edit Draft
+                  <span className="poll-tab-icon">✏️</span>
+                  <span className="poll-tab-label">Edit Draft</span>
                 </button>
               ) : (
                 <button
@@ -2674,7 +2702,8 @@ export default function DashboardPage() {
                     setModalPollTab("create");
                   }}
                 >
-                  ⚡ Create New Poll
+                  <span className="poll-tab-icon">⚡</span>
+                  <span className="poll-tab-label">Create New Poll</span>
                 </button>
               )}
             </div>
