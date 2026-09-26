@@ -8,7 +8,7 @@ export function initializeSockets(io, prisma) {
             return next();
         }
         try {
-            const secret = process.env.JWT_SECRET || "Deepesh@#$123";
+            const secret = process.env.JWT_SECRET;
             const decoded = jwt.verify(token, secret);
             socket.user = decoded;
             next();

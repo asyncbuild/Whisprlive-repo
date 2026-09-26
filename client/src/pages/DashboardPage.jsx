@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2,
@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(15);
   const [session, setSession] = useState(null); // { title, duration, roomCode, link, started, expiresAt, startsAt, showPublicFeed }
+  const sessionRef = useRef(null); // Always reflects the latest session (avoids stale closure in socket handlers)
   const [copied, setCopied] = useState(false);
   const [messages, setMessages] = useState([]);
   const [pastSessions, setPastSessions] = useState([]);
@@ -394,6 +395,14 @@ export default function DashboardPage() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.roomCode) {
+          // Co-host sessions are NOT restored from localStorage — they are fetched live from
+          // /api/rooms/shared. Restoring them causes stale "Session Ended" ghosts after the
+          // host closes the room. Clear any leftover co-host session data and bail out.
+          if (parsed.isShared) {
+            localStorage.removeItem("whisprlive_active_session");
+            return;
+          }
+
           setSession(parsed);
           setTab("active");
 
@@ -512,6 +521,22 @@ export default function DashboardPage() {
     }
   };
 
+  // Keep sessionRef in sync with session state so socket closures always read current value
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  // Load history from API (defined before socket useEffect so socket closures can call it safely)
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await API.get("/api/rooms/history");
+      setPastSessions(res.data.rooms || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // 3. Socket.io connection for user notifications & live room updates
   useEffect(() => {
     const token = localStorage.getItem("whisprlive_token");
@@ -546,7 +571,8 @@ export default function DashboardPage() {
 
     socket.on("collaborator_removed", ({ roomCode, roomId }) => {
       setSharedSessions((prev) => prev.filter((r) => r.roomCode !== roomCode && r.id !== roomId));
-      if (session?.roomCode === roomCode && session?.isShared) {
+      const currentSession = sessionRef.current;
+      if (currentSession?.roomCode === roomCode && currentSession?.isShared) {
         toast.info("You are no longer a co-host for this session.");
         setSession(null);
         setTab("new");
@@ -555,9 +581,16 @@ export default function DashboardPage() {
 
     socket.on("collaborator_room_closed", ({ roomCode, roomId }) => {
       setSharedSessions((prev) => prev.filter((r) => r.roomCode !== roomCode && r.id !== roomId));
-      if (session?.roomCode === roomCode && session?.isShared) {
+      // Use sessionRef.current to avoid stale closure — captures the live session value
+      const currentSession = sessionRef.current;
+      if (currentSession?.roomCode === roomCode && currentSession?.isShared) {
+        // Clear the co-host's active session and redirect them to Past sessions
+        setSession(null);
+        setMessages([]);
+        setActivePoll(null);
         setSecondsLeft(0);
-        setSession((prev) => (prev ? { ...prev, isEnded: true } : null));
+        setTab("past");
+        loadHistory();
         toast.info("The host has closed this session.");
       }
     });
@@ -610,6 +643,14 @@ export default function DashboardPage() {
           return updated;
         });
       }
+      if (typeof data?.isAccepting === "boolean") {
+        setSession((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, isAccepting: data.isAccepting };
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+          return updated;
+        });
+      }
     });
 
     socket.on("poll_created", (poll) => {
@@ -625,21 +666,32 @@ export default function DashboardPage() {
     });
 
     socket.on("session_ended", (data) => {
-      setSecondsLeft(0);
-      setSession((prev) => {
-        if (!prev) return null;
-        const updated = {
-          ...prev,
-          isEnded: true,
-          endReason: data?.reason || "This room has reached its capacity limit or has ended."
-        };
-        localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
-        return updated;
-      });
-      if (data?.reason) {
-        toast.info(data.reason);
+      const currentSession = sessionRef.current;
+      if (!currentSession) return;
+
+      if (currentSession.isShared) {
+        // Co-host: stop the timer immediately and let collaborator_room_closed do the full cleanup.
+        // Just freeze the timer at 0 so the UI shows "00:00 (Session ended)" instantly.
+        setSecondsLeft(0);
+        setSession((prev) => prev ? { ...prev, isEnded: true } : null);
       } else {
-        toast.info("This session has ended.");
+        // Host: mark session as ended and persist to localStorage for the "Session Ended" banner
+        setSecondsLeft(0);
+        setSession((prev) => {
+          if (!prev) return null;
+          const updated = {
+            ...prev,
+            isEnded: true,
+            endReason: data?.reason || "This room has reached its capacity limit or has ended."
+          };
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+          return updated;
+        });
+        if (data?.reason) {
+          toast.info(data.reason);
+        } else {
+          toast.info("This session has ended.");
+        }
       }
     });
 
@@ -673,19 +725,6 @@ export default function DashboardPage() {
 
     return () => clearInterval(interval);
   }, [session]);
-
-  // 5. Load history from API
-  const loadHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await API.get("/api/rooms/history");
-      setPastSessions(res.data.rooms || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -721,10 +760,14 @@ export default function DashboardPage() {
       activityType: sharedRoom.activityType
     };
 
+    const remainingSeconds = sharedRoom.expiresAt
+      ? Math.max(0, Math.floor((new Date(sharedRoom.expiresAt).getTime() - Date.now()) / 1000))
+      : (sharedRoom.durationMinutes || 0) * 60;
+
     setSession(sharedSession);
     setTab("active");
     setUntilStart(0);
-    setSecondsLeft(sharedRoom.durationMinutes * 60);
+    setSecondsLeft(remainingSeconds);
     setShowPublicFeed(sharedRoom.showPublicFeed);
     setMessagesLoading(true);
     try {
@@ -2226,7 +2269,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <button
-                        className="btn btn-primary btn-sm"
+                        className="btn btn-primary btn-sm past-recap-btn"
                         onClick={() => openSessionReport(p)}
                         disabled={reportLoadingCode === code}
                       >
@@ -2238,7 +2281,7 @@ export default function DashboardPage() {
 
                         return (
                           <button
-                            className="btn btn-soft btn-sm"
+                            className="btn btn-soft btn-sm past-messages-btn"
                             onClick={() => openShowMessagesModal(p)}
                             disabled={loadingMessagesCode === code}
                             title={!isUnlocked ? "Unlock responses with Host plan or Room Pass" : "View session messages"}

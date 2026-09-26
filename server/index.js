@@ -1,13 +1,20 @@
 import dotenv from "dotenv"
 dotenv.config()
 
+// Safety check: JWT_SECRET must be explicitly set — no insecure fallback allowed.
+if (!process.env.JWT_SECRET) {
+  console.error("\n❌ FATAL: JWT_SECRET environment variable is not set. Server cannot start securely.\n");
+  process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET;
+
 import express from "express"
 import cors from "cors"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 import { nanoid } from "nanoid"
 import { verifyToken } from "./middleware/middleware.js"
-import { authLimiter, roomCreationLimiter, messageSubmissionLimiter, paymentLimiter, feedbackLimiter } from "./middleware/rateLimiter.js"
+import { authLimiter, roomCreationLimiter, messageSubmissionLimiter, paymentLimiter, feedbackLimiter, pollVoteLimiter } from "./middleware/rateLimiter.js"
 import { parseClientMetadata } from "./utils/deviceTracker.js"
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -76,7 +83,7 @@ app.get("/api/stats", async (req, res) => {
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: process.env.VITE_CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"]
   }
 })
@@ -278,7 +285,7 @@ app.post("/api/auth/verify-signup-otp", authLimiter, async (req, res) => {
 
     signupOtpStore.delete(cleanEmail);
 
-    const secret = process.env.JWT_SECRET || "Deepesh@#$123";
+    const secret = JWT_SECRET;
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       secret,
@@ -305,8 +312,9 @@ app.post("/signup", authLimiter, async (req, res) => {
   if (!username || !email || !password) {
     return res.status(400).json({ message: "All fields are required" })
   }
+  const cleanEmail = email.toLowerCase().trim();
   try {
-    const existingUser = await prisma.user.findUnique({ where: { email } })
+    const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } })
     if (existingUser) {
       return res.status(400).json({ message: "User already exists, Please Signin" })
     }
@@ -314,8 +322,8 @@ app.post("/signup", authLimiter, async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt)
     const newUser = await prisma.user.create({
       data: {
-        username,
-        email,
+        username: username.trim(),
+        email: cleanEmail,
         passwordHash: hashedPassword
       },
       select: {
@@ -358,7 +366,7 @@ app.post("/signin", authLimiter, async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
-    const secret = process.env.JWT_SECRET || "Deepesh@#$123";
+    const secret = JWT_SECRET;
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       secret,
@@ -426,11 +434,11 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
           passwordHash: `GOOGLE_AUTH_${googleId}`,
           plan: "SOLO"
         },
-        select: { id: true, email: true, username: true, plan: true },
+        select: { id: true, email: true, username: true, plan: true, roomPasses: true },
       })
     }
     //generate app jwt token
-    const secret = process.env.JWT_SECRET || "Deepesh@#$123";
+    const secret = JWT_SECRET;
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       secret,
@@ -444,6 +452,7 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
         email: user.email,
         username: user.username,
         plan: user.plan || 'SOLO',
+        roomPasses: user.roomPasses || 0
       }
     })
   } catch (error) {
@@ -662,16 +671,18 @@ app.patch("/api/rooms/:roomId/end", verifyToken, async (req, res) => {
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
+    const closedAt = room.closedAt || new Date();
     const updated = await prisma.room.update({
       where: { id: room.id },
       data: {
         isAccepting: false,
-        expiresAt: new Date()
+        expiresAt: closedAt,
+        closedAt
       }
     })
     // Evict message cache for this room (prevents memory leaks)
     evictRoomMessagesCache(roomId);
-    io.to(roomId).emit("session_ended", { roomCode: roomId })
+    await notifyRoomEnded(roomId, room.id);
     res.json({ message: "Session ended successfully", room: updated })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -692,21 +703,9 @@ app.patch("/api/rooms/:roomId/close", verifyToken, async (req, res) => {
       data: { isAccepting: false, expiresAt: closedAt, closedAt }
     });
     evictRoomMessagesCache(roomId);
-    io.to(roomId).emit("session_ended", { roomCode: roomId });
     io.to(roomId).emit("room_closed", { roomCode: roomId, roomId: room.id });
-
-    // Notify all collaborators so their dashboards remove the closed room in real-time
-    try {
-      const collaborators = await prisma.roomCollaborator.findMany({
-        where: { roomId: room.id },
-        select: { userId: true }
-      });
-      for (const c of collaborators) {
-        io.to(`user_${c.userId}`).emit("collaborator_room_closed", { roomCode: roomId, roomId: room.id });
-      }
-    } catch (collabErr) {
-      console.error("Failed to notify collaborators on room close:", collabErr);
-    }
+    // notifyRoomEnded handles session_ended broadcast + collaborator_room_closed to all co-hosts
+    await notifyRoomEnded(roomId, room.id);
 
     res.json({ message: "Room closed successfully", room: updated });
   } catch (err) {
@@ -727,9 +726,18 @@ app.get("/api/rooms/history", verifyToken, async (req, res) => {
     });
     const userPlan = user?.plan || "SOLO";
 
+    // A past session is any session hosted by the user that has ended, expired, or was closed
     const rooms = await prisma.room.findMany({
-      where: { hostId: userId, closedAt: { not: null } },
+      where: {
+        hostId: userId,
+        OR: [
+          { closedAt: { not: null } },
+          { expiresAt: { lte: new Date() } },
+          { isAccepting: false }
+        ]
+      },
       include: {
+        host: { select: { username: true, email: true } },
         _count: {
           select: { messages: true }
         }
@@ -1286,12 +1294,10 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
         data: { isAccepting: false, expiresAt: new Date() }
       });
       evictRoomMessagesCache(roomId);
-      io.to(roomId).emit("session_ended", {
-        roomCode: roomId,
-        reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
-      });
+      const capacityReason = `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`;
+      await notifyRoomEnded(roomId, room.id, capacityReason);
       return res.status(403).json({
-        message: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`,
+        message: capacityReason,
         isExpired: true
       });
     }
@@ -1345,7 +1351,6 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     }
 
     // 3. Instant WebSocket broadcast to Host & All Participants (< 5ms)
-    console.log(`📨 Emitting new_message to room ${roomId} (cache-first)`);
     io.to(roomId).emit("new_message", msgData);
 
     // 4. Return HTTP response immediately (Audience sees confirmation in < 5ms)
@@ -1389,10 +1394,8 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
             data: { isAccepting: false, expiresAt: new Date() }
           });
           console.log(`Room ${roomId} reached ${tierName} capacity (${maxMessagesAllowed} messages). Session automatically ended.`);
-          io.to(roomId).emit("session_ended", {
-            roomCode: roomId,
-            reason: `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`
-          });
+          const capacityReason = `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`;
+          await notifyRoomEnded(roomId, room.id, capacityReason);
           evictRoomMessagesCache(roomId);
         }
       } catch (dbErr) {
@@ -1530,6 +1533,32 @@ function evictRoomMessagesCache(roomCode) {
   roomMessagesCache.delete(roomCode);
 }
 
+/**
+ * Notify everyone when a room session ends:
+ *  - Broadcasts `session_ended` to all sockets in the room channel (guests, host, co-hosts)
+ *  - Sends `collaborator_room_closed` to each co-host's personal channel so their
+ *    dashboards update in real-time without requiring a page refresh.
+ *
+ * @param {string} roomCode  - The short room code used as the socket room name
+ * @param {string} roomDbId  - The Prisma UUID for DB lookup of collaborators
+ * @param {string} [reason]  - Optional human-readable reason string
+ */
+async function notifyRoomEnded(roomCode, roomDbId, reason) {
+  const payload = reason ? { roomCode, reason } : { roomCode };
+  io.to(roomCode).emit("session_ended", payload);
+  try {
+    const collaborators = await prisma.roomCollaborator.findMany({
+      where: { roomId: roomDbId },
+      select: { userId: true }
+    });
+    for (const c of collaborators) {
+      io.to(`user_${c.userId}`).emit("collaborator_room_closed", { roomCode, roomId: roomDbId });
+    }
+  } catch (err) {
+    console.error("Failed to notify collaborators on session end:", err);
+  }
+}
+
 //upvote / toggle vote messages (Cache-First: < 2ms)
 app.patch("/api/rooms/:roomId/messages/:messageId/upvote", async (req, res) => {
   const { roomId, messageId } = req.params
@@ -1553,12 +1582,12 @@ app.patch("/api/rooms/:roomId/messages/:messageId/upvote", async (req, res) => {
         // Immediate HTTP response
         res.json({ message: "Vote updated successfully", upvotes: msg.upvotes });
 
-        // Background DB writeback (non-blocking)
+        // Background DB writeback (non-blocking) — use increment/decrement to avoid race conditions
         (async () => {
           try {
             await prisma.message.update({
               where: { id: messageId },
-              data: { upvotes: msg.upvotes }
+              data: { upvotes: isDecrement ? { decrement: 1 } : { increment: 1 } }
             });
           } catch (dbErr) {
             console.error("Background DB upvote write error:", dbErr.message);
@@ -1990,6 +2019,13 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
   if (!question || question.trim() === "") {
     return res.status(400).json({ message: "Poll question/prompt is required" });
   }
+  if (question.length > 200) {
+    return res.status(400).json({ message: "Poll question must be 200 characters or fewer" });
+  }
+  if (Array.isArray(options)) {
+    const tooLong = options.some((o) => typeof o === "string" && o.length > 100);
+    if (tooLong) return res.status(400).json({ message: "Poll option text must be 100 characters or fewer" });
+  }
   const pollType = type === "WORD_CLOUD" ? "WORD_CLOUD" : "CHOICE";
 
   try {
@@ -2109,7 +2145,7 @@ app.get("/api/rooms/public/:roomId/poll/active", async (req, res) => {
 });
 
 // Public Audience: Cast a vote or submit a word (Instant sub-10ms response + WebSocket broadcast)
-app.post("/api/rooms/public/:roomId/poll/:pollId/vote", async (req, res) => {
+app.post("/api/rooms/public/:roomId/poll/:pollId/vote", pollVoteLimiter, async (req, res) => {
   const { roomId, pollId } = req.params;
   const { optionId, word, voterId } = req.body;
 

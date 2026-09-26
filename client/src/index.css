@@ -183,12 +183,24 @@ body {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: #fff !important;
 }
 
 .btn-primary:hover {
   background: var(--accent-dark);
+  color: #fff !important;
   transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text) !important;
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  border-color: var(--text);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .btn-ghost {
@@ -512,6 +524,7 @@ body {
   color: var(--accent);
   background: linear-gradient(135deg, #0066FF 0%, #4F46E5 50%, #8B5CF6 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-left: 1px;
 }
@@ -3152,17 +3165,16 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 16px 22px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 200px 270px;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
 }
 
 .past-card-left {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -3224,8 +3236,16 @@ body {
 
 .past-card-stats {
   display: flex;
-  gap: 22px;
-  flex-shrink: 0;
+  gap: 28px;
+  width: 200px;
+}
+
+.past-card-stats .stat:first-child {
+  min-width: 85px;
+}
+
+.past-card-stats .stat:last-child {
+  min-width: 75px;
 }
 
 .stat {
@@ -3250,9 +3270,31 @@ body {
 .past-card-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 270px;
   white-space: nowrap;
+}
+
+.past-card-actions .btn {
+  justify-content: center;
+  gap: 6px;
+}
+
+.past-card-actions .btn svg {
+  flex-shrink: 0;
+}
+
+.past-card-actions .past-recap-btn {
+  width: 105px;
+  min-width: 105px;
+  max-width: 105px;
+}
+
+.past-card-actions .past-messages-btn {
+  width: 155px;
+  min-width: 155px;
+  max-width: 155px;
 }
 
 .shared-sessions {
