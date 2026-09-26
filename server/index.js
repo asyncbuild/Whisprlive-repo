@@ -1384,21 +1384,9 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       }
     }
 
-    // 3. Instant WebSocket broadcast:
-    // A. Public audience in the room receives filtered message (NO IP, NO device, NO location)
+    // 3. Instant WebSocket broadcast to all participants in the room (sanitized without PII)
     const publicMsg = buildPublicMessage(msgData);
     io.to(roomId).emit("new_message", publicMsg);
-
-    // B. Host and verified Co-hosts receive full moderation message on their private personal channels
-    const hostMsg = buildHostMessage(msgData);
-    if (room.hostId) {
-      io.to(`user_${room.hostId}`).emit("new_message", hostMsg);
-    }
-    if (room.collaborators && room.collaborators.length > 0) {
-      for (const collab of room.collaborators) {
-        io.to(`user_${collab.userId}`).emit("new_message", hostMsg);
-      }
-    }
 
     // 4. Return sanitized HTTP response (Audience sees confirmation in < 5ms without PII)
     res.status(201).json({

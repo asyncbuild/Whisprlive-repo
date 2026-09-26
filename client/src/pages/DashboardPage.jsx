@@ -609,8 +609,9 @@ export default function DashboardPage() {
     });
 
     socket.on("new_message", (newMsg) => {
+      if (!newMsg || !newMsg.id) return;
       const formatted = {
-        id: newMsg.id || Math.random().toString(),
+        id: newMsg.id,
         guest: newMsg.guestName || "Anonymous",
         text: newMsg.content || newMsg.text,
         votes: newMsg.upvotes || 0,
@@ -619,7 +620,10 @@ export default function DashboardPage() {
         hostReply: newMsg.hostReply || null,
         ts: new Date(newMsg.createdAt || Date.now()).getTime()
       };
-      setMessages((prev) => [formatted, ...prev]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === formatted.id)) return prev;
+        return [formatted, ...prev];
+      });
     });
 
     socket.on("message_upvoted", ({ messageId, upvotes }) => {
