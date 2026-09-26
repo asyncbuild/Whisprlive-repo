@@ -29,10 +29,11 @@ export function initializeSockets(io, prisma) {
         }
 
         socket.on("join_user", (userId) => {
-            const targetId = userId || socket.user?.id;
-            if (targetId) {
+            // Security: Only allow verified authenticated sockets to join their own personal notifications channel
+            if (socket.user?.id) {
+                const targetId = userId === socket.user.id ? userId : socket.user.id;
                 socket.join(`user_${targetId}`);
-                console.log(`Socket explicitly joined user channel: user_${targetId}`);
+                console.log(`Socket joined user personal channel: user_${targetId}`);
             }
         });
 

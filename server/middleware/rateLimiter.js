@@ -71,3 +71,15 @@ export const pollVoteLimiter = rateLimit({
     message: "You are voting too quickly. Please slow down."
   }
 });
+
+// 7. Plan Waitlist Rate Limiter
+// Prevents automated spam of plan waitlist registrations
+export const waitlistLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes window
+  max: 5, // Limit each IP to 5 waitlist submissions per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "Waitlist submission limit reached. Please try again in a few minutes."
+  }
+});

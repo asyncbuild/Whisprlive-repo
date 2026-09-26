@@ -17,6 +17,7 @@ model User {
   rooms        Room[]
   collaborations RoomCollaborator[]
   pollTemplates PollTemplate[]
+  payments     Payment[]
 }
 
 model Room {
@@ -145,6 +146,20 @@ model RoomCollaborator {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  userId            String
+  razorpayOrderId   String
+  razorpayPaymentId String   @unique
+  plan              String   // "ROOM_PASS", "HOST", etc.
+  amount            Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
