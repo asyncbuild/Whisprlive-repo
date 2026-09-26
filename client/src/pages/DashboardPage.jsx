@@ -544,17 +544,30 @@ export default function DashboardPage() {
 
     const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
     const socket = io(socketUrl, {
-      auth: { token }
+      auth: { token },
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000
     });
 
-    socket.on("connect", () => {
+    const syncSocketRooms = () => {
       if (user?.id) {
         socket.emit("join_user", user.id);
       }
       if (session?.roomCode) {
         socket.emit("join_room", session.roomCode);
       }
-    });
+    };
+
+    socket.on("connect", syncSocketRooms);
+    if (socket.connected) {
+      syncSocketRooms();
+    }
+
+    // If session changes after connection is open, guarantee room is joined
+    if (session?.roomCode) {
+      socket.emit("join_room", session.roomCode);
+    }
 
     // Real-time Co-host Invitations / Removal / Room Close
     socket.on("collaborator_added", ({ room, addedBy }) => {

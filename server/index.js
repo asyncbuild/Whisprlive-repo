@@ -14,7 +14,7 @@ import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 import { nanoid } from "nanoid"
 import { verifyToken } from "./middleware/middleware.js"
-import { authLimiter, roomCreationLimiter, messageSubmissionLimiter, paymentLimiter, feedbackLimiter, pollVoteLimiter } from "./middleware/rateLimiter.js"
+import { authLimiter, roomCreationLimiter, messageSubmissionLimiter, paymentLimiter, feedbackLimiter, pollVoteLimiter, waitlistLimiter } from "./middleware/rateLimiter.js"
 import { parseClientMetadata } from "./utils/deviceTracker.js"
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -83,9 +83,10 @@ app.get("/api/stats", async (req, res) => {
 
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.VITE_CLIENT_URL || "http://localhost:5173",
+    origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ["websocket", "polling"]
 })
 
 initializeSockets(io, prisma) // Pass prisma to socket initialization
@@ -123,8 +124,8 @@ app.post("/api/auth/send-signup-otp", authLimiter, async (req, res) => {
       // If user signed up with Google, let them proceed through OTP verification to link a password!
     }
 
-    // Generate random 6-digit code
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure random 6-digit code
+    const otp = crypto.randomInt(100000, 1000000).toString();
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -394,7 +395,18 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
     let email, name, googleId;
 
     if (accessToken) {
-      // Fetch user profile from Google userinfo API using access token
+      // Validate access token audience with Google tokeninfo
+      const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+      if (!tokenInfoRes.ok) {
+        return res.status(400).json({ message: "Invalid Google access token" });
+      }
+      const tokenInfo = await tokenInfoRes.json();
+      const validAudience = tokenInfo.aud === process.env.GOOGLE_CLIENT_ID || tokenInfo.azp === process.env.GOOGLE_CLIENT_ID;
+      if (!validAudience) {
+        return res.status(400).json({ message: "Google token was not issued for this application" });
+      }
+
+      // Fetch user profile from Google userinfo API using verified access token
       const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
@@ -526,16 +538,37 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
     hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
     const generatedSignature = hmac.digest("hex");
 
-    if (generatedSignature !== razorpay_signature) {
+    // Constant-time signature comparison to prevent timing side-channel attacks
+    const sigBuffer = Buffer.from(generatedSignature, "utf8");
+    const receivedBuffer = Buffer.from(razorpay_signature, "utf8");
+    if (sigBuffer.length !== receivedBuffer.length || !crypto.timingSafeEqual(sigBuffer, receivedBuffer)) {
       return res.status(400).json({ message: "Invalid transaction signature" });
     }
 
-    // Grant 1 Room Pass credit to user
-    const updatedUser = await prisma.user.update({
-      where: { id: req.user.id },
-      data: { roomPasses: { increment: 1 } },
-      select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+    // Replay attack protection: ensure this payment ID has not already been processed
+    const existingPayment = await prisma.payment.findUnique({
+      where: { razorpayPaymentId: razorpay_payment_id }
     });
+    if (existingPayment) {
+      return res.status(400).json({ message: "This payment has already been redeemed." });
+    }
+
+    // Atomically record the payment and grant 1 Room Pass credit to user
+    const [_, updatedUser] = await prisma.$transaction([
+      prisma.payment.create({
+        data: {
+          userId: req.user.id,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+          plan: "ROOM_PASS"
+        }
+      }),
+      prisma.user.update({
+        where: { id: req.user.id },
+        data: { roomPasses: { increment: 1 } },
+        select: { id: true, email: true, username: true, plan: true, roomPasses: true }
+      })
+    ]);
 
     res.json({
       message: "Payment verified successfully!",
@@ -656,8 +689,8 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
       activityType: newRoom.activityType,
     });
   } catch (err) {
-    console.error("❌ Prisma Room Creation Error:", err);
-    res.status(500).json({ error: err.message, stack: err });
+    console.error("❌ Room Creation Error:", err);
+    res.status(500).json({ message: "Failed to create session. Please try again." });
   }
 });
 
@@ -988,7 +1021,7 @@ app.get("/api/rooms/:roomId/report", verifyToken, async (req, res) => {
 });
 
 // Join Plan Waitlist (for Host & Studio coming soon plans)
-app.post("/api/waitlist", async (req, res) => {
+app.post("/api/waitlist", waitlistLimiter, async (req, res) => {
   const { email, plan } = req.body;
   if (!email || typeof email !== "string" || !email.includes("@")) {
     return res.status(400).json({ message: "A valid email address is required." });
@@ -1271,6 +1304,7 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       where: { roomCode: roomId },
       include: {
         host: { select: { plan: true } },
+        collaborators: { select: { userId: true } },
         _count: { select: { messages: true } }
       }
     })
@@ -1314,10 +1348,10 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     }
 
     const metadata = parseClientMetadata(req);
-    const clientDeviceModel = req.body.clientDeviceModel && req.body.clientDeviceModel.toUpperCase() !== "K"
-      ? req.body.clientDeviceModel.trim()
+    const clientDeviceModel = req.body.clientDeviceModel && typeof req.body.clientDeviceModel === "string" && req.body.clientDeviceModel.toUpperCase() !== "K"
+      ? req.body.clientDeviceModel.trim().slice(0, 100)
       : null;
-    const finalDeviceModel = clientDeviceModel || metadata.deviceModel;
+    const finalDeviceModel = clientDeviceModel || (metadata.deviceModel ? String(metadata.deviceModel).slice(0, 100) : null);
 
     // 1. Generate a temporary in-memory message object with a UUID (< 1ms)
     const tempId = crypto.randomUUID();
@@ -1350,13 +1384,26 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       }
     }
 
-    // 3. Instant WebSocket broadcast to Host & All Participants (< 5ms)
-    io.to(roomId).emit("new_message", msgData);
+    // 3. Instant WebSocket broadcast:
+    // A. Public audience in the room receives filtered message (NO IP, NO device, NO location)
+    const publicMsg = buildPublicMessage(msgData);
+    io.to(roomId).emit("new_message", publicMsg);
 
-    // 4. Return HTTP response immediately (Audience sees confirmation in < 5ms)
+    // B. Host and verified Co-hosts receive full moderation message on their private personal channels
+    const hostMsg = buildHostMessage(msgData);
+    if (room.hostId) {
+      io.to(`user_${room.hostId}`).emit("new_message", hostMsg);
+    }
+    if (room.collaborators && room.collaborators.length > 0) {
+      for (const collab of room.collaborators) {
+        io.to(`user_${collab.userId}`).emit("new_message", hostMsg);
+      }
+    }
+
+    // 4. Return sanitized HTTP response (Audience sees confirmation in < 5ms without PII)
     res.status(201).json({
       message: "Message sent successfully",
-      newMessage: msgData,
+      newMessage: publicMsg,
       data: {
         id: tempId,
         createdAt: now
@@ -1597,16 +1644,19 @@ app.patch("/api/rooms/:roomId/messages/:messageId/upvote", async (req, res) => {
       }
     }
 
-    // Fallback: DB-first if cache miss (e.g. room not cached)
-    const current = await prisma.message.findUnique({ where: { id: messageId } })
-    if (!current) return res.status(404).json({ message: "Message not found" })
+    // Fallback: DB-first if cache miss (scope message lookup to this room)
+    const room = await prisma.room.findFirst({ where: { roomCode: roomId }, select: { id: true } });
+    if (!room) return res.status(404).json({ message: "Room not found" });
 
-    const newUpvotes = isDecrement ? Math.max(0, current.upvotes - 1) : current.upvotes + 1
+    const current = await prisma.message.findFirst({ where: { id: messageId, roomId: room.id } });
+    if (!current) return res.status(404).json({ message: "Message not found in this room" });
+
+    const newUpvotes = isDecrement ? Math.max(0, current.upvotes - 1) : current.upvotes + 1;
 
     const updatedMessage = await prisma.message.update({
       where: { id: messageId },
       data: { upvotes: newUpvotes }
-    })
+    });
     io.to(roomId).emit("message_upvoted", {
       messageId: updatedMessage.id,
       upvotes: updatedMessage.upvotes
