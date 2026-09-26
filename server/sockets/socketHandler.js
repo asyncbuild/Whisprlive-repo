@@ -8,7 +8,7 @@ export function initializeSockets(io, prisma) {
             return next();
         }
         try {
-            const secret = process.env.JWT_SECRET || "Deepesh@#$123";
+            const secret = process.env.JWT_SECRET;
             const decoded = jwt.verify(token, secret);
             socket.user = decoded;
             next();
@@ -21,6 +21,20 @@ export function initializeSockets(io, prisma) {
     io.on("connection", (socket) => {
         const userLabel = socket.user?.username || socket.user?.id || "Participant";
         console.log(`Socket connected: ${socket.id} (${userLabel})`);
+
+        if (socket.user?.id) {
+            const userRoom = `user_${socket.user.id}`;
+            socket.join(userRoom);
+            console.log(`Socket joined user personal channel: ${userRoom} (${userLabel})`);
+        }
+
+        socket.on("join_user", (userId) => {
+            const targetId = userId || socket.user?.id;
+            if (targetId) {
+                socket.join(`user_${targetId}`);
+                console.log(`Socket explicitly joined user channel: user_${targetId}`);
+            }
+        });
 
         const handleJoin = async (roomCode) => {
             if (!roomCode) return;

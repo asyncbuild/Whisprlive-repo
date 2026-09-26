@@ -3,18 +3,34 @@ import API from '../api/axios';
 
 const AuthContext = createContext();
 
+function getValidStoredToken() {
+  const saved = localStorage.getItem('whisprlive_token');
+  if (!saved) return null;
+
+  try {
+    const encodedPayload = saved.split('.')[1];
+    if (!encodedPayload) throw new Error('Invalid token');
+
+    const base64Payload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = base64Payload.padEnd(Math.ceil(base64Payload.length / 4) * 4, '=');
+    const payload = JSON.parse(atob(paddedPayload));
+    if (typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now()) {
+      throw new Error('Expired token');
+    }
+
+    return saved;
+  } catch {
+    localStorage.removeItem('whisprlive_token');
+    localStorage.removeItem('whisprlive_user');
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
+  const [token, setToken] = useState(getValidStoredToken);
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('whisprlive_user');
     return saved ? JSON.parse(saved) : null;
-  });
-  const [token, setToken] = useState(() => {
-    const saved = localStorage.getItem('whisprlive_token');
-    if (!saved || saved === '[object Object]' || saved === 'undefined' || saved === 'null') {
-      localStorage.removeItem('whisprlive_token');
-      return null;
-    }
-    return saved;
   });
 
   // Sync auth state across multiple browser tabs automatically

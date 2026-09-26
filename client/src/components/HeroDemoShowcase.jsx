@@ -12,7 +12,7 @@ const DEMO_STEPS = [
   { id: "audience-join", label: "QR Join", icon: QrCode, mode: "audience" },
   { id: "live-qa", label: "Live Q&A", icon: MessageSquare, mode: "audience" },
   { id: "live-poll", label: "Polls", icon: BarChart2, mode: "audience" },
-  { id: "spotlight", label: "Spotlight", icon: Pin, mode: "host" }
+  { id: "spotlight", label: "WordCloud", icon: Pin, mode: "host" }
 ];
 
 export default function HeroDemoShowcase() {
@@ -598,7 +598,7 @@ export default function HeroDemoShowcase() {
                   <div className="real-dash-top" style={{ paddingBottom: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <span className="live-dot" />
-                      <strong style={{ fontSize: 11.5, fontFamily: "var(--font-display)" }}>Stage Spotlight</strong>
+                      <strong style={{ fontSize: 11.5, fontFamily: "var(--font-display)" }}>Stage WordCloud</strong>
                     </div>
                     <span style={{ fontSize: 9.5, padding: "2px 7px", borderRadius: 999, background: "var(--accent-soft)", color: "var(--accent)", fontWeight: 700 }}>
                       PROJECTOR VIEW

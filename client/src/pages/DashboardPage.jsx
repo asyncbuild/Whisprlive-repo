@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Link2, Play, Trash2,
   Clock, User, LogOut, Radio, Check, Copy,
   MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, Plus, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
-  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download
+  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download, Users
 } from "lucide-react";
 import { io } from "socket.io-client";
 import QRCode from "qrcode";
@@ -64,9 +64,12 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(15);
   const [session, setSession] = useState(null); // { title, duration, roomCode, link, started, expiresAt, startsAt, showPublicFeed }
+  const sessionRef = useRef(null); // Always reflects the latest session (avoids stale closure in socket handlers)
   const [copied, setCopied] = useState(false);
   const [messages, setMessages] = useState([]);
   const [pastSessions, setPastSessions] = useState([]);
+  const [sharedSessions, setSharedSessions] = useState([]);
+  const [sharedSessionsLoading, setSharedSessionsLoading] = useState(true);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [untilStart, setUntilStart] = useState(0);
   const [query, setQuery] = useState("");
@@ -208,8 +211,17 @@ export default function DashboardPage() {
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [showCollaboratorsModal, setShowCollaboratorsModal] = useState(false);
+  const [collaborators, setCollaborators] = useState([]);
+  const [collaboratorEmail, setCollaboratorEmail] = useState("");
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
+  const [collaboratorSaving, setCollaboratorSaving] = useState(false);
   const [selectedPastSession, setSelectedPastSession] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [sessionReport, setSessionReport] = useState(null);
+  const [reportLoadingCode, setReportLoadingCode] = useState(null);
   const [pastMessages, setPastMessages] = useState([]);
   const [loadingMessagesCode, setLoadingMessagesCode] = useState(null);
   const [pastModalQuery, setPastModalQuery] = useState("");
@@ -222,6 +234,8 @@ export default function DashboardPage() {
       showWaitlistModal ||
       showLeaveModal ||
       showMessagesModal ||
+      showCollaboratorsModal ||
+      showReportModal ||
       showQrModal ||
       showPollModal
     );
@@ -238,6 +252,8 @@ export default function DashboardPage() {
     showWaitlistModal,
     showLeaveModal,
     showMessagesModal,
+    showCollaboratorsModal,
+    showReportModal,
     showQrModal,
     showPollModal
   ]);
@@ -379,6 +395,14 @@ export default function DashboardPage() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.roomCode) {
+          // Co-host sessions are NOT restored from localStorage — they are fetched live from
+          // /api/rooms/shared. Restoring them causes stale "Session Ended" ghosts after the
+          // host closes the room. Clear any leftover co-host session data and bail out.
+          if (parsed.isShared) {
+            localStorage.removeItem("whisprlive_active_session");
+            return;
+          }
+
           setSession(parsed);
           setTab("active");
 
@@ -477,6 +501,7 @@ export default function DashboardPage() {
       // Persist active session in localStorage
       localStorage.setItem("whisprlive_active_session", JSON.stringify(sessionData));
       setSession(sessionData);
+      setTitle("");
       setMessages([]);
       setActivePoll(null);
 
@@ -496,18 +521,78 @@ export default function DashboardPage() {
     }
   };
 
-  // 3. Socket.io connection for live updates
-  useEffect(() => {
-    if (!session?.roomCode) return;
+  // Keep sessionRef in sync with session state so socket closures always read current value
+  useEffect(() => { sessionRef.current = session; }, [session]);
 
+  // Load history from API (defined before socket useEffect so socket closures can call it safely)
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await API.get("/api/rooms/history");
+      setPastSessions(res.data.rooms || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // 3. Socket.io connection for user notifications & live room updates
+  useEffect(() => {
     const token = localStorage.getItem("whisprlive_token");
+    if (!token && !user?.id) return;
+
     const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
     const socket = io(socketUrl, {
       auth: { token }
     });
 
     socket.on("connect", () => {
-      socket.emit("join_room", session.roomCode);
+      if (user?.id) {
+        socket.emit("join_user", user.id);
+      }
+      if (session?.roomCode) {
+        socket.emit("join_room", session.roomCode);
+      }
+    });
+
+    // Real-time Co-host Invitations / Removal / Room Close
+    socket.on("collaborator_added", ({ room, addedBy }) => {
+      if (!room) return;
+      setSharedSessions((prev) => {
+        const exists = prev.some((r) => r.roomCode === room.roomCode || r.id === room.id);
+        if (exists) {
+          return prev.map((r) => (r.roomCode === room.roomCode || r.id === room.id ? room : r));
+        }
+        return [room, ...prev];
+      });
+      toast.success(`${addedBy || room.host?.username || "A host"} added you as a co-host for "${room.title || "Live Session"}"!`);
+    });
+
+    socket.on("collaborator_removed", ({ roomCode, roomId }) => {
+      setSharedSessions((prev) => prev.filter((r) => r.roomCode !== roomCode && r.id !== roomId));
+      const currentSession = sessionRef.current;
+      if (currentSession?.roomCode === roomCode && currentSession?.isShared) {
+        toast.info("You are no longer a co-host for this session.");
+        setSession(null);
+        setTab("new");
+      }
+    });
+
+    socket.on("collaborator_room_closed", ({ roomCode, roomId }) => {
+      setSharedSessions((prev) => prev.filter((r) => r.roomCode !== roomCode && r.id !== roomId));
+      // Use sessionRef.current to avoid stale closure — captures the live session value
+      const currentSession = sessionRef.current;
+      if (currentSession?.roomCode === roomCode && currentSession?.isShared) {
+        // Clear the co-host's active session and redirect them to Past sessions
+        setSession(null);
+        setMessages([]);
+        setActivePoll(null);
+        setSecondsLeft(0);
+        setTab("past");
+        loadHistory();
+        toast.info("The host has closed this session.");
+      }
     });
 
     socket.on("new_message", (newMsg) => {
@@ -558,6 +643,14 @@ export default function DashboardPage() {
           return updated;
         });
       }
+      if (typeof data?.isAccepting === "boolean") {
+        setSession((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, isAccepting: data.isAccepting };
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+          return updated;
+        });
+      }
     });
 
     socket.on("poll_created", (poll) => {
@@ -573,26 +666,37 @@ export default function DashboardPage() {
     });
 
     socket.on("session_ended", (data) => {
-      setSecondsLeft(0);
-      setSession((prev) => {
-        if (!prev) return null;
-        const updated = {
-          ...prev,
-          isEnded: true,
-          endReason: data?.reason || "This room has reached its capacity limit or has ended."
-        };
-        localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
-        return updated;
-      });
-      if (data?.reason) {
-        toast.info(data.reason);
+      const currentSession = sessionRef.current;
+      if (!currentSession) return;
+
+      if (currentSession.isShared) {
+        // Co-host: stop the timer immediately and let collaborator_room_closed do the full cleanup.
+        // Just freeze the timer at 0 so the UI shows "00:00 (Session ended)" instantly.
+        setSecondsLeft(0);
+        setSession((prev) => prev ? { ...prev, isEnded: true } : null);
       } else {
-        toast.info("This session has ended.");
+        // Host: mark session as ended and persist to localStorage for the "Session Ended" banner
+        setSecondsLeft(0);
+        setSession((prev) => {
+          if (!prev) return null;
+          const updated = {
+            ...prev,
+            isEnded: true,
+            endReason: data?.reason || "This room has reached its capacity limit or has ended."
+          };
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+          return updated;
+        });
+        if (data?.reason) {
+          toast.info(data.reason);
+        } else {
+          toast.info("This session has ended.");
+        }
       }
     });
 
     return () => socket.disconnect();
-  }, [session?.roomCode]);
+  }, [user?.id, session?.roomCode]);
 
   // 4. Timer tick for scheduled start & active session duration
   useEffect(() => {
@@ -622,16 +726,114 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [session]);
 
-  // 5. Load history from API
-  const loadHistory = async () => {
-    setHistoryLoading(true);
+  useEffect(() => {
+    let isMounted = true;
+    API.get("/api/rooms/shared")
+      .then((res) => {
+        if (isMounted) setSharedSessions(res.data.rooms || []);
+      })
+      .catch((err) => {
+        if (isMounted && err.response?.status !== 503) {
+          console.error("Failed to load shared sessions:", err);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setSharedSessionsLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleOpenSharedSession = async (sharedRoom) => {
+    const roomCode = sharedRoom.roomCode;
+    const sharedSession = {
+      title: sharedRoom.title,
+      duration: sharedRoom.durationMinutes,
+      roomCode,
+      link: `${window.location.host}/ask/${roomCode}`,
+      startsAt: sharedRoom.startsAt,
+      expiresAt: sharedRoom.expiresAt,
+      started: true,
+      isEnded: false,
+      isShared: true,
+      hostUsername: sharedRoom.host?.username,
+      showPublicFeed: sharedRoom.showPublicFeed,
+      activityType: sharedRoom.activityType
+    };
+
+    const remainingSeconds = sharedRoom.expiresAt
+      ? Math.max(0, Math.floor((new Date(sharedRoom.expiresAt).getTime() - Date.now()) / 1000))
+      : (sharedRoom.durationMinutes || 0) * 60;
+
+    setSession(sharedSession);
+    setTab("active");
+    setUntilStart(0);
+    setSecondsLeft(remainingSeconds);
+    setShowPublicFeed(sharedRoom.showPublicFeed);
+    setMessagesLoading(true);
     try {
-      const res = await API.get("/api/rooms/history");
-      setPastSessions(res.data.rooms || []);
+      const [messagesRes, pollRes] = await Promise.all([
+        API.get(`/api/rooms/${roomCode}/messages`),
+        API.get(`/api/rooms/public/${roomCode}/poll/active`)
+      ]);
+      setMessages((messagesRes.data.messages || []).map((message) => ({
+        id: message.id,
+        guest: message.guestName || "Anonymous",
+        text: message.content,
+        votes: message.upvotes || 0,
+        answered: message.isAnswered || message.status === "answered",
+        isPinned: Boolean(message.isPinned),
+        hostReply: message.hostReply || null,
+        ts: new Date(message.createdAt).getTime()
+      })));
+      setActivePoll(pollRes.data.poll || null);
     } catch (err) {
-      console.error(err);
+      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to open shared session");
     } finally {
-      setHistoryLoading(false);
+      setMessagesLoading(false);
+    }
+  };
+
+  const openCollaboratorsModal = async () => {
+    if (!session?.roomCode || session.isShared) return;
+    setShowCollaboratorsModal(true);
+    setCollaboratorsLoading(true);
+    try {
+      const res = await API.get(`/api/rooms/${session.roomCode}/collaborators`);
+      setCollaborators(res.data.collaborators || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to load co-hosts");
+    } finally {
+      setCollaboratorsLoading(false);
+    }
+  };
+
+  const addCollaborator = async (event) => {
+    event.preventDefault();
+    const email = collaboratorEmail.trim();
+    if (!email) return;
+    setCollaboratorSaving(true);
+    try {
+      const res = await API.post(`/api/rooms/${session.roomCode}/collaborators`, { email });
+      setCollaborators((current) => [
+        ...current.filter((collaborator) => collaborator.id !== res.data.collaborator.id),
+        res.data.collaborator
+      ]);
+      setCollaboratorEmail("");
+      toast.success(res.data.message || "Co-host added.");
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to add co-host");
+    } finally {
+      setCollaboratorSaving(false);
+    }
+  };
+
+  const removeCollaborator = async (userId) => {
+    try {
+      await API.delete(`/api/rooms/${session.roomCode}/collaborators/${userId}`);
+      setCollaborators((current) => current.filter((collaborator) => collaborator.id !== userId));
+      toast.success("Co-host removed.");
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to remove co-host");
     }
   };
 
@@ -649,7 +851,7 @@ export default function DashboardPage() {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `session-${roomCode}-messages.txt`);
+      link.setAttribute("download", `session-${roomCode}-report.txt`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -670,6 +872,26 @@ export default function DashboardPage() {
       }
     } finally {
       setExportingCode(null);
+    }
+  };
+
+  const openSessionReport = async (sessionItem) => {
+    const code = sessionItem.roomCode || sessionItem.id;
+    setReportLoadingCode(code);
+    try {
+      const res = await API.get(`/api/rooms/${code}/report`);
+      setSelectedPastSession(sessionItem);
+      setSessionReport(res.data);
+      setShowReportModal(true);
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || (
+        err.response?.status === 404
+          ? "Session recap is unavailable on this server version. Restart or deploy the latest API."
+          : "Failed to load session recap"
+      );
+      toast.error(errorMessage);
+    } finally {
+      setReportLoadingCode(null);
     }
   };
 
@@ -1126,14 +1348,14 @@ export default function DashboardPage() {
   };
 
   const closeRoom = async () => {
-    if (closingRoom) return;
+    if (closingRoom || !session?.roomCode || session.isShared) return;
     setClosingRoom(true);
-    if (session?.roomCode && !session.isEnded) {
-      try {
-        await API.patch(`/api/rooms/${session.roomCode}/end`);
-      } catch (err) {
-        console.error("Failed to end session on server during close:", err);
-      }
+    try {
+      await API.patch(`/api/rooms/${session.roomCode}/close`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to close room");
+      setClosingRoom(false);
+      return;
     }
     resetSession();
     await loadHistory();
@@ -1144,7 +1366,7 @@ export default function DashboardPage() {
 
   const handleLogout = () => {
     if (logout) logout();
-    localStorage.removeItem("whisprlive_active_session");
+    if (!session?.isShared) localStorage.removeItem("whisprlive_active_session");
     navigate("/");
   };
 
@@ -1313,6 +1535,39 @@ export default function DashboardPage() {
         {/* TAB 1: CREATE NEW SESSION */}
         {tab === "new" && (
           <div>
+            {(sharedSessionsLoading || sharedSessions.length > 0) && (
+              <section className="shared-sessions">
+                <div className="shared-sessions-heading">
+                  <div>
+                    <h2>Shared with me</h2>
+                    <p>Live sessions you can help moderate.</p>
+                  </div>
+                  <span>{sharedSessions.length} active</span>
+                </div>
+                {sharedSessionsLoading ? (
+                  <LoadingSpinner text="Loading shared sessions..." />
+                ) : (
+                  <div className="shared-sessions-list">
+                    {sharedSessions.map((room) => (
+                      <div className="shared-session-row" key={room.roomCode}>
+                        <div className="shared-session-info">
+                          <strong>{room.title || "Untitled session"}</strong>
+                          <span>
+                            Hosted by {room.host?.username || room.host?.email || "WhisprLive host"} · {room._count?.messages || 0} responses
+                          </span>
+                        </div>
+                        <button
+                          className="btn btn-soft btn-sm"
+                          onClick={() => handleProtectedNavigation(() => handleOpenSharedSession(room))}
+                        >
+                          <Eye size={13} /> Open room
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
             <div className="new-session-card">
               <div className="ns-row">
                 <div className="ns-title-field">
@@ -1515,55 +1770,70 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      {session.isShared ? (
+                        <span className="cohost-session-badge">Co-host · {session.hostUsername || "Host"}</span>
+                      ) : (
+                        <button className="btn btn-soft btn-sm" onClick={openCollaboratorsModal}>
+                          <Users size={14} /> Co-hosts
+                        </button>
+                      )}
                       {isSessionScheduled ? (
                         <>
                           <span className="opens-badge">
                             <Clock size={14} /> Opens at {formatTargetTime(session.startsAt)} · starts in {formatClock(untilStart)}
                           </span>
-                          <button className="btn btn-primary btn-sm" onClick={startSessionEarly}>
-                            <Play size={14} /> Start Session Early
-                          </button>
-                          <button className="btn btn-soft btn-sm" onClick={closeRoom} disabled={closingRoom}>
-                            {closingRoom ? <Loader2 size={13} className="spin" /> : <XCircle size={14} />} Close room
-                          </button>
+                          {!session.isShared && (
+                            <>
+                              <button className="btn btn-primary btn-sm" onClick={startSessionEarly}>
+                                <Play size={14} /> Start Session Early
+                              </button>
+                              <button className="btn btn-soft btn-sm" onClick={closeRoom} disabled={closingRoom}>
+                                {closingRoom ? <Loader2 size={13} className="spin" /> : <XCircle size={14} />} Close room
+                              </button>
+                            </>
+                          )}
                         </>
                       ) : (
                         <>
                           <span className={`countdown ${isSessionCompleted ? "completed" : secondsLeft <= 60 ? "urgent" : ""}`}>
                             <Clock size={15} /> {isSessionCompleted ? "00:00 (Session ended)" : `${formatClock(secondsLeft)} remaining`}
                           </span>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={endSession}
-                            disabled={isSessionCompleted || endingSession}
-                            style={{
-                              opacity: isSessionCompleted ? 0.5 : 1,
-                              cursor: isSessionCompleted ? "not-allowed" : "pointer"
-                            }}
-                            title={isSessionCompleted ? "Session completed" : "End session timer early"}
-                          >
-                            {endingSession ? (
-                              <>Ending... <Loader2 size={13} className="spin" /></>
-                            ) : (
-                              <><Square size={14} /> End session</>
-                            )}
-                          </button>
-                          <button
-                            className="btn btn-soft btn-sm"
-                            onClick={closeRoom}
-                            disabled={closingRoom}
-                            title="Close and archive room"
-                            style={{
-                              borderColor: isSessionCompleted ? "var(--accent)" : undefined,
-                              fontWeight: isSessionCompleted ? 600 : "normal"
-                            }}
-                          >
-                            {closingRoom ? (
-                              <>Closing... <Loader2 size={13} className="spin" /></>
-                            ) : (
-                              <><XCircle size={14} /> Close room</>
-                            )}
-                          </button>
+                          {!session.isShared && (
+                            <>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={endSession}
+                                disabled={isSessionCompleted || endingSession}
+                                style={{
+                                  opacity: isSessionCompleted ? 0.5 : 1,
+                                  cursor: isSessionCompleted ? "not-allowed" : "pointer"
+                                }}
+                                title={isSessionCompleted ? "Session completed" : "End session timer early"}
+                              >
+                                {endingSession ? (
+                                  <>Ending... <Loader2 size={13} className="spin" /></>
+                                ) : (
+                                  <><Square size={14} /> End session</>
+                                )}
+                              </button>
+                              <button
+                                className="btn btn-soft btn-sm"
+                                onClick={closeRoom}
+                                disabled={closingRoom}
+                                title="Close and archive room"
+                                style={{
+                                  borderColor: isSessionCompleted ? "var(--accent)" : undefined,
+                                  fontWeight: isSessionCompleted ? 600 : "normal"
+                                }}
+                              >
+                                {closingRoom ? (
+                                  <>Closing... <Loader2 size={13} className="spin" /></>
+                                ) : (
+                                  <><XCircle size={14} /> Close room</>
+                                )}
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
@@ -1998,12 +2268,20 @@ export default function DashboardPage() {
                       <div className="stat"><span className="stat-num">{durMinutes}m</span><span className="stat-label">Duration</span></div>
                     </div>
                     <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-primary btn-sm past-recap-btn"
+                        onClick={() => openSessionReport(p)}
+                        disabled={reportLoadingCode === code}
+                      >
+                        {reportLoadingCode === code ? <Loader2 size={13} className="spin" /> : <BarChart2 size={13} />}
+                        {reportLoadingCode === code ? "Loading..." : "Recap"}
+                      </button>
                       {(() => {
                         const isUnlocked = !isSolo || p.isPassUsed;
 
                         return (
                           <button
-                            className="btn btn-soft btn-sm"
+                            className="btn btn-soft btn-sm past-messages-btn"
                             onClick={() => openShowMessagesModal(p)}
                             disabled={loadingMessagesCode === code}
                             title={!isUnlocked ? "Unlock responses with Host plan or Room Pass" : "View session messages"}
@@ -2547,6 +2825,169 @@ export default function DashboardPage() {
                 Proceed anyway
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCollaboratorsModal && session && (
+        <div className="modal-overlay" onClick={() => setShowCollaboratorsModal(false)}>
+          <div className="modal-content collaborators-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700 }}>Co-hosts</h3>
+                <p style={{ color: "var(--text-dim)", fontSize: 13, margin: "4px 0 0" }}>{session.title}</p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowCollaboratorsModal(false)} aria-label="Close co-hosts">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={addCollaborator} className="collaborator-invite-form">
+              <label htmlFor="cohost-email">WhisprLive account email</label>
+              <div>
+                <input
+                  id="cohost-email"
+                  type="email"
+                  value={collaboratorEmail}
+                  onChange={(event) => setCollaboratorEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  required
+                />
+                <button className="btn btn-primary btn-sm" type="submit" disabled={collaboratorSaving}>
+                  {collaboratorSaving ? "Adding..." : "Add co-host"}
+                </button>
+              </div>
+            </form>
+
+            <div className="collaborator-list">
+              <h4>People with access</h4>
+              {collaboratorsLoading ? (
+                <LoadingSpinner text="Loading co-hosts..." />
+              ) : collaborators.length === 0 ? (
+                <p className="collaborator-empty">No co-hosts added yet.</p>
+              ) : collaborators.map((collaborator) => (
+                <div className="collaborator-row" key={collaborator.id}>
+                  <div>
+                    <strong>{collaborator.username}</strong>
+                    <span>{collaborator.email}</span>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => removeCollaborator(collaborator.id)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportModal && sessionReport && selectedPastSession && (
+        <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 760, width: "92%", maxHeight: "86vh", overflowY: "auto" }}
+          >
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 14 }}>
+              <div>
+                <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700 }}>Session recap</h3>
+                <div className="mono" style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 4 }}>
+                  {sessionReport.room.title} · {formatFullDateTime(sessionReport.room.createdAt)} · Code: {sessionReport.room.roomCode}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    if (sessionReport.canExport) {
+                      exportSession(sessionReport.room.roomCode);
+                    } else {
+                      setShowReportModal(false);
+                      openUpgradeModal();
+                    }
+                  }}
+                  disabled={exportingCode === sessionReport.room.roomCode}
+                >
+                  {sessionReport.canExport ? <Download size={13} /> : <Lock size={13} />}
+                  {exportingCode === sessionReport.room.roomCode ? "Exporting..." : sessionReport.canExport ? "Export report" : "Unlock export"}
+                </button>
+                <button className="modal-close-btn" onClick={() => setShowReportModal(false)} aria-label="Close recap">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 10, margin: "18px 0 24px" }}>
+              {[
+                [sessionReport.summary.responseCount, "Responses"],
+                [sessionReport.summary.answeredCount, "Answered"],
+                [sessionReport.summary.totalUpvotes, "Upvotes"],
+                [sessionReport.summary.pollCount, "Polls"],
+                [sessionReport.summary.pollResponseCount, "Poll votes"]
+              ].map(([value, label]) => (
+                <div key={label} style={{ padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+                  <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{value}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            <section style={{ marginBottom: 22 }}>
+              <h4 style={{ fontSize: 14, margin: "0 0 10px" }}>Poll results</h4>
+              {sessionReport.polls.length === 0 ? (
+                <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>No polls were launched during this session.</p>
+              ) : sessionReport.polls.map((poll, pollIndex) => (
+                <div key={`${poll.question}-${pollIndex}`} style={{ padding: "12px 0", borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, fontWeight: 600 }}>
+                    <span>{poll.question}</span>
+                    <span style={{ color: "var(--text-dim)", whiteSpace: "nowrap" }}>{poll.totalVotes} responses</span>
+                  </div>
+                  {poll.type === "WORD_CLOUD" ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                      {poll.words.length > 0 ? poll.words.map((word) => (
+                        <span key={word.text} className="chip">{word.text} · {word.count}</span>
+                      )) : <span style={{ color: "var(--text-dim)", fontSize: 12 }}>No words submitted.</span>}
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                      {poll.options.map((option) => {
+                        const percentage = poll.totalVotes ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
+                        return (
+                          <div key={option.text} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5 }}>
+                            <span>{option.text}</span>
+                            <span className="mono" style={{ color: "var(--text-dim)", whiteSpace: "nowrap" }}>{option.votes} · {percentage}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+
+            <section>
+              <h4 style={{ fontSize: 14, margin: "0 0 10px" }}>Top questions</h4>
+              {sessionReport.canViewQuestions ? (
+                sessionReport.topQuestions.length === 0 ? (
+                  <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>No questions were submitted during this session.</p>
+                ) : sessionReport.topQuestions.map((question, index) => (
+                  <div key={`${question.createdAt}-${index}`} style={{ padding: "10px 0", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{question.content}</div>
+                    <div style={{ display: "flex", gap: 12, marginTop: 4, color: "var(--text-dim)", fontSize: 11.5 }}>
+                      <span>{question.upvotes} upvotes</span>
+                      <span>{question.isAnswered ? "Answered" : "Unanswered"}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: 14, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+                  <p style={{ color: "var(--text-dim)", fontSize: 13, margin: "0 0 10px" }}>Unlock question details and report export with a Room Pass or Host plan.</p>
+                  <button className="btn btn-soft btn-sm" onClick={() => { setShowReportModal(false); openUpgradeModal(); }}>
+                    <Lock size={13} /> View plans
+                  </button>
+                </div>
+              )}
+            </section>
           </div>
         </div>
       )}

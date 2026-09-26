@@ -60,3 +60,14 @@ export const feedbackLimiter = rateLimit({
   }
 });
 
+// 6. Poll Vote Rate Limiter
+// Prevents automated vote stuffing on live polls and word clouds
+export const pollVoteLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 20, // Limit each IP to 20 poll votes per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "You are voting too quickly. Please slow down."
+  }
+});

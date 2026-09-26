@@ -279,6 +279,10 @@ export default function PublicAskPage() {
   // 5. Real-time timer tick & periodic status fallback
   useEffect(() => {
     if (!roomInfo) return;
+    if (roomInfo.status === "Expired" || roomInfo.status === "ended") {
+      setUntilEnd(0);
+      return;
+    }
 
     const interval = setInterval(() => {
       const now = Date.now();
