@@ -22,6 +22,20 @@ export function initializeSockets(io, prisma) {
         const userLabel = socket.user?.username || socket.user?.id || "Participant";
         console.log(`Socket connected: ${socket.id} (${userLabel})`);
 
+        if (socket.user?.id) {
+            const userRoom = `user_${socket.user.id}`;
+            socket.join(userRoom);
+            console.log(`Socket joined user personal channel: ${userRoom} (${userLabel})`);
+        }
+
+        socket.on("join_user", (userId) => {
+            const targetId = userId || socket.user?.id;
+            if (targetId) {
+                socket.join(`user_${targetId}`);
+                console.log(`Socket explicitly joined user channel: user_${targetId}`);
+            }
+        });
+
         const handleJoin = async (roomCode) => {
             if (!roomCode) return;
             // Avoid duplicate join if socket is already in the channel

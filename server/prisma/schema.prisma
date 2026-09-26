@@ -8,13 +8,14 @@ datasource db {
 
 model User {
   id           String    @id @default(uuid())
-  username     String    
+  username     String
   email        String    @unique
   passwordHash String
   plan         String   @default("SOLO") // SOLO, HOST, STUDIO
   roomPasses   Int      @default(0)
   createdAt    DateTime  @default(now())
   rooms        Room[]
+  collaborations RoomCollaborator[]
   pollTemplates PollTemplate[]
 }
 
@@ -31,11 +32,13 @@ model Room {
   activityType    String    @default("ALL") // "ALL" | "POLL" | "WORD_CLOUD" | "QA"
   isPassUsed      Boolean   @default(false)
   createdAt       DateTime  @default(now())
+  closedAt        DateTime?
 
   // Relations
   host            User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
   messages        Message[]
   polls           Poll[]
+  collaborators   RoomCollaborator[]
 }
 
 model Message {
@@ -131,4 +134,18 @@ model PollTemplate {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-
+model RoomCollaborator {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  role      String   @default("MODERATOR")
+  createdAt DateTime @default(now())
+
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+

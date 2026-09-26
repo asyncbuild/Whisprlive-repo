@@ -238,6 +238,28 @@ export default function LandingPage() {
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
           </div>
           <div className="nav-actions">
+            {/* Desktop Quick Room Code Join Input */}
+            <form onSubmit={handleJoinRoom} className="nav-join-form nav-hide-mobile" title="Join a live Q&A room by code">
+              <div className="nav-join-input-wrap">
+                <Radio size={12} className="nav-join-live-dot" />
+                <input
+                  type="text"
+                  placeholder="Enter room code..."
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  className="nav-join-input"
+                  aria-label="Enter room code to join"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm nav-join-btn"
+                disabled={!joinCode.trim()}
+              >
+                Join <ArrowRight size={13} />
+              </button>
+            </form>
+
             <ThemeToggle className="nav-hide-mobile" />
             {isLoggedIn ? (
               <button className="btn btn-primary btn-sm" onClick={() => navigate("/dashboard")}>
@@ -278,6 +300,33 @@ export default function LandingPage() {
         </div>
       </nav>
 
+      {/* Sub-Navbar Sticky Join Bar for Mobile & Tablet */}
+      <div className="subnav-join-bar">
+        <div className="container subnav-join-inner">
+          <div className="subnav-join-label">
+            <Radio size={12} className="subnav-join-icon" />
+            <span>Join Room:</span>
+          </div>
+          <form onSubmit={handleJoinRoom} className="subnav-join-form">
+            <input
+              type="text"
+              placeholder="Enter room code (e.g. 8tVmS0a1)"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+              className="subnav-join-input"
+              aria-label="Enter room code to join"
+            />
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm subnav-join-btn"
+              disabled={!joinCode.trim()}
+            >
+              Join <ArrowRight size={13} />
+            </button>
+          </form>
+        </div>
+      </div>
+
       <div ref={homeRef}>
         <section className="hero">
           <div className="container hero-grid">
@@ -294,35 +343,12 @@ export default function LandingPage() {
                 >
                   {isLoggedIn ? "Go to Dashboard" : "Start a free session"} <ArrowRight size={16} />
                 </button>
-                <button className="btn btn-ghost" onClick={() => scrollTo("liveMock")}>
-                  Watch the live demo <ArrowUpRight size={16} />
+                <button className="btn btn-ghost" onClick={() => navigate("/try")}>
+                  Try the interactive demo <ArrowUpRight size={16} />
                 </button>
               </div>
               <div className="hero-friction-proof">
                 <ShieldCheck size={16} /> <strong>Guests join in seconds.</strong> Hosts get a moderated, real-time question feed.
-              </div>
-
-              {/* Join Live Room Input Box */}
-              <div className="join-room-card">
-                <label className="join-room-label">
-                  <Radio size={13} style={{ color: "var(--live)" }} /> Joining a live Q&amp;A room?
-                </label>
-                <form onSubmit={handleJoinRoom} className="join-room-form">
-                  <input
-                    type="text"
-                    placeholder="Enter Room Code (e.g. 8tVmSOa1)"
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
-                    className="join-room-input"
-                  />
-                  <button
-                    type="submit"
-                    className="btn btn-primary btn-sm join-room-btn"
-                    disabled={!joinCode.trim()}
-                  >
-                    Join Room <ArrowRight size={14} />
-                  </button>
-                </form>
               </div>
               <div className="hero-meta">
                 <div className="hero-meta-item">
@@ -334,7 +360,7 @@ export default function LandingPage() {
                   <span className="hero-meta-label">sessions hosted</span>
                 </div>
                 <div className="hero-meta-item">
-                  <span className="hero-meta-num mono">180ms</span>
+                  <span className="hero-meta-num mono">&lt; 50ms</span>
                   <span className="hero-meta-label">avg. message delay</span>
                 </div>
               </div>

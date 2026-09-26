@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { MessageSquarePlus, X, Send, Loader2, Sparkles, Bug, Lightbulb, MessageCircle } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import API from "../api/axios";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
 
 export default function FeedbackWidget() {
+  const location = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -53,7 +55,7 @@ export default function FeedbackWidget() {
       {/* Floating Action Button */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className="feedback-widget-btn"
+        className={`feedback-widget-btn${location.pathname === "/dashboard" ? " feedback-widget-btn-dashboard" : ""}`}
         title="Give feedback or suggest a feature"
       >
         <MessageSquarePlus size={16} />

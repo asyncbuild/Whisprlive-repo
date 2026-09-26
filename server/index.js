@@ -362,7 +362,7 @@ app.post("/signin", authLimiter, async (req, res) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       secret,
-      { expiresIn: "3h" }
+      { expiresIn: "30d" }
     );
     res.json({
       message: "Signin successful",
@@ -434,7 +434,7 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       secret,
-      { expiresIn: "3h" }
+      { expiresIn: "30d" }
     )
     res.json({
       message: "Google Sign-in Successful",
@@ -539,6 +539,16 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
 });
 
 // Room & Session Routes
+async function findRoomAccess(roomCode, userId) {
+  const ownedRoom = await prisma.room.findFirst({ where: { roomCode, hostId: userId } });
+  if (ownedRoom) return { room: ownedRoom, isHost: true };
+
+  const sharedRoom = await prisma.room.findFirst({
+    where: { roomCode, collaborators: { some: { userId } } }
+  });
+  return sharedRoom ? { room: sharedRoom, isHost: false } : null;
+}
+
 // Create new session Route
 app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
   const { title, durationMinutes, startsAt, usePass, showPublicFeed, activityType } = req.body;
@@ -668,6 +678,45 @@ app.patch("/api/rooms/:roomId/end", verifyToken, async (req, res) => {
   }
 })
 
+app.patch("/api/rooms/:roomId/close", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: roomId, hostId: req.user.id }
+    });
+    if (!room) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const closedAt = room.closedAt || new Date();
+    const updated = await prisma.room.update({
+      where: { id: room.id },
+      data: { isAccepting: false, expiresAt: closedAt, closedAt }
+    });
+    evictRoomMessagesCache(roomId);
+    io.to(roomId).emit("session_ended", { roomCode: roomId });
+    io.to(roomId).emit("room_closed", { roomCode: roomId, roomId: room.id });
+
+    // Notify all collaborators so their dashboards remove the closed room in real-time
+    try {
+      const collaborators = await prisma.roomCollaborator.findMany({
+        where: { roomId: room.id },
+        select: { userId: true }
+      });
+      for (const c of collaborators) {
+        io.to(`user_${c.userId}`).emit("collaborator_room_closed", { roomCode: roomId, roomId: room.id });
+      }
+    } catch (collabErr) {
+      console.error("Failed to notify collaborators on room close:", collabErr);
+    }
+
+    res.json({ message: "Room closed successfully", room: updated });
+  } catch (err) {
+    if (err.code === "P2022") {
+      return res.status(503).json({ message: "Room closing is unavailable until the database migration is applied." });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all sessions Route (filtered by plan history retention days)
 app.get("/api/rooms/history", verifyToken, async (req, res) => {
   const userId = req.user.id
@@ -679,7 +728,7 @@ app.get("/api/rooms/history", verifyToken, async (req, res) => {
     const userPlan = user?.plan || "SOLO";
 
     const rooms = await prisma.room.findMany({
-      where: { hostId: userId },
+      where: { hostId: userId, closedAt: { not: null } },
       include: {
         _count: {
           select: { messages: true }
@@ -698,7 +747,235 @@ app.get("/api/rooms/history", verifyToken, async (req, res) => {
 
     res.json({ rooms: filteredRooms });
   } catch (err) {
+    if (err.code === "P2022") {
+      return res.status(503).json({ message: "Room history is unavailable until the database migration is applied." });
+    }
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/rooms/shared", verifyToken, async (req, res) => {
+  try {
+    const rooms = await prisma.room.findMany({
+      where: {
+        collaborators: { some: { userId: req.user.id } },
+        isAccepting: true,
+        startsAt: { lte: new Date() },
+        expiresAt: { gt: new Date() }
+      },
+      include: {
+        host: { select: { username: true, email: true } },
+        _count: { select: { messages: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    res.json({ rooms });
+  } catch (err) {
+    if (err.code === "P2021") {
+      return res.status(503).json({ rooms: [], message: "Co-hosting is unavailable until its database migration is applied." });
+    }
+    console.error("Shared rooms lookup error:", err);
+    res.status(500).json({ error: "Failed to load shared sessions" });
+  }
+});
+
+app.get("/api/rooms/:roomId/collaborators", verifyToken, async (req, res) => {
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: req.params.roomId, hostId: req.user.id },
+      select: { id: true }
+    });
+    if (!room) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const collaborators = await prisma.roomCollaborator.findMany({
+      where: { roomId: room.id },
+      include: { user: { select: { id: true, username: true, email: true } } },
+      orderBy: { createdAt: "asc" }
+    });
+    res.json({ collaborators: collaborators.map(({ user, role, createdAt }) => ({ ...user, role, createdAt })) });
+  } catch (err) {
+    if (err.code === "P2021") {
+      return res.status(503).json({ message: "Co-hosting is unavailable until its database migration is applied." });
+    }
+    console.error("Collaborator list error:", err);
+    res.status(500).json({ error: "Failed to load co-hosts" });
+  }
+});
+
+app.post("/api/rooms/:roomId/collaborators", verifyToken, async (req, res) => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!email || !email.includes("@")) {
+    return res.status(400).json({ message: "Enter the email address of an existing WhisprLive account." });
+  }
+
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: req.params.roomId, hostId: req.user.id },
+      select: { id: true }
+    });
+    if (!room) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      select: { id: true, email: true, username: true }
+    });
+    if (!user) return res.status(404).json({ message: "No WhisprLive account was found for that email." });
+    if (user.id === req.user.id) return res.status(400).json({ message: "You already own this session." });
+
+    const collaborator = await prisma.roomCollaborator.upsert({
+      where: { roomId_userId: { roomId: room.id, userId: user.id } },
+      update: {},
+      create: { roomId: room.id, userId: user.id, role: "MODERATOR" }
+    });
+
+    // Fetch full room info with host details to emit to collaborator's dashboard in real-time
+    const fullRoom = await prisma.room.findUnique({
+      where: { id: room.id },
+      include: {
+        host: { select: { username: true, email: true } },
+        _count: { select: { messages: true } }
+      }
+    });
+
+    if (fullRoom) {
+      io.to(`user_${user.id}`).emit("collaborator_added", {
+        room: fullRoom,
+        addedBy: req.user.username || "Host"
+      });
+    }
+
+    res.status(201).json({ message: "Co-host added.", collaborator: { ...user, role: collaborator.role, createdAt: collaborator.createdAt } });
+  } catch (err) {
+    if (err.code === "P2021") {
+      return res.status(503).json({ message: "Co-hosting is unavailable until its database migration is applied." });
+    }
+    console.error("Add collaborator error:", err);
+    res.status(500).json({ error: "Failed to add co-host" });
+  }
+});
+
+app.delete("/api/rooms/:roomId/collaborators/:userId", verifyToken, async (req, res) => {
+  try {
+    const room = await prisma.room.findFirst({
+      where: { roomCode: req.params.roomId, hostId: req.user.id },
+      select: { id: true, roomCode: true }
+    });
+    if (!room) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const result = await prisma.roomCollaborator.deleteMany({
+      where: { roomId: room.id, userId: req.params.userId }
+    });
+    if (!result.count) return res.status(404).json({ message: "Co-host not found." });
+
+    io.to(`user_${req.params.userId}`).emit("collaborator_removed", {
+      roomId: room.id,
+      roomCode: room.roomCode,
+      removedBy: req.user.username || "Host"
+    });
+
+    res.json({ message: "Co-host removed." });
+  } catch (err) {
+    if (err.code === "P2021") {
+      return res.status(503).json({ message: "Co-hosting is unavailable until its database migration is applied." });
+    }
+    console.error("Remove collaborator error:", err);
+    res.status(500).json({ error: "Failed to remove co-host" });
+  }
+});
+
+app.get("/api/rooms/:roomId/report", verifyToken, async (req, res) => {
+  try {
+    const [user, room] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { plan: true }
+      }),
+      prisma.room.findFirst({
+        where: { roomCode: req.params.roomId, hostId: req.user.id }
+      })
+    ]);
+
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+
+    const userPlan = user?.plan || "SOLO";
+    const userLimits = PLAN_LIMITS[userPlan] || PLAN_LIMITS.SOLO;
+    const roomLimits = room.isPassUsed ? PLAN_LIMITS.ROOM_PASS : userLimits;
+    const retentionDays = roomLimits.historyRetentionDays || 7;
+    if (Date.now() - new Date(room.createdAt).getTime() > retentionDays * 24 * 60 * 60 * 1000) {
+      return res.status(403).json({ error: "This session is outside your history retention period." });
+    }
+
+    const [messages, polls] = await Promise.all([
+      prisma.message.findMany({
+        where: { roomId: room.id },
+        select: { content: true, upvotes: true, isAnswered: true, status: true, createdAt: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.poll.findMany({
+        where: { roomId: room.id },
+        orderBy: { createdAt: "asc" },
+        include: {
+          options: { orderBy: { id: "asc" } },
+          responses: { select: { word: true } }
+        }
+      })
+    ]);
+
+    const canViewQuestions = Boolean(userLimits.canExport || room.isPassUsed);
+    const summary = {
+      responseCount: messages.length,
+      answeredCount: messages.filter((message) => message.isAnswered || message.status === "answered").length,
+      totalUpvotes: messages.reduce((total, message) => total + (message.upvotes || 0), 0),
+      pollCount: polls.length,
+      pollResponseCount: polls.reduce((total, poll) => total + poll.responses.length, 0)
+    };
+    const pollSummaries = polls.map((poll) => {
+      const words = new Map();
+      for (const response of poll.responses) {
+        const word = response.word?.trim();
+        if (word) words.set(word, (words.get(word) || 0) + 1);
+      }
+
+      return {
+        question: poll.question,
+        type: poll.type,
+        totalVotes: poll.responses.length,
+        options: poll.options.map((option) => ({ text: option.text, votes: option.votes })),
+        words: [...words.entries()]
+          .map(([text, count]) => ({ text, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8)
+      };
+    });
+
+    res.json({
+      room: {
+        title: room.title,
+        roomCode: room.roomCode,
+        durationMinutes: room.durationMinutes,
+        createdAt: room.createdAt
+      },
+      summary,
+      polls: pollSummaries,
+      canViewQuestions,
+      canExport: canViewQuestions,
+      topQuestions: canViewQuestions
+        ? [...messages]
+            .sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0) || new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 5)
+            .map((message) => ({
+              content: message.content,
+              upvotes: message.upvotes || 0,
+              isAnswered: message.isAnswered || message.status === "answered",
+              createdAt: message.createdAt
+            }))
+        : []
+    });
+  } catch (err) {
+    console.error("Session report error:", err);
+    res.status(500).json({ error: "Failed to build session report" });
   }
 });
 
@@ -766,18 +1043,13 @@ app.post("/api/feedback", feedbackLimiter, async (req, res) => {
 app.get("/api/rooms/:roomId/messages", verifyToken, async (req, res) => {
   const { roomId } = req.params
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { plan: true, roomPasses: true }
-    })
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id },
-      select: { id: true, expiresAt: true, isPassUsed: true, createdAt: true }
-    })
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
-    const limits = PLAN_LIMITS[user?.plan || "SOLO"]
+    const owner = await prisma.user.findUnique({ where: { id: room.hostId }, select: { plan: true } });
+    const limits = PLAN_LIMITS[owner?.plan || "SOLO"] || PLAN_LIMITS.SOLO;
     const now = new Date();
     const isExpired = room.expiresAt && now > new Date(room.expiresAt);
     const roomLimits = room.isPassUsed ? PLAN_LIMITS.ROOM_PASS : limits;
@@ -842,8 +1114,13 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
     const room = await prisma.room.findFirst({
       where: { roomCode: roomId, hostId: req.user.id },
       include: {
-        messages: {
-          orderBy: { createdAt: 'desc' }
+        messages: { orderBy: { createdAt: 'desc' } },
+        polls: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            options: { orderBy: { id: 'asc' } },
+            responses: { select: { word: true } }
+          }
         }
       }
     })
@@ -862,11 +1139,47 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
         error: "Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass."
       });
     }
-    const exportText = room.messages.map((m, idx) => `[${idx + 1}] (${new Date(m.createdAt).toLocaleString()}): ${m.content}`)
-      .join('\n\n');
-    res.setHeader('Content-Type', 'text/plain')
-    res.setHeader('Content-Disposition', `attachment; filename="${room.title || 'session'}-messages.txt"`);
-    res.send(exportText || 'No messages received.');
+    const answeredCount = room.messages.filter((message) => message.isAnswered || message.status === 'answered').length;
+    const totalUpvotes = room.messages.reduce((total, message) => total + (message.upvotes || 0), 0);
+    const reportLines = [
+      'WHISPRLIVE SESSION REPORT',
+      `Session: ${room.title || 'Untitled session'}`,
+      `Room code: ${room.roomCode}`,
+      `Date: ${new Date(room.createdAt).toLocaleString()}`,
+      `Duration: ${room.durationMinutes} minutes`,
+      '',
+      'SUMMARY',
+      `Responses: ${room.messages.length}`,
+      `Answered: ${answeredCount}`,
+      `Upvotes: ${totalUpvotes}`,
+      `Polls: ${room.polls.length}`,
+      `Poll responses: ${room.polls.reduce((total, poll) => total + poll.responses.length, 0)}`,
+      '',
+      'QUESTIONS',
+      ...room.messages.map((message, index) => [
+        `${index + 1}. ${message.content}`,
+        `   ${message.upvotes || 0} upvotes · ${message.isAnswered || message.status === 'answered' ? 'Answered' : 'Unanswered'} · ${new Date(message.createdAt).toLocaleString()}`
+      ].join('\n'))
+    ];
+
+    for (const poll of room.polls) {
+      reportLines.push('', `POLL: ${poll.question}`, `Responses: ${poll.responses.length}`);
+      if (poll.type === 'WORD_CLOUD') {
+        const words = new Map();
+        for (const response of poll.responses) {
+          const word = response.word?.trim();
+          if (word) words.set(word, (words.get(word) || 0) + 1);
+        }
+        reportLines.push(...[...words.entries()].sort((a, b) => b[1] - a[1]).map(([word, count]) => `- ${word}: ${count}`));
+      } else {
+        reportLines.push(...poll.options.map((option) => `- ${option.text}: ${option.votes}`));
+      }
+    }
+
+    const safeTitle = (room.title || 'session').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'session';
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}-report.txt"`);
+    res.send(reportLines.join('\n'));
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1050,6 +1363,7 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       try {
         const dbMessage = await prisma.message.create({
           data: {
+            id: tempId,
             roomId: room.id,
             content: content.trim(),
             status: "accepted",
@@ -1060,14 +1374,11 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
           }
         });
 
-        // Update cache with the real DB-assigned ID
+        // Ensure cache timestamp is synced
         const currentCache = roomMessagesCache.get(roomId);
         if (currentCache && currentCache.messages.has(tempId)) {
-          const oldMsg = currentCache.messages.get(tempId);
-          currentCache.messages.delete(tempId);
-          oldMsg.id = dbMessage.id;
-          oldMsg.createdAt = dbMessage.createdAt;
-          currentCache.messages.set(dbMessage.id, oldMsg);
+          const msg = currentCache.messages.get(tempId);
+          msg.createdAt = dbMessage.createdAt;
         }
 
         // Check if this message hits the capacity limit and end session
@@ -1282,12 +1593,16 @@ app.patch("/api/rooms/:roomId/messages/:messageId/answered", verifyToken, async 
   const { roomId, messageId } = req.params
   const { isAnswered } = req.body || {}
   try {
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id }
-    })
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" })
     }
+    const targetMessage = await prisma.message.findFirst({
+      where: { id: messageId, roomId: room.id },
+      select: { id: true }
+    });
+    if (!targetMessage) return res.status(404).json({ message: "Message not found in this room" });
 
     const answeredVal = Boolean(isAnswered);
 
@@ -1452,12 +1767,16 @@ app.patch("/api/rooms/:roomId/messages/:messageId/reply", verifyToken, async (re
   const { roomId, messageId } = req.params;
   const { hostReply } = req.body;
   try {
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id }
-    });
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" });
     }
+    const targetMessage = await prisma.message.findFirst({
+      where: { id: messageId, roomId: room.id },
+      select: { id: true }
+    });
+    if (!targetMessage) return res.status(404).json({ message: "Message not found in this room" });
 
     const cleanReply = typeof hostReply === "string" ? hostReply.trim() : null;
     const isAnswered = Boolean(cleanReply);
@@ -1506,12 +1825,16 @@ app.patch("/api/rooms/:roomId/messages/:messageId/pin", verifyToken, async (req,
   const { roomId, messageId } = req.params;
   const { isPinned } = req.body;
   try {
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id }
-    });
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" });
     }
+    const targetMessage = await prisma.message.findFirst({
+      where: { id: messageId, roomId: room.id },
+      select: { id: true }
+    });
+    if (!targetMessage) return res.status(404).json({ message: "Message not found in this room" });
 
     const pinnedVal = Boolean(isPinned);
 
@@ -1670,9 +1993,8 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
   const pollType = type === "WORD_CLOUD" ? "WORD_CLOUD" : "CHOICE";
 
   try {
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id }
-    });
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" });
     }
@@ -1872,12 +2194,16 @@ app.post("/api/rooms/public/:roomId/poll/:pollId/vote", async (req, res) => {
 app.patch("/api/rooms/:roomId/polls/:pollId/end", verifyToken, async (req, res) => {
   const { roomId, pollId } = req.params;
   try {
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id }
-    });
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
     if (!room) {
       return res.status(404).json({ message: "Room not found or unauthorized" });
     }
+    const targetPoll = await prisma.poll.findFirst({
+      where: { id: pollId, roomId: room.id },
+      select: { id: true }
+    });
+    if (!targetPoll) return res.status(404).json({ message: "Poll not found in this room" });
 
     // Invalidate in-memory cache immediately (< 1ms)
     if (activePollCache.has(pollId)) {

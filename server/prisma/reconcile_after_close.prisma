@@ -1,0 +1,27 @@
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String              @id
+  collaborations  RoomCollaborator[]
+}
+
+model Room {
+  id              String              @id
+  closedAt        DateTime?
+  collaborators   RoomCollaborator[]
+}
+
+model RoomCollaborator {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  role      String   @default("MODERATOR")
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}

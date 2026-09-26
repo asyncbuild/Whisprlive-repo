@@ -23,13 +23,16 @@ function ProtectedRoute({ children }) {
   return token ? children : <Navigate to="/" replace />;
 }
 
-// Track pageviews on SPA route changes for GA4
+// Track pageviews on SPA route changes for GA4 & reset scroll to top
 function RouteTracker() {
   const location = useLocation();
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
     trackPageView(location.pathname + location.search);
-  }, [location]);
+  }, [location.pathname, location.search]);
 
   return null;
 }

@@ -1,0 +1,7 @@
+datasource db {
+  provider = "postgresql"
+}
+
+model Room {
+  id String @id
+}
