@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   X,
@@ -364,10 +363,7 @@ export default function OnboardingTour({ isOpen, onClose, onFinish, onSetTab }) 
               title={isLastStep ? "Complete tour" : "Next feature (>)"}
             >
               {isLastStep ? (
-                <>
-                  <span>Get Started</span>
-                  <Sparkles size={13} />
-                </>
+                <span>Get Started</span>
               ) : (
                 <>
                   <span>Next</span>

@@ -6,6 +6,7 @@ import { useToast } from "../context/ToastContext";
 import { useTheme } from "../context/ThemeContext";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { getSweetUserGreeting } from "../utils/greetings";
 
 export default function AuthGoogleButton({ onLoading, text = "Continue with Google" }) {
   const { login } = useAuth();
@@ -25,9 +26,15 @@ export default function AuthGoogleButton({ onLoading, text = "Continue with Goog
 
         if (res.data?.isNewUser && res.data?.user?.id) {
           localStorage.setItem(`whisprlive_tour_new_user_${res.data.user.id}`, 'true');
+        } else {
+          const greeting = getSweetUserGreeting(res.data.user?.username);
+          try {
+            sessionStorage.setItem('whisprlive_welcome_greeting', greeting);
+          } catch {
+            /* ignore */
+          }
         }
         if (login) login(res.data.user, res.data.token);
-        toast.success("Google Sign-In Successful!");
         navigate("/dashboard");
       } catch (err) {
         toast.error(err.response?.data?.message || "Google Sign-In failed");

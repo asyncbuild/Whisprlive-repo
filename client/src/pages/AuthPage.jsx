@@ -7,6 +7,7 @@ import { ArrowRight, Loader2, ShieldCheck, RefreshCw, Eye, EyeOff, Check } from 
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import AuthGoogleButton from '../components/AuthGoogleButton';
+import { getSweetUserGreeting } from '../utils/greetings';
 
 export default function AuthPage({ mode }) {
   const navigate = useNavigate();
@@ -130,7 +131,12 @@ export default function AuthPage({ mode }) {
           password: formData.password
         });
         if (login) login(res.data.user, res.data.token);
-        toast.success(`Welcome back, ${res.data.user?.username || 'Host'}!`);
+        const greeting = getSweetUserGreeting(res.data.user?.username);
+        try {
+          sessionStorage.setItem('whisprlive_welcome_greeting', greeting);
+        } catch {
+          /* ignore */
+        }
         navigate('/dashboard');
       }
     } catch (err) {

@@ -118,6 +118,17 @@ export default function DashboardPage() {
   const [sessionQrUrl, setSessionQrUrl] = useState("");
   const [showQrModal, setShowQrModal] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [welcomeGreeting, setWelcomeGreeting] = useState(() => {
+    try {
+      const msg = sessionStorage.getItem("whisprlive_welcome_greeting");
+      if (msg) {
+        sessionStorage.removeItem("whisprlive_welcome_greeting");
+        return msg;
+      }
+    } catch {}
+    return null;
+  });
+  const [greetingFading, setGreetingFading] = useState(false);
 
   // Generate Branded QR Code with Light Full-Square Logo Watermark
   useEffect(() => {
@@ -419,6 +430,22 @@ export default function DashboardPage() {
       }
     }
     setShowTour(false);
+  };
+
+  // Returning User Welcome Greeting Popup Auto-Dismiss
+  useEffect(() => {
+    if (!welcomeGreeting) return;
+    const hideTimer = setTimeout(() => {
+      setGreetingFading(true);
+      setTimeout(() => setWelcomeGreeting(null), 520);
+    }, 6500);
+
+    return () => clearTimeout(hideTimer);
+  }, [welcomeGreeting]);
+
+  const handleDismissGreeting = () => {
+    setGreetingFading(true);
+    setTimeout(() => setWelcomeGreeting(null), 520);
   };
   // Handle Post-Payment Success and initial user sync
   useEffect(() => {
@@ -1596,7 +1623,7 @@ export default function DashboardPage() {
         {/* TAB 1: CREATE NEW SESSION */}
         {tab === "new" && (
           <div>
-            {(sharedSessionsLoading || sharedSessions.length > 0) && (
+            {!sharedSessionsLoading && sharedSessions.length > 0 && (
               <section className="shared-sessions">
                 <div className="shared-sessions-heading">
                   <div>
@@ -3573,6 +3600,32 @@ export default function DashboardPage() {
         onSetTab={setTab}
         user={currentUser}
       />
+
+      {/* Prominently Centered Sweet Welcome Greeting */}
+      {welcomeGreeting && (
+        <aside
+          aria-label="Welcome greeting"
+          className={`dash-centered-greeting-wrap ${greetingFading ? "greeting-fading" : ""}`}
+        >
+          <div className="dash-centered-greeting-card">
+            <div className="dash-greeting-icon-box">
+              <span className="dash-greeting-emoji">👋</span>
+            </div>
+            <div className="dash-greeting-text-content">
+              <p className="dash-greeting-message">{welcomeGreeting}</p>
+            </div>
+            <button
+              type="button"
+              className="dash-greeting-close-btn"
+              onClick={handleDismissGreeting}
+              aria-label="Close greeting"
+            >
+              <X size={15} />
+            </button>
+            <div className="dash-greeting-progress-bar" />
+          </div>
+        </aside>
+      )}
     </div>
   );
 }
