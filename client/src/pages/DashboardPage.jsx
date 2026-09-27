@@ -13,6 +13,7 @@ import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
 import ThemeToggle from "../components/ThemeToggle";
+import OnboardingTour from "../components/OnboardingTour";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
@@ -116,6 +117,7 @@ export default function DashboardPage() {
   // Modal states
   const [sessionQrUrl, setSessionQrUrl] = useState("");
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   // Generate Branded QR Code with Light Full-Square Logo Watermark
   useEffect(() => {
@@ -237,7 +239,8 @@ export default function DashboardPage() {
       showCollaboratorsModal ||
       showReportModal ||
       showQrModal ||
-      showPollModal
+      showPollModal ||
+      showTour
     );
 
     if (isAnyModalOpen) {
@@ -255,7 +258,8 @@ export default function DashboardPage() {
     showCollaboratorsModal,
     showReportModal,
     showQrModal,
-    showPollModal
+    showPollModal,
+    showTour
   ]);
 
   const openWaitlist = (planName) => {
@@ -376,6 +380,46 @@ export default function DashboardPage() {
   const username = currentUser?.username || currentUser?.email || "Host";
   const isSolo = !currentUser?.plan || currentUser?.plan === "SOLO";
   const isFreeSolo = isSolo && (currentUser?.roomPasses || 0) <= 0;
+
+  // Auto-launch feature tour for freshly registered hosts
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    try {
+      const isTourCompleted = localStorage.getItem(`whisprlive_tour_completed_${currentUser.id}`);
+      const isNewUserPending = localStorage.getItem(`whisprlive_tour_new_user_${currentUser.id}`);
+      if (isNewUserPending === "true" && !isTourCompleted) {
+        if (toast?.clear) toast.clear();
+        setShowTour(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [currentUser?.id]);
+
+  const handleTourFinish = () => {
+    if (currentUser?.id) {
+      try {
+        localStorage.setItem(`whisprlive_tour_completed_${currentUser.id}`, "true");
+        localStorage.removeItem(`whisprlive_tour_new_user_${currentUser.id}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    setShowTour(false);
+    toast.success("🚀 You're all set! Enjoy hosting on WhisprLive.");
+  };
+
+  const handleTourClose = () => {
+    if (currentUser?.id) {
+      try {
+        localStorage.setItem(`whisprlive_tour_completed_${currentUser.id}`, "true");
+        localStorage.removeItem(`whisprlive_tour_new_user_${currentUser.id}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    setShowTour(false);
+  };
   // Handle Post-Payment Success and initial user sync
   useEffect(() => {
     if (refreshUser) refreshUser();
@@ -1419,7 +1463,7 @@ export default function DashboardPage() {
       <div className="dash-top">
         <div className="container dash-top-container">
           <Brand onClick={() => handleProtectedNavigation(() => navigate("/"))} />
-          <div className="dash-user">
+          <div className="dash-user" id="tour-target-profile">
             {/* Active Plan Badge */}
             <span
               className={`plan-badge ${(!currentUser?.plan || currentUser?.plan === "SOLO") ? "plan-badge-solo" : ""}`}
@@ -1511,7 +1555,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 4 Tabs: New session | Active session | Past sessions | Poll Library */}
-        <div className="tabs">
+        <div className="tabs" id="tour-target-tabs">
           <button className={`tab ${tab === "new" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("new"))}>
             <span className="tab-full">New session</span>
             <span className="tab-short">New</span>
@@ -1526,7 +1570,7 @@ export default function DashboardPage() {
             <span className="tab-full">Past sessions</span>
             <span className="tab-short">Past</span>
           </button>
-          <button className={`tab ${tab === "polls" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("polls"))}>
+          <button id="tour-target-polls-tab" className={`tab ${tab === "polls" ? "active" : ""}`} onClick={() => handleProtectedNavigation(() => setTab("polls"))}>
             <BarChart2 size={13} style={{ marginRight: 4, color: tab === "polls" ? "var(--accent)" : "var(--text-dim)" }} />
             <span className="tab-full">Poll Library</span>
             <span className="tab-short">Polls</span>
@@ -1587,7 +1631,7 @@ export default function DashboardPage() {
             )}
             <div className="new-session-card">
               <div className="ns-row">
-                <div className="ns-title-field">
+                <div className="ns-title-field" id="tour-target-title">
                   <label>Event Name / Session Title</label>
                   <input
                     placeholder="e.g. Tech Conference Keynote Q&A"
@@ -1595,7 +1639,7 @@ export default function DashboardPage() {
                     onChange={(e) => setTitle(e.target.value)}
                   />
                 </div>
-                <div className="duration-field">
+                <div className="duration-field" id="tour-target-duration">
                   <label>Duration</label>
                   <div className="duration-pills">
                     {(() => {
@@ -1699,7 +1743,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Audience Feed Visibility Setting - Full Width */}
-              <div className="new-session-toggle-row">
+              <div className="new-session-toggle-row" id="tour-target-feed-toggle">
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
                     Audience Q&A Feed Visibility
@@ -1720,7 +1764,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Polls & Word Cloud Discovery Card for New Users */}
-            <div className="new-feature-banner">
+            <div className="new-feature-banner" id="tour-target-polls-banner">
               <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 1 }}>
                 <div className="new-feature-icon-box">
                   <BarChart2 size={22} />
@@ -3520,6 +3564,15 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Feature Walkthrough Onboarding Tour for New Users */}
+      <OnboardingTour
+        isOpen={showTour}
+        onClose={handleTourClose}
+        onFinish={handleTourFinish}
+        onSetTab={setTab}
+        user={currentUser}
+      />
     </div>
   );
 }

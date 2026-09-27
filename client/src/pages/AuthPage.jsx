@@ -157,6 +157,9 @@ export default function AuthPage({ mode }) {
         otp: otp.trim()
       });
 
+      if (res.data?.user?.id) {
+        localStorage.setItem(`whisprlive_tour_new_user_${res.data.user.id}`, 'true');
+      }
       if (login) login(res.data.user, res.data.token);
       toast.success('🎉 Account verified and created successfully!');
       navigate('/dashboard');

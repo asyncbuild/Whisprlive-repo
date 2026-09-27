@@ -144,55 +144,92 @@ app.post("/api/auth/send-signup-otp", authLimiter, async (req, res) => {
           to: cleanEmail,
           subject: `${otp} is your WhisprLive verification code`,
           html: `
-            <div style="background-color: #F8FAFC; padding: 40px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; min-height: 100%;">
-              <div style="max-width: 500px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06);">
+            <div style="background-color: #F1F5F9; padding: 48px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1E293B;">
+              <div style="max-width: 520px; margin: 0 auto; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.08);">
                 
-                <!-- Top Brand Header -->
-                <div style="padding: 32px 32px 24px; text-align: center; background: #FFFFFF; border-bottom: 1px solid #F1F5F9;">
-                  <div style="display: inline-block; margin-bottom: 6px;">
-                    <span style="font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: #0F172A;">Whispr<span style="color: #2563EB;">Live</span></span>
+                <!-- Top Colorful Brand Accent Line -->
+                <div style="height: 5px; background: linear-gradient(90deg, #2563EB 0%, #38BDF8 50%, #FF5A36 100%);"></div>
+
+                <!-- Header Section -->
+                <div style="padding: 36px 36px 20px; text-align: center;">
+                  <div style="display: inline-block; margin-bottom: 8px;">
+                    <span style="font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: #0F172A;">
+                      Whispr<span style="color: #2563EB;">Live</span>
+                    </span>
                   </div>
-                  <p style="margin: 0; font-size: 13px; color: #64748B; font-weight: 500;">Live Q&A, Polls & Audience Engagement</p>
+                  <p style="margin: 0; font-size: 13px; color: #64748B; font-weight: 500; letter-spacing: 0.01em;">
+                    Frictionless Live Audience Engagement
+                  </p>
                 </div>
 
-                <!-- Main Content -->
-                <div style="padding: 32px;">
-                  <h2 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #0F172A; letter-spacing: -0.02em;">
-                    Verify your email address
-                  </h2>
-                  <p style="margin: 0 0 24px 0; font-size: 14.5px; color: #475569; line-height: 1.6;">
-                    Hi <strong>${cleanUsername}</strong>, welcome to WhisprLive! Please use the 6-digit verification code below to verify your email and finish setting up your account:
+                <!-- Divider -->
+                <div style="height: 1px; background-color: #F1F5F9; margin: 0 36px;"></div>
+
+                <!-- Body Content -->
+                <div style="padding: 32px 36px;">
+                  <h1 style="margin: 0 0 10px 0; font-size: 21px; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; text-align: center;">
+                    Verify Your Email Address
+                  </h1>
+                  <p style="margin: 0 0 28px 0; font-size: 14.5px; color: #475569; line-height: 1.6; text-align: center;">
+                    Hi <strong style="color: #0F172A;">${cleanUsername}</strong>, welcome to WhisprLive! Enter the 6-digit verification code below to activate your account and start hosting live sessions:
                   </p>
 
-                  <!-- OTP Code Box -->
-                  <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px 16px; text-align: center; margin: 0 0 24px 0;">
-                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748B; margin-bottom: 10px;">
-                      Verification Code
+                  <!-- OTP Code Card -->
+                  <div style="background: linear-gradient(145deg, #F8FAFC 0%, #EFF6FF 100%); border: 1px solid #DBEAFE; border-radius: 16px; padding: 28px 20px; text-align: center; margin: 0 0 28px 0; box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.8);">
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #2563EB; margin-bottom: 12px;">
+                      One-Time Verification Code
                     </div>
-                    <div style="font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 38px; font-weight: 800; letter-spacing: 12px; color: #2563EB; margin-left: 12px;">
+                    
+                    <div style="display: inline-block; font-family: 'JetBrains Mono', SFMono-Regular, Consolas, Monaco, monospace; font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #1E3A8A; background: #FFFFFF; padding: 12px 24px; border-radius: 12px; border: 1px solid #BFDBFE; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08); margin-left: 10px;">
                       ${otp}
                     </div>
-                    <div style="margin-top: 10px; font-size: 12px; color: #94A3B8; font-weight: 500;">
-                      Expires in <strong>10 minutes</strong>
+
+                    <div style="margin-top: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: #64748B; font-weight: 500;">
+                      <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background-color: #10B981; margin-right: 6px;"></span>
+                      Code expires in <strong style="color: #334155; margin-left: 4px;">10 minutes</strong>
                     </div>
+                  </div>
+
+                  <!-- Feature Highlights Box -->
+                  <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                    <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                      What you can do with WhisprLive:
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #475569;">
+                      <tr>
+                        <td style="padding: 4px 0; vertical-align: top; width: 24px;">🚀</td>
+                        <td style="padding: 4px 0;"><strong>Create Live Rooms</strong> with instant branded QR codes</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; vertical-align: top; width: 24px;">💬</td>
+                        <td style="padding: 4px 0;"><strong>100% Anonymous Q&A</strong> with live crowd upvoting</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; vertical-align: top; width: 24px;">📊</td>
+                        <td style="padding: 4px 0;"><strong>Interactive Polls</strong> and real-time word clouds</td>
+                      </tr>
+                    </table>
                   </div>
 
                   <!-- Security Callout -->
-                  <div style="background: #EFF6FF; border-left: 3px solid #2563EB; border-radius: 6px; padding: 12px 14px; margin-bottom: 24px;">
-                    <p style="margin: 0; font-size: 13px; color: #1E40AF; line-height: 1.5;">
-                      <strong>Security tip:</strong> Never share this code with anyone. WhisprLive will never ask for your verification code.
+                  <div style="border-left: 3px solid #F59E0B; background-color: #FFFBEB; border-radius: 0 8px 8px 0; padding: 12px 16px; margin-bottom: 24px;">
+                    <p style="margin: 0; font-size: 12.5px; color: #92400E; line-height: 1.5;">
+                      <strong>Security Tip:</strong> Never share this code with anyone. WhisprLive will never ask for your verification code.
                     </p>
                   </div>
 
-                  <p style="margin: 0; font-size: 12.5px; color: #94A3B8; line-height: 1.5;">
-                    If you did not request this verification code or didn't attempt to sign up for WhisprLive, you can safely disregard this email.
+                  <p style="margin: 0; font-size: 12px; color: #94A3B8; line-height: 1.5; text-align: center;">
+                    If you didn't attempt to create a WhisprLive account, you can safely disregard this email.
                   </p>
                 </div>
 
-                <!-- Footer -->
-                <div style="padding: 20px 32px; background: #F8FAFC; border-top: 1px solid #E2E8F0; text-align: center;">
-                  <p style="margin: 0; font-size: 12px; color: #94A3B8;">
-                    © WhisprLive · Real-time interactive audience engagement
+                <!-- Footer Section -->
+                <div style="padding: 24px 36px; background-color: #F8FAFC; border-top: 1px solid #E2E8F0; text-align: center;">
+                  <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #475569;">
+                    WhisprLive · The Frictionless Live Audience Engagement Platform
+                  </p>
+                  <p style="margin: 0; font-size: 11px; color: #94A3B8;">
+                    © ${new Date().getFullYear()} WhisprLive. All rights reserved.
                   </p>
                 </div>
 
@@ -296,7 +333,8 @@ app.post("/api/auth/verify-signup-otp", authLimiter, async (req, res) => {
     res.status(200).json({
       message: "Account verified successfully!",
       token,
-      user
+      user,
+      isNewUser: true
     });
   } catch (err) {
     console.error("verify-signup-otp error:", err);
@@ -334,7 +372,7 @@ app.post("/signup", authLimiter, async (req, res) => {
         createdAt: true
       }
     })
-    res.status(201).json({ message: "User created successfully", user: newUser })
+    res.status(201).json({ message: "User created successfully", user: newUser, isNewUser: true })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: "Internal Server Error" })
@@ -435,10 +473,12 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
       })
     }
     // check if user already exists
+    let isNewUser = false;
     let user = await prisma.user.findUnique({
       where: { email }
     })
     if (!user) {
+      isNewUser = true;
       user = await prisma.user.create({
         data: {
           email,
@@ -459,6 +499,7 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
     res.json({
       message: "Google Sign-in Successful",
       token,
+      isNewUser,
       user: {
         id: user.id,
         email: user.email,

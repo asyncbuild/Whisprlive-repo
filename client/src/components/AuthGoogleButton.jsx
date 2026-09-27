@@ -23,6 +23,9 @@ export default function AuthGoogleButton({ onLoading, text = "Continue with Goog
           accessToken: tokenResponse.access_token,
         });
 
+        if (res.data?.isNewUser && res.data?.user?.id) {
+          localStorage.setItem(`whisprlive_tour_new_user_${res.data.user.id}`, 'true');
+        }
         if (login) login(res.data.user, res.data.token);
         toast.success("Google Sign-In Successful!");
         navigate("/dashboard");
