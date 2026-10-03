@@ -16,7 +16,7 @@ export const authLimiter = rateLimit({
 // Prevents spam creation of disposable Q&A rooms
 export const roomCreationLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes window
-  max: 5, // Limit each IP to 5 room creations per 10 minutes
+  max: 50, // Limit each IP to 50 room creations per 10 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: {

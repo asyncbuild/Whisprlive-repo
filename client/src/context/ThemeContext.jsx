@@ -13,10 +13,7 @@ export function ThemeProvider({ children }) {
       // Ignore localStorage errors in restricted environments
     }
 
-    // Default to user's OS preference
-    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
+    // Default to Light theme for all users
     return 'light';
   });
 
@@ -37,31 +34,6 @@ export function ThemeProvider({ children }) {
       // Ignore storage errors
     }
   }, [theme]);
-
-  // Listen to OS theme changes if user hasn't explicitly saved a preference
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e) => {
-      try {
-        const savedTheme = localStorage.getItem('whisprlive_theme');
-        if (!savedTheme) {
-          setThemeState(e.matches ? 'dark' : 'light');
-        }
-      } catch {
-        // Ignore
-      }
-    };
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    } else if (mediaQuery.addListener) {
-      mediaQuery.addListener(handleChange);
-      return () => mediaQuery.removeListener(handleChange);
-    }
-  }, []);
 
   const setTheme = (newTheme) => {
     if (newTheme === 'dark' || newTheme === 'light') {

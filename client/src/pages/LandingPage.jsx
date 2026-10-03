@@ -455,13 +455,15 @@ export default function LandingPage() {
                   <div className="price-amount">{geoCurrency.symbol}0</div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> Unlimited sessions</li>
+                    <li><Check size={15} /> Unlimited live sessions</li>
                     <li><Check size={15} /> Up to 100 questions / session</li>
-                    <li><Check size={15} /> Anonymous Q&amp;A &amp; live upvotes</li>
-                    <li><Check size={15} /> Live polls &amp; word clouds</li>
+                    <li><Check size={15} /> Anonymous Q&amp;A &amp; instant live upvotes</li>
+                    <li><Check size={15} /> Live polls &amp; dynamic word clouds</li>
                     <li><Check size={15} /> Up to 2 saved templates in library</li>
-                    <li><Check size={15} /> 15-min timers</li>
-                    <li><Check size={15} /> 7 days history retention</li>
+                    <li><Check size={15} /> Real-time moderation &amp; host replies</li>
+                    <li><Check size={15} /> Instant TXT session export</li>
+                    <li><Check size={15} /> 15-minute room timers</li>
+                    <li><Check size={15} /> 7 days session history</li>
                   </ul>
                 </div>
                 <button
@@ -494,13 +496,16 @@ export default function LandingPage() {
                   </div>
                   <p style={{ fontSize: "12.5px", color: "var(--text-dim)", margin: "4px 0 0" }}>One-time pass per event · Launch pricing</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> 1 room for 24 hours</li>
-                    <li><Check size={15} /> Up to 500 messages / room</li>
+                    <li><Check size={15} /> 1 room active for full 24 hours</li>
+                    <li><Check size={15} /> Up to 500 questions / room</li>
+                    <li><Check size={15} /> Live audience quizzes &amp; answer reveal</li>
                     <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
                     <li><Check size={15} /> Unlimited poll templates in library</li>
-                    <li><Check size={15} /> Scheduled start supported</li>
-                    <li><Check size={15} /> 30 days history retention</li>
-                    <li><Check size={15} /> Export transcript (.txt)</li>
+                    <li><Check size={15} /> Co-host &amp; moderator collaboration</li>
+                    <li><Check size={15} /> CSV spreadsheet &amp; TXT exports</li>
+                    <li><Check size={15} /> Audience device &amp; location insights</li>
+                    <li><Check size={15} /> Scheduled room start &amp; custom duration</li>
+                    <li><Check size={15} /> 30 days session history</li>
                   </ul>
                 </div>
                 <button
@@ -525,13 +530,17 @@ export default function LandingPage() {
                   </div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>For active hosts &amp; speakers</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> Unlimited rooms</li>
-                    <li><Check size={15} /> Up to 1,000 messages / room</li>
-                    <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
-                    <li><Check size={15} /> Unlimited poll templates in library</li>
-                    <li><Check size={15} /> 60-min room timers</li>
-                    <li><Check size={15} /> Scheduled start</li>
-                    <li><Check size={15} /> 90 days history retention</li>
+                    <li><Check size={15} /> Unlimited rooms &amp; sessions</li>
+                    <li><Check size={15} /> Up to 1,000 questions / room</li>
+                    <li><Check size={15} /> Custom vanity slugs (e.g. /ask/your-event)</li>
+                    <li><Check size={15} /> AI live auto-moderation &amp; safety filtering</li>
+                    <li><Check size={15} /> Live quizzes, polls &amp; unlimited templates</li>
+                    <li><Check size={15} /> Up to 3 co-hosts per room</li>
+                    <li><Check size={15} /> CSV, PDF &amp; JSON session exports</li>
+                    <li><Check size={15} /> Audience device &amp; geo analytics</li>
+                    <li><Check size={15} /> 60-minute room timers &amp; scheduled starts</li>
+                    <li><Check size={15} /> 90 days session history</li>
+                    <li><Check size={15} /> Priority email &amp; chat support</li>
                   </ul>
                 </div>
                 <button
@@ -555,14 +564,16 @@ export default function LandingPage() {
                   </div>
                   <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>For conferences &amp; studios</p>
                   <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> Unlimited rooms</li>
-                    <li><Check size={15} /> Up to 2,500 messages / room</li>
-                    <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
-                    <li><Check size={15} /> Unlimited poll templates in library</li>
-                    <li><Check size={15} /> 120-min room timers</li>
-                    <li><Check size={15} /> 1 year history retention</li>
-                    <li><Check size={15} /> Export (.txt &amp; CSV)</li>
-                    <li><Check size={15} /> Priority email support</li>
+                    <li><Check size={15} /> Unlimited rooms &amp; concurrent sessions</li>
+                    <li><Check size={15} /> Up to 2,500 questions / room</li>
+                    <li><Check size={15} /> Custom event logo watermark on QR scanner &amp; stage</li>
+                    <li><Check size={15} /> AI smart question clustering &amp; deduplication</li>
+                    <li><Check size={15} /> AI executive recap &amp; sentiment analysis</li>
+                    <li><Check size={15} /> Custom vanity slugs (e.g. /ask/your-brand)</li>
+                    <li><Check size={15} /> Unlimited co-hosts &amp; moderator seats</li>
+                    <li><Check size={15} /> Full audience analytics &amp; all export formats</li>
+                    <li><Check size={15} /> 120-min+ timers &amp; multi-day passes</li>
+                    <li><Check size={15} /> 1 year session history &amp; 24/7 priority support</li>
                   </ul>
                 </div>
                 <button

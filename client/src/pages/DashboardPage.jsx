@@ -4,7 +4,8 @@ import {
   Link2, Play, Trash2,
   Clock, User, LogOut, Radio, Check, Copy,
   MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, Plus, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
-  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download, Users
+  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download, Users,
+  Monitor, Palette, Layers, FileText, PieChart, HelpCircle, Trophy, Target, Upload
 } from "lucide-react";
 import { io } from "socket.io-client";
 import QRCode from "qrcode";
@@ -14,6 +15,7 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
 import ThemeToggle from "../components/ThemeToggle";
 import OnboardingTour from "../components/OnboardingTour";
+import LiveReactionsOverlay from "../components/LiveReactionsOverlay";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
@@ -80,6 +82,7 @@ export default function DashboardPage() {
   const [scheduleTime, setScheduleTime] = useState("");
   const [usePass, setUsePass] = useState(false);
   const [activityType, setActivityType] = useState("ALL"); // "ALL" | "POLL" | "WORD_CLOUD" | "QA"
+  const [customSlug, setCustomSlug] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Loading states
@@ -97,11 +100,32 @@ export default function DashboardPage() {
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollType, setPollType] = useState("CHOICE"); // "CHOICE" | "WORD_CLOUD"
   const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [isQuiz, setIsQuiz] = useState(false);
+  const [quizCorrectIndex, setQuizCorrectIndex] = useState(0);
+  const [quizTimerSeconds, setQuizTimerSeconds] = useState(0);
+  const [revealingQuiz, setRevealingQuiz] = useState(false);
   const [submittingPoll, setSubmittingPoll] = useState(false);
   const [endingPoll, setEndingPoll] = useState(false);
   const [replyingMessageId, setReplyingMessageId] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [savingReplyId, setSavingReplyId] = useState(null);
+
+  // Studio & Host Features: Export, Branding, AI Insights
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState("txt");
+  const [exportRoomCode, setExportRoomCode] = useState(null);
+  const [showBrandingModal, setShowBrandingModal] = useState(false);
+  const [brandingLogo, setBrandingLogo] = useState("");
+  const [brandingColor, setBrandingColor] = useState("#2563EB");
+  const [stageTheme, setStageTheme] = useState("dark");
+  const [savingBranding, setSavingBranding] = useState(false);
+  const [showAiInsightsModal, setShowAiInsightsModal] = useState(false);
+  const [aiModalTab, setAiModalTab] = useState("clusters"); // "clusters" | "summary"
+  const [aiClusters, setAiClusters] = useState(null);
+  const [aiSummary, setAiSummary] = useState(null);
+  const [loadingAiClusters, setLoadingAiClusters] = useState(false);
+  const [loadingAiSummary, setLoadingAiSummary] = useState(false);
+  const reactionsRef = useRef(null);
 
   // Poll Templates & Library States
   const [pollTemplates, setPollTemplates] = useState([]);
@@ -212,12 +236,12 @@ export default function DashboardPage() {
         };
 
         qrImg.src = qrData;
-        logoImg.src = "/Logo Bgless.png";
+        logoImg.src = session?.brandLogo || "/Logo Bgless.png";
       })
       .catch((err) => {
         console.error("Failed to generate QR code:", err);
       });
-  }, [session?.link]);
+  }, [session?.link, session?.brandLogo]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [waitlistPlan, setWaitlistPlan] = useState("HOST");
@@ -251,6 +275,9 @@ export default function DashboardPage() {
       showReportModal ||
       showQrModal ||
       showPollModal ||
+      showExportModal ||
+      showBrandingModal ||
+      showAiInsightsModal ||
       showTour
     );
 
@@ -270,6 +297,9 @@ export default function DashboardPage() {
     showReportModal,
     showQrModal,
     showPollModal,
+    showExportModal,
+    showBrandingModal,
+    showAiInsightsModal,
     showTour
   ]);
 
@@ -550,7 +580,8 @@ export default function DashboardPage() {
         startsAt: startsAtIso,
         usePass,
         showPublicFeed,
-        activityType
+        activityType,
+        customSlug: customSlug.trim() || undefined
       };
       const res = await API.post("/api/rooms", payload);
       const roomCode = res.data.room;
@@ -561,7 +592,8 @@ export default function DashboardPage() {
         title: payload.title,
         duration,
         roomCode,
-        link: `${window.location.host}/ask/${roomCode}`,
+        customSlug: res.data.customSlug || undefined,
+        link: `${window.location.host}/ask/${res.data.customSlug || roomCode}`,
         started: startMode === "now",
         startsAt: startTime.toISOString(),
         expiresAt,
@@ -573,6 +605,7 @@ export default function DashboardPage() {
       localStorage.setItem("whisprlive_active_session", JSON.stringify(sessionData));
       setSession(sessionData);
       setTitle("");
+      setCustomSlug("");
       setMessages([]);
       setActivePoll(null);
 
@@ -640,6 +673,13 @@ export default function DashboardPage() {
       socket.emit("join_room", session.roomCode);
     }
 
+    // Live Floating Reactions
+    socket.on("live_reaction", (data) => {
+      if (data?.emoji && reactionsRef.current) {
+        reactionsRef.current.triggerReaction(data.emoji);
+      }
+    });
+
     // Real-time Co-host Invitations / Removal / Room Close
     socket.on("collaborator_added", ({ room, addedBy }) => {
       if (!room) return;
@@ -689,6 +729,9 @@ export default function DashboardPage() {
         answered: newMsg.status === "answered" || newMsg.isAnswered === true,
         isPinned: Boolean(newMsg.isPinned),
         hostReply: newMsg.hostReply || null,
+        aiFlagged: Boolean(newMsg.aiFlagged),
+        aiFlagReason: newMsg.aiFlagReason || null,
+        aiCategory: newMsg.aiCategory || null,
         ts: new Date(newMsg.createdAt || Date.now()).getTime()
       };
       setMessages((prev) => {
@@ -721,6 +764,10 @@ export default function DashboardPage() {
       );
     });
 
+    socket.on("message_deleted", ({ messageId }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    });
+
     socket.on("room_settings_updated", (data) => {
       if (typeof data?.showPublicFeed === "boolean") {
         setShowPublicFeed(data.showPublicFeed);
@@ -747,6 +794,11 @@ export default function DashboardPage() {
 
     socket.on("poll_updated", (poll) => {
       setActivePoll(poll);
+    });
+
+    socket.on("quiz_revealed", (poll) => {
+      setActivePoll(poll);
+      toast.info("🎯 Quiz answers have been revealed to audience!");
     });
 
     socket.on("poll_ended", () => {
@@ -1153,6 +1205,22 @@ export default function DashboardPage() {
     }
   };
 
+  const deleteMessage = async (id) => {
+    if (!session?.roomCode) return;
+    const previousMessages = [...messages];
+    // 1. Instant optimistic UI removal (< 0.1ms)
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    toast.success("Question deleted");
+
+    try {
+      await API.delete(`/api/rooms/${session.roomCode}/messages/${id}`);
+    } catch (err) {
+      // Revert if API failed
+      setMessages(previousMessages);
+      toast.error(err.response?.data?.message || "Failed to delete question on server");
+    }
+  };
+
   const togglePublicFeedVisibility = async (newVal) => {
     if (!session?.roomCode) return;
     setShowPublicFeed(newVal);
@@ -1187,10 +1255,17 @@ export default function DashboardPage() {
 
     setSubmittingPoll(true);
     try {
+      const formattedOptions = pollType === "CHOICE" ? pollOptions.map((opt, idx) => ({
+        text: opt.trim(),
+        isCorrect: isQuiz ? idx === quizCorrectIndex : false
+      })).filter((o) => o.text !== "") : [];
+
       const res = await API.post(`/api/rooms/${session.roomCode}/polls`, {
         question: pollQuestion.trim(),
         type: pollType,
-        options: pollOptions.filter((o) => o.trim() !== "")
+        options: formattedOptions,
+        isQuiz,
+        quizTimerSeconds: isQuiz ? parseInt(quizTimerSeconds, 10) || 0 : 0
       });
       setActivePoll(res.data?.poll);
 
@@ -1215,13 +1290,153 @@ export default function DashboardPage() {
       setPollQuestion("");
       setTemplateFormTitle("");
       setPollOptions(["", ""]);
+      setIsQuiz(false);
+      setQuizCorrectIndex(0);
+      setQuizTimerSeconds(0);
       setSaveAsTemplate(false);
       setModalPollTab("active");
-      toast.success("🚀 Live poll launched to audience!");
+      toast.success(isQuiz ? "🎯 Live Quiz launched to audience!" : "🚀 Live poll launched to audience!");
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to launch poll");
     } finally {
       setSubmittingPoll(false);
+    }
+  };
+
+  const handleRevealQuiz = async () => {
+    if (!session?.roomCode || !activePoll) return;
+    setRevealingQuiz(true);
+    try {
+      const res = await API.post(`/api/rooms/${session.roomCode}/polls/${activePoll.id}/reveal`);
+      setActivePoll(res.data?.poll);
+      toast.success("🎯 Correct quiz answer revealed to audience!");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to reveal quiz answer");
+    } finally {
+      setRevealingQuiz(false);
+    }
+  };
+
+  // Export Modal Handlers
+  const openExportModal = (code) => {
+    setExportRoomCode(code || session?.roomCode);
+    setExportFormat("txt");
+    setShowExportModal(true);
+  };
+
+  const handleDownloadExport = async () => {
+    const code = exportRoomCode || session?.roomCode;
+    if (!code) return;
+    setExportingCode(code);
+    try {
+      const token = localStorage.getItem("whisprlive_token");
+      const res = await API.get(`/api/rooms/${code}/export?format=${exportFormat}`, {
+        responseType: "blob"
+      });
+
+      const blob = new Blob([res.data], {
+        type: exportFormat === "csv" ? "text/csv" : exportFormat === "json" ? "application/json" : "text/plain"
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `whisprlive-${code}-${exportFormat}.${exportFormat}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`Session exported as ${exportFormat.toUpperCase()}!`);
+      setShowExportModal(false);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        toast.error(err.response?.data?.message || "Export format not permitted in current tier.");
+      } else {
+        toast.error("Failed to export session data");
+      }
+    } finally {
+      setExportingCode(null);
+    }
+  };
+
+  // Custom Branding Modal Handlers (Studio)
+  const openBrandingModal = () => {
+    setBrandingLogo(session?.brandLogo || "");
+    setBrandingColor(session?.brandColor || "#2563EB");
+    setStageTheme(session?.stageTheme || "dark");
+    setShowBrandingModal(true);
+  };
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Logo file size must be 2MB or less");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBrandingLogo(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveBranding = async (e) => {
+    e?.preventDefault();
+    if (!session?.roomCode) return;
+    setSavingBranding(true);
+    try {
+      await API.post(`/api/rooms/${session.roomCode}/branding`, {
+        brandLogo: brandingLogo || null,
+        brandColor: "#2563EB",
+        stageTheme: "dark"
+      });
+      setSession((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, brandLogo: brandingLogo || null };
+        try {
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      toast.success(brandingLogo ? "✨ Custom Logo saved & applied to QR scanner!" : "Logo removed. Default WhisprLive watermark restored.");
+      setShowBrandingModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save logo. Ensure image is under 2MB and safe.");
+    } finally {
+      setSavingBranding(false);
+    }
+  };
+
+  // AI Insights Modal Handlers (Studio)
+  const openAiInsightsModal = () => {
+    setShowAiInsightsModal(true);
+    setAiModalTab("clusters");
+    loadAiClusters();
+  };
+
+  const loadAiClusters = async () => {
+    if (!session?.roomCode) return;
+    setLoadingAiClusters(true);
+    try {
+      const res = await API.get(`/api/rooms/${session.roomCode}/ai/cluster`);
+      setAiClusters(res.data?.clusters || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to load AI clusters. Requires Host or Studio plan.");
+    } finally {
+      setLoadingAiClusters(false);
+    }
+  };
+
+  const loadAiSummary = async () => {
+    if (!session?.roomCode) return;
+    setLoadingAiSummary(true);
+    try {
+      const res = await API.get(`/api/rooms/${session.roomCode}/ai/summary`);
+      setAiSummary(res.data?.summary || null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to generate AI session summary.");
+    } finally {
+      setLoadingAiSummary(false);
     }
   };
 
@@ -1495,23 +1710,28 @@ export default function DashboardPage() {
             <span
               className={`plan-badge ${(!currentUser?.plan || currentUser?.plan === "SOLO") ? "plan-badge-solo" : ""}`}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
                 fontSize: 11,
                 fontWeight: 700,
                 padding: "4px 10px",
                 borderRadius: "999px",
                 background: (currentUser?.plan === "STUDIO")
-                  ? "var(--accent-soft)"
+                  ? "rgba(37, 99, 235, 0.08)"
                   : (currentUser?.plan === "HOST")
-                    ? "var(--live-soft)"
+                    ? "rgba(255, 90, 54, 0.08)"
                     : "var(--surface-2)",
                 color: (currentUser?.plan === "STUDIO")
-                  ? "var(--accent)"
+                  ? "#2563EB"
                   : (currentUser?.plan === "HOST")
-                    ? "var(--live)"
-                    : "var(--text)",
-                border: "1px solid var(--border)",
-                alignItems: "center",
-                gap: 4,
+                    ? "#FF5A36"
+                    : "var(--text-dim)",
+                border: (currentUser?.plan === "STUDIO")
+                  ? "1px solid rgba(37, 99, 235, 0.25)"
+                  : (currentUser?.plan === "HOST")
+                    ? "1px solid rgba(255, 90, 54, 0.25)"
+                    : "1px solid var(--border)",
                 textTransform: "uppercase",
                 letterSpacing: "0.04em",
                 whiteSpace: "nowrap",
@@ -1519,10 +1739,10 @@ export default function DashboardPage() {
                 lineHeight: 1
               }}
             >
-              {currentUser?.plan === "STUDIO" && <Crown size={12} />}
-              {currentUser?.plan === "HOST" && <Sparkles size={12} />}
-              <span>{currentUser?.plan || "SOLO"}</span>
-              <span className="plan-text-suffix"> PLAN</span>
+              {currentUser?.plan === "STUDIO" && <Crown size={13} style={{ strokeWidth: 2.2, marginBottom: 1 }} />}
+              {currentUser?.plan === "HOST" && <Sparkles size={13} style={{ strokeWidth: 2.2 }} />}
+              <span style={{ fontWeight: 800 }}>{currentUser?.plan || "SOLO"}</span>
+              <span className="plan-text-suffix" style={{ fontWeight: 600, opacity: 0.85, marginLeft: 2 }}>PLAN</span>
             </span>
 
             {currentUser?.roomPasses > 0 && (
@@ -1769,6 +1989,36 @@ export default function DashboardPage() {
                 )}
               </div>
 
+              {/* Custom Vanity URL Slug (Host & Studio plans) */}
+              <div className="new-session-slug-row" style={{ marginTop: 16, padding: "14px 16px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Sparkles size={14} style={{ color: "var(--accent)" }} /> Custom Vanity URL Slug (Optional)
+                  </label>
+                  {(!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS") && (
+                    <span
+                      onClick={openUpgradeModal}
+                      style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
+                      <Lock size={10} /> Host & Studio Plans
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, color: "var(--text-faint)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+                    whisprlive.com/ask/
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="e.g. keynote-qna"
+                    value={customSlug}
+                    onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ""))}
+                    disabled={!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS"}
+                    style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13.5, background: (!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS") ? "var(--surface-3)" : "var(--surface)" }}
+                  />
+                </div>
+              </div>
+
               {/* Audience Feed Visibility Setting - Full Width */}
               <div className="new-session-toggle-row" id="tour-target-feed-toggle">
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1853,8 +2103,8 @@ export default function DashboardPage() {
                         {session.title}
                       </div>
                       <div className="mono" style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 4 }}>
-                        {session.duration}-minute session · Room Code:{" "}
-                        <strong style={{ color: "var(--accent)" }}>{session.roomCode}</strong>
+                        {session.duration}-minute session · {session.customSlug ? "Slug: " : "Room Code: "}
+                        <strong style={{ color: "var(--accent)" }}>{session.customSlug ? `/ask/${session.customSlug}` : session.roomCode}</strong>
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1972,6 +2222,38 @@ export default function DashboardPage() {
                         {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied Link" : "Copy Link"}
                       </button>
                       <button
+                        className="btn btn-soft btn-sm"
+                        onClick={() => window.open(`/stage/${session.customSlug || session.roomCode}`, "_blank")}
+                        title="Open Fullscreen Presenter / Projector Stage View"
+                      >
+                        <Monitor size={14} /> Stage View
+                      </button>
+                      <button
+                        className="btn btn-soft btn-sm"
+                        onClick={() => openExportModal(session.roomCode)}
+                        title="Export session transcripts & data"
+                      >
+                        <Download size={14} /> Export
+                      </button>
+                      {currentUser?.plan === "STUDIO" && (
+                        <button
+                          className="btn btn-soft btn-sm"
+                          onClick={openBrandingModal}
+                          title="Custom Branding & Stage Styling"
+                        >
+                          <Palette size={14} /> Branding
+                        </button>
+                      )}
+                      {(currentUser?.plan === "STUDIO" || currentUser?.plan === "HOST") && (
+                        <button
+                          className="btn btn-soft btn-sm"
+                          onClick={openAiInsightsModal}
+                          title="AI Question Clustering & Session Summary"
+                        >
+                          <Sparkles size={14} /> AI Insights
+                        </button>
+                      )}
+                      <button
                         className="btn btn-primary btn-sm"
                         onClick={() => (activePoll ? openActivePollModal() : openSessionPollModal())}
                         title={activePoll ? "View active live poll results or saved drafts" : "Open saved poll drafts to launch to audience"}
@@ -1983,7 +2265,7 @@ export default function DashboardPage() {
                         }}
                       >
                         <BarChart2 size={14} />
-                        {activePoll ? "Live Poll 🔴" : "Live Polls"}
+                        {activePoll ? (activePoll.isQuiz ? "Live Quiz 🎯" : "Live Poll 🔴") : "Live Polls"}
                       </button>
                     </div>
 
@@ -2013,13 +2295,15 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Active Live Poll HUD Widget (Visible on Host screen in Real-Time) */}
+                {/* Active Live Poll & Quiz HUD Widget (Visible on Host screen in Real-Time) */}
                 {activePoll && (
                   <div className="host-active-poll-hud" style={{
                     marginBottom: 16,
                     padding: "16px 20px",
-                    background: "linear-gradient(145deg, rgba(255, 90, 54, 0.06) 0%, var(--surface-1) 100%)",
-                    border: "1px solid rgba(255, 90, 54, 0.35)",
+                    background: activePoll.isQuiz
+                      ? "linear-gradient(145deg, rgba(16, 185, 129, 0.08) 0%, var(--surface-1) 100%)"
+                      : "linear-gradient(145deg, rgba(255, 90, 54, 0.06) 0%, var(--surface-1) 100%)",
+                    border: activePoll.isQuiz ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid rgba(255, 90, 54, 0.35)",
                     borderRadius: "var(--radius-lg)",
                     boxShadow: "0 4px 20px rgba(0, 0, 0, 0.25)"
                   }}>
@@ -2035,18 +2319,33 @@ export default function DashboardPage() {
                           textTransform: "uppercase",
                           padding: "3px 10px",
                           borderRadius: 999,
-                          background: "rgba(255, 90, 54, 0.15)",
-                          color: "var(--primary)",
-                          border: "1px solid rgba(255, 90, 54, 0.4)"
+                          background: activePoll.isQuiz ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 90, 54, 0.15)",
+                          color: activePoll.isQuiz ? "#10B981" : "var(--primary)",
+                          border: activePoll.isQuiz ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid rgba(255, 90, 54, 0.4)"
                         }}>
-                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--primary)" }} />
-                          LIVE {activePoll.type === "WORD_CLOUD" ? "WORD CLOUD" : "POLL"}
+                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: activePoll.isQuiz ? "#10B981" : "var(--primary)" }} />
+                          {activePoll.isQuiz ? "LIVE QUIZ 🎯" : `LIVE ${activePoll.type === "WORD_CLOUD" ? "WORD CLOUD" : "POLL"}`}
                         </span>
                         <span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 500 }}>
                           {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"} received
                         </span>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {activePoll.isQuiz && !activePoll.isQuizRevealed && (
+                          <button
+                            className="btn btn-primary btn-xs"
+                            onClick={handleRevealQuiz}
+                            disabled={revealingQuiz}
+                            style={{ fontSize: 12, padding: "5px 12px", background: "linear-gradient(135deg, #10B981 0%, #059669 100%)", border: "none" }}
+                          >
+                            {revealingQuiz ? "Revealing..." : "Reveal Correct Answer 🎯"}
+                          </button>
+                        )}
+                        {activePoll.isQuiz && activePoll.isQuizRevealed && (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#10B981", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <CheckCircle2 size={13} /> Answer Revealed
+                          </span>
+                        )}
                         <button
                           className="btn btn-soft btn-xs"
                           onClick={openActivePollModal}
@@ -2071,23 +2370,28 @@ export default function DashboardPage() {
 
                     {activePoll.type === "CHOICE" ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {activePoll.options.map((opt) => (
-                          <div key={opt.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
-                              <span style={{ fontWeight: 500, color: "var(--text)" }}>{opt.text}</span>
-                              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{opt.percentage}% ({opt.votes})</span>
+                        {activePoll.options.map((opt) => {
+                          const isCorrect = activePoll.isQuizRevealed && opt.isCorrect;
+                          return (
+                            <div key={opt.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
+                                <span style={{ fontWeight: isCorrect ? 700 : 500, color: isCorrect ? "#10B981" : "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                                  {opt.text} {isCorrect && <CheckCircle2 size={14} style={{ color: "#10B981" }} />}
+                                </span>
+                                <span style={{ fontWeight: 600, color: isCorrect ? "#10B981" : "var(--primary)" }}>{opt.percentage}% ({opt.votes})</span>
+                              </div>
+                              <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
+                                <div style={{
+                                  height: "100%",
+                                  width: `${opt.percentage}%`,
+                                  background: isCorrect ? "linear-gradient(90deg, #10B981 0%, #059669 100%)" : "linear-gradient(90deg, #FF5A36 0%, #EA580C 100%)",
+                                  borderRadius: 999,
+                                  transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                                }} />
+                              </div>
                             </div>
-                            <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
-                              <div style={{
-                                height: "100%",
-                                width: `${opt.percentage}%`,
-                                background: "linear-gradient(90deg, #FF5A36 0%, #EA580C 100%)",
-                                borderRadius: 999,
-                                transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
-                              }} />
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <WordCloudVisualizer
@@ -2206,6 +2510,15 @@ export default function DashboardPage() {
                                         <CheckCircle2 size={11} /> Answered
                                       </span>
                                     )}
+                                    {m.aiFlagged && (
+                                      <span
+                                        className="bubble-tag"
+                                        style={{ background: "rgba(239, 68, 68, 0.15)", color: "#EF4444", border: "1px solid rgba(239, 68, 68, 0.35)", fontSize: 10.5 }}
+                                        title={m.aiFlagReason || "Flagged by AI moderation filter"}
+                                      >
+                                        <AlertTriangle size={10} /> AI Flagged: {m.aiCategory || "Toxicity"}
+                                      </span>
+                                    )}
                                     <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)", display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4 }}>
                                       <ThumbsUp size={11} /> {m.votes || 0}
                                     </span>
@@ -2231,8 +2544,17 @@ export default function DashboardPage() {
                                       className={`answer-btn ${m.answered ? "done" : ""}`}
                                       onClick={() => toggleAnswered(m.id)}
                                       title={m.answered ? "Mark as unanswered" : "Mark as answered"}
+                                      style={{ marginRight: 4 }}
                                     >
                                       <Check size={14} />
+                                    </button>
+                                    <button
+                                      className="answer-btn delete-btn"
+                                      onClick={() => deleteMessage(m.id)}
+                                      title="Delete question permanently"
+                                      style={{ color: "#EF4444" }}
+                                    >
+                                      <Trash2 size={13} />
                                     </button>
                                   </div>
                                 </div>
@@ -2348,14 +2670,14 @@ export default function DashboardPage() {
                       </div>
                       <span className="past-card-date" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                         <Clock size={13} style={{ color: "var(--accent)" }} />
-                        {dateStr} · Code: <strong style={{ color: "var(--text)" }}>{code}</strong>
+                        {dateStr} · {p.customSlug ? "Slug: " : "Code: "}<strong style={{ color: "var(--text)" }}>{p.customSlug ? `/ask/${p.customSlug}` : code}</strong>
                       </span>
                     </div>
                     <div className="past-card-stats">
                       <div className="stat"><span className="stat-num">{responseCount}</span><span className="stat-label">Responses</span></div>
                       <div className="stat"><span className="stat-num">{durMinutes}m</span><span className="stat-label">Duration</span></div>
                     </div>
-                    <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap" }}>
                       <button
                         className="btn btn-primary btn-sm past-recap-btn"
                         onClick={() => openSessionReport(p)}
@@ -2363,6 +2685,13 @@ export default function DashboardPage() {
                       >
                         {reportLoadingCode === code ? <Loader2 size={13} className="spin" /> : <BarChart2 size={13} />}
                         {reportLoadingCode === code ? "Loading..." : "Recap"}
+                      </button>
+                      <button
+                        className="btn btn-soft btn-sm"
+                        onClick={() => openExportModal(code)}
+                        title="Export session data (.txt, .csv, .json)"
+                      >
+                        <Download size={13} /> Export
                       </button>
                       {(() => {
                         const isUnlocked = !isSolo || p.isPassUsed;
@@ -2710,13 +3039,14 @@ export default function DashboardPage() {
                       <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500 }}> /pass</span>
                     </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>1 room for 24 hours</li>
-                      <li>Up to 500 messages / room</li>
+                      <li>1 room active for 24 hours</li>
+                      <li>Up to 500 questions / room</li>
                       <li>Unlimited live polls &amp; word clouds</li>
                       <li>Unlimited poll templates in library</li>
-                      <li>Scheduled start supported</li>
-                      <li>30 days history retention</li>
-                      <li>Export responses</li>
+                      <li>Co-host &amp; moderator collaboration</li>
+                      <li>Audience device &amp; location insights</li>
+                      <li>Scheduled room start &amp; custom duration</li>
+                      <li>30 days session history</li>
                     </ul>
                   </div>
                   <button
@@ -2740,13 +3070,15 @@ export default function DashboardPage() {
                       {geoCurrency.isIndia ? "₹349/mo" : "$9/mo"}
                     </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>Unlimited rooms</li>
-                      <li>Up to 1,000 messages / room</li>
+                      <li>Unlimited rooms &amp; sessions</li>
+                      <li>Up to 1,000 questions / room</li>
                       <li>Unlimited live polls &amp; word clouds</li>
                       <li>Unlimited poll templates in library</li>
-                      <li>60-min room timers</li>
-                      <li>Scheduled start</li>
-                      <li>90 days history retention</li>
+                      <li>Up to 3 co-hosts per room</li>
+                      <li>Audience device &amp; location analytics</li>
+                      <li>60-minute room timers &amp; scheduled starts</li>
+                      <li>90 days session history</li>
+                      <li>Priority email &amp; chat support</li>
                     </ul>
                   </div>
                   <button
@@ -2769,14 +3101,15 @@ export default function DashboardPage() {
                       {geoCurrency.isIndia ? "₹799/mo" : "$19/mo"}
                     </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>Unlimited rooms</li>
-                      <li>Up to 2,500 messages / room</li>
+                      <li>Unlimited rooms &amp; concurrent sessions</li>
+                      <li>Up to 2,500 questions / room</li>
                       <li>Unlimited live polls &amp; word clouds</li>
                       <li>Unlimited poll templates in library</li>
-                      <li>120-min room timers</li>
-                      <li>1 year history retention</li>
-                      <li>Export (.txt &amp; CSV)</li>
-                      <li>Priority email support</li>
+                      <li>Unlimited co-hosts &amp; moderator seats</li>
+                      <li>Full audience analytics &amp; insights</li>
+                      <li>120-min+ timers &amp; multi-day passes</li>
+                      <li>1 year session history</li>
+                      <li>Dedicated priority 24/7 support</li>
                     </ul>
                   </div>
                   <button
@@ -3491,12 +3824,28 @@ export default function DashboardPage() {
 
                     {pollType === "CHOICE" && (
                       <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text)" }}>
-                          Options (Minimum 2)
-                        </label>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                            Options (Minimum 2) {isQuiz && <span style={{ color: "#10B981", fontSize: 12 }}>— Select the correct answer</span>}
+                          </label>
+                        </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {pollOptions.map((opt, idx) => (
                             <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              {isQuiz && (
+                                <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }} title="Mark as correct answer">
+                                  <input
+                                    type="radio"
+                                    name="quizCorrectOption"
+                                    checked={quizCorrectIndex === idx}
+                                    onChange={() => setQuizCorrectIndex(idx)}
+                                    style={{ cursor: "pointer", accentColor: "#10B981", width: 16, height: 16 }}
+                                  />
+                                  <span style={{ fontSize: 12, fontWeight: quizCorrectIndex === idx ? 700 : 500, color: quizCorrectIndex === idx ? "#10B981" : "var(--text-dim)" }}>
+                                    {quizCorrectIndex === idx ? "Correct" : ""}
+                                  </span>
+                                </label>
+                              )}
                               <input
                                 type="text"
                                 placeholder={`Option ${idx + 1}`}
@@ -3507,13 +3856,17 @@ export default function DashboardPage() {
                                   setPollOptions(updated);
                                 }}
                                 required={idx < 2}
-                                style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13.5 }}
+                                style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: isQuiz && quizCorrectIndex === idx ? "1px solid #10B981" : "1px solid var(--border)", fontSize: 13.5 }}
                               />
                               {pollOptions.length > 2 && (
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                  onClick={() => {
+                                    const nextOpts = pollOptions.filter((_, i) => i !== idx);
+                                    setPollOptions(nextOpts);
+                                    if (quizCorrectIndex >= nextOpts.length) setQuizCorrectIndex(0);
+                                  }}
                                   style={{ padding: "6px 8px" }}
                                 >
                                   <X size={14} />
@@ -3531,6 +3884,55 @@ export default function DashboardPage() {
                           >
                             + Add Option
                           </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Quiz Mode Settings */}
+                    {pollType === "CHOICE" && (
+                      <div style={{ padding: "12px 14px", background: isQuiz ? "rgba(16, 185, 129, 0.08)" : "var(--surface-2)", border: isQuiz ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
+                            <input
+                              type="checkbox"
+                              checked={isQuiz}
+                              onChange={(e) => {
+                                const hasPass = (currentUser?.roomPasses || 0) > 0;
+                                const isSolo = (!currentUser?.plan || currentUser?.plan === "SOLO") && !hasPass;
+                                if (isSolo && e.target.checked) {
+                                  toast.info("Live Quiz Mode is available on 24h Room Pass, Host, and Studio plans.");
+                                  openUpgradeModal();
+                                  return;
+                                }
+                                setIsQuiz(e.target.checked);
+                              }}
+                              style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#10B981" }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                              <Trophy size={14} style={{ color: "#10B981" }} /> Live Quiz Mode
+                            </span>
+                          </label>
+                          {isQuiz && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <Clock size={13} style={{ color: "var(--text-dim)" }} />
+                              <select
+                                value={quizTimerSeconds}
+                                onChange={(e) => setQuizTimerSeconds(Number(e.target.value))}
+                                style={{ padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 12, background: "var(--surface)", color: "var(--text)" }}
+                              >
+                                <option value={0}>No Timer</option>
+                                <option value={15}>15 Seconds</option>
+                                <option value={30}>30 Seconds</option>
+                                <option value={45}>45 Seconds</option>
+                                <option value={60}>60 Seconds</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                        {isQuiz && (
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 6 }}>
+                            Audience members lock in their answer and you can reveal the correct answer with full results whenever you are ready!
+                          </div>
                         )}
                       </div>
                     )}
@@ -3591,6 +3993,431 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Export Session Modal */}
+      {showExportModal && (
+        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, width: "92%" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Download size={20} style={{ color: "var(--accent)" }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Export Session Data</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowExportModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 16 }}>
+                Download audience questions, answers, live polls, and engagement statistics for session <strong>{exportRoomCode || session?.roomCode}</strong>.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Plain TXT Option */}
+                <label
+                  onClick={() => setExportFormat("txt")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    border: exportFormat === "txt" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    background: exportFormat === "txt" ? "var(--accent-soft)" : "var(--surface-2)",
+                    cursor: "pointer"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <FileText size={18} style={{ color: "var(--accent)" }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Plain Text Transcript (.txt)</div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Questions, answers & poll tallies in readable text</div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--success)", background: "rgba(16, 185, 129, 0.15)", padding: "2px 8px", borderRadius: 999 }}>
+                    Included in All Plans
+                  </span>
+                </label>
+
+                {/* CSV Option */}
+                <label
+                  onClick={() => {
+                    const hasPass = (currentUser?.roomPasses || 0) > 0;
+                    const isSolo = (!currentUser?.plan || currentUser?.plan === "SOLO") && !hasPass;
+                    if (isSolo) {
+                      toast.info("CSV spreadsheet export requires 24h Room Pass, Host, or Studio plan.");
+                      openUpgradeModal();
+                      return;
+                    }
+                    setExportFormat("csv");
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    border: exportFormat === "csv" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    background: exportFormat === "csv" ? "var(--accent-soft)" : "var(--surface-2)",
+                    cursor: "pointer",
+                    opacity: (!currentUser?.plan || currentUser?.plan === "SOLO") && (currentUser?.roomPasses || 0) <= 0 ? 0.7 : 1
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Layers size={18} style={{ color: "#10B981" }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>CSV Spreadsheet (.csv)</div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Structured rows for Excel, Sheets, and analytics</div>
+                    </div>
+                  </div>
+                  {(!currentUser?.plan || currentUser?.plan === "SOLO") && (currentUser?.roomPasses || 0) <= 0 ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999, display: "flex", alignItems: "center", gap: 3 }}>
+                      <Lock size={10} /> Pass/Host
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", background: "rgba(16, 185, 129, 0.15)", padding: "2px 8px", borderRadius: 999 }}>
+                      Unlocked
+                    </span>
+                  )}
+                </label>
+
+                {/* JSON / Report Option */}
+                <label
+                  onClick={() => {
+                    const isAllowed = currentUser?.plan === "HOST" || currentUser?.plan === "STUDIO";
+                    if (!isAllowed) {
+                      toast.info("Full JSON session report requires Host or Studio plan.");
+                      openUpgradeModal();
+                      return;
+                    }
+                    setExportFormat("json");
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    border: exportFormat === "json" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    background: exportFormat === "json" ? "var(--accent-soft)" : "var(--surface-2)",
+                    cursor: "pointer",
+                    opacity: currentUser?.plan !== "HOST" && currentUser?.plan !== "STUDIO" ? 0.7 : 1
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Sparkles size={18} style={{ color: "var(--accent)" }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Full JSON Session Report (.json)</div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Complete raw data with timestamps and poll breakdown</div>
+                    </div>
+                  </div>
+                  {currentUser?.plan !== "HOST" && currentUser?.plan !== "STUDIO" ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999, display: "flex", alignItems: "center", gap: 3 }}>
+                      <Lock size={10} /> Host/Studio
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999 }}>
+                      Unlocked
+                    </span>
+                  )}
+                </label>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowExportModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleDownloadExport}
+                  disabled={exportingCode === (exportRoomCode || session?.roomCode)}
+                >
+                  {exportingCode === (exportRoomCode || session?.roomCode) ? (
+                    <>Exporting... <Loader2 size={13} className="spin" /></>
+                  ) : (
+                    <><Download size={14} /> Download {exportFormat.toUpperCase()}</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Branding & Stage Settings Modal (Studio Plan) */}
+      {showBrandingModal && (
+        <div className="modal-overlay" onClick={() => setShowBrandingModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500, width: "92%" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Palette size={20} style={{ color: "var(--accent)" }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Custom Event Logo</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowBrandingModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBranding} style={{ marginTop: 16 }}>
+              {/* Logo Upload Section */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+                  Event / Organization Logo
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  {brandingLogo ? (
+                    <div style={{ width: 68, height: 68, borderRadius: "var(--radius-md)", border: "1px solid var(--border)", padding: 6, background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                      <img src={brandingLogo} alt="Brand Logo Preview" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                    </div>
+                  ) : (
+                    <div style={{ width: 68, height: 68, borderRadius: "var(--radius-md)", border: "1.5px dashed var(--border)", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-faint)", flexShrink: 0 }}>
+                      <Palette size={24} style={{ opacity: 0.5 }} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="file"
+                      id="branding-logo-file-input"
+                      accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml"
+                      onChange={handleLogoUpload}
+                      style={{ display: "none" }}
+                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <label
+                        htmlFor="branding-logo-file-input"
+                        className="btn btn-soft btn-sm"
+                        style={{
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontWeight: 600,
+                          padding: "7px 14px",
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: 12.5,
+                          border: "1px solid var(--border)",
+                          background: "var(--surface-2)"
+                        }}
+                      >
+                        <Upload size={14} style={{ color: "var(--accent)" }} />
+                        {brandingLogo ? "Change Logo Image" : "Upload Logo Image"}
+                      </label>
+                      {brandingLogo && (
+                        <button
+                          type="button"
+                          onClick={() => setBrandingLogo("")}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: "var(--accent)", fontSize: 12, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
+                          <Trash2 size={13} /> Remove
+                        </button>
+                      )}
+                    </div>
+                    <span style={{ display: "block", fontSize: 11.5, color: "var(--text-dim)", marginTop: 6 }}>
+                      Supports PNG, JPG, SVG, WebP (max 2MB). Automatically watermarked onto audience QR scanner!
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowBrandingModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingBranding}>
+                  {savingBranding ? (
+                    <>Saving... <Loader2 size={13} className="spin" /></>
+                  ) : (
+                    "Save Logo Settings ✨"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI Insights Modal (Studio & Host Plans) */}
+      {showAiInsightsModal && (
+        <div className="modal-overlay" onClick={() => setShowAiInsightsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, width: "94%", maxHeight: "90vh", overflowY: "auto" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Sparkles size={20} style={{ color: "var(--accent)" }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>AI Session Intelligence</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowAiInsightsModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* AI Modal Tabs */}
+            <div className="poll-modal-tabs" style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                className={`poll-modal-tab-btn ${aiModalTab === "clusters" ? "active" : ""}`}
+                onClick={() => {
+                  setAiModalTab("clusters");
+                  if (!aiClusters) loadAiClusters();
+                }}
+              >
+                <Layers size={14} /> Topic Clusters
+              </button>
+              <button
+                type="button"
+                className={`poll-modal-tab-btn ${aiModalTab === "summary" ? "active" : ""}`}
+                onClick={() => {
+                  setAiModalTab("summary");
+                  if (!aiSummary) loadAiSummary();
+                }}
+              >
+                <FileText size={14} /> Executive Summary & Sentiment
+              </button>
+            </div>
+
+            {/* TAB 1: Topic Clusters */}
+            {aiModalTab === "clusters" && (
+              <div style={{ marginTop: 16 }}>
+                {loadingAiClusters ? (
+                  <LoadingSpinner text="Analyzing semantic question similarity..." />
+                ) : !aiClusters || aiClusters.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "30px 10px", color: "var(--text-dim)" }}>
+                    <Layers size={28} style={{ opacity: 0.6, marginBottom: 8 }} />
+                    <p style={{ fontSize: 14, fontWeight: 600 }}>No audience questions yet to cluster.</p>
+                    <p style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 4 }}>
+                      Once attendees submit questions, AI will group them into relevant topic themes automatically.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {aiClusters.map((cluster, cIdx) => (
+                      <div
+                        key={cIdx}
+                        style={{
+                          background: "var(--surface-2)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          padding: "14px 16px"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)" }} />
+                            {cluster.topic || "General Discussion"}
+                          </h4>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999 }}>
+                            {cluster.questions?.length || 0} questions
+                          </span>
+                        </div>
+                        {cluster.summary && (
+                          <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 10 }}>
+                            {cluster.summary}
+                          </p>
+                        )}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          {(cluster.questions || []).map((q, qIdx) => (
+                            <div
+                              key={qIdx}
+                              style={{
+                                fontSize: 12.5,
+                                color: "var(--text)",
+                                background: "var(--surface)",
+                                padding: "6px 10px",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--border-subtle)"
+                              }}
+                            >
+                              • {q}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: Executive Summary & Sentiment */}
+            {aiModalTab === "summary" && (
+              <div style={{ marginTop: 16 }}>
+                {loadingAiSummary ? (
+                  <LoadingSpinner text="Generating executive summary and audience sentiment analysis..." />
+                ) : !aiSummary ? (
+                  <div style={{ textAlign: "center", padding: "30px 10px", color: "var(--text-dim)" }}>
+                    <FileText size={28} style={{ opacity: 0.6, marginBottom: 8 }} />
+                    <p style={{ fontSize: 14, fontWeight: 600 }}>No session data to summarize.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {/* Executive Summary Card */}
+                    <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "16px" }}>
+                      <h4 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+                        Executive Summary
+                      </h4>
+                      <p style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.55 }}>
+                        {aiSummary.executiveSummary || "Session summary not available."}
+                      </p>
+                    </div>
+
+                    {/* Key Highlights */}
+                    {aiSummary.keyHighlights && aiSummary.keyHighlights.length > 0 && (
+                      <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "16px" }}>
+                        <h4 style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+                          Key Takeaways & Highlights
+                        </h4>
+                        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>
+                          {aiSummary.keyHighlights.map((h, i) => (
+                            <li key={i}>{h}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Audience Sentiment Breakdown */}
+                    <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "16px" }}>
+                      <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+                        Audience Sentiment & Engagement
+                      </h4>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                        <div style={{ background: "var(--surface)", padding: "12px", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--success)" }}>
+                            {aiSummary.sentiment?.positive || 0}%
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Positive</div>
+                        </div>
+                        <div style={{ background: "var(--surface)", padding: "12px", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>
+                            {aiSummary.sentiment?.neutral || 0}%
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Neutral</div>
+                        </div>
+                        <div style={{ background: "var(--surface)", padding: "12px", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--danger)" }}>
+                            {aiSummary.sentiment?.negative || 0}%
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Concern / Critical</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="modal-actions" style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAiInsightsModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time Floating Reactions Particle Overlay */}
+      <LiveReactionsOverlay ref={reactionsRef} />
 
       {/* Feature Walkthrough Onboarding Tour for New Users */}
       <OnboardingTour

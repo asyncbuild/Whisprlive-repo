@@ -15,6 +15,11 @@ export default function FeedbackWidget() {
   const [email, setEmail] = useState(user?.email || "");
   const [submitting, setSubmitting] = useState(false);
 
+  // Hide feedback widget on Stage Projector mode to keep presenter view clean
+  if (location.pathname.startsWith("/stage")) {
+    return null;
+  }
+
   useEffect(() => {
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
