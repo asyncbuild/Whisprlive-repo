@@ -32,83 +32,93 @@ export default function HeroDemoShowcase() {
   const stepDuration = 5600;
   const progressTimerRef = useRef(null);
 
-  // Generate real static branded QR code linking to /try with full logo watermark background (exact match to Dashboard room scanners)
+  // Generate real static branded QR code linking to /try with centered logo badge (exact match to Dashboard & Stage room scanners)
   useEffect(() => {
     const targetUrl = `${window.location.origin}/try`;
     QRCode.toDataURL(targetUrl, {
       errorCorrectionLevel: "H",
       margin: 2,
       width: 440,
-      color: { dark: "#000000", light: "#00000000" } // Pure black modules over transparent background
+      color: { dark: "#0f172a", light: "#ffffff" }
     })
       .then((qrData) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = 440;
-        canvas.height = 440;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          setStaticQrUrl(qrData);
-          return;
-        }
-
         const qrImg = new Image();
         const logoImg = new Image();
-        let qrLoaded = false;
-        let logoLoaded = false;
 
-        const renderComposite = () => {
-          if (!qrLoaded) return;
+        const loadImg = (img, src) =>
+          new Promise((resolve) => {
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = src;
+          });
 
-          // 1. Fill clean white base
+        Promise.all([
+          loadImg(qrImg, qrData),
+          loadImg(logoImg, "/Logo Bgless.png")
+        ]).then(([qrOk, logoOk]) => {
+          if (!qrOk) {
+            setStaticQrUrl(qrData);
+            return;
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = 440;
+          canvas.height = 440;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            setStaticQrUrl(qrData);
+            return;
+          }
+
+          // 1. Clean white background & crisp QR matrix
           ctx.fillStyle = "#FFFFFF";
           ctx.fillRect(0, 0, 440, 440);
+          ctx.drawImage(qrImg, 0, 0, 440, 440);
 
-          // 2. Draw branded logo watermark across the entire square
-          if (logoLoaded && logoImg.width && logoImg.height) {
+          // 2. High-contrast centered logo badge
+          if (logoOk && logoImg.width && logoImg.height) {
+            const badgeSize = 88;
+            const bx = (440 - badgeSize) / 2;
+            const by = (440 - badgeSize) / 2;
+
             ctx.save();
-            ctx.globalAlpha = 0.38;
-            const maxDimension = 360;
-            let drawW = maxDimension;
-            let drawH = maxDimension;
-            const aspect = logoImg.width / logoImg.height;
-            if (aspect > 1) {
-              drawW = maxDimension;
-              drawH = maxDimension / aspect;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.22)";
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 2;
+
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(bx, by, badgeSize, badgeSize, 14);
             } else {
-              drawH = maxDimension;
-              drawW = maxDimension * aspect;
+              ctx.rect(bx, by, badgeSize, badgeSize);
             }
-            const drawX = (440 - drawW) / 2;
-            const drawY = (440 - drawH) / 2;
-            ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
+            ctx.fill();
+
+            ctx.shadowColor = "transparent";
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "#E2E8F0";
+            ctx.stroke();
+
+            const pad = 10;
+            const innerSize = badgeSize - pad * 2;
+            const aspect = logoImg.width / logoImg.height;
+            let lw = innerSize;
+            let lh = innerSize;
+            if (aspect > 1) {
+              lh = innerSize / aspect;
+            } else {
+              lw = innerSize * aspect;
+            }
+            const lx = bx + (badgeSize - lw) / 2;
+            const ly = by + (badgeSize - lh) / 2;
+            ctx.drawImage(logoImg, lx, ly, lw, lh);
             ctx.restore();
           }
 
-          // 3. Draw transparent QR code pattern on top
-          ctx.drawImage(qrImg, 0, 0, 440, 440);
-
           setStaticQrUrl(canvas.toDataURL("image/png"));
-        };
-
-        qrImg.onload = () => {
-          qrLoaded = true;
-          renderComposite();
-        };
-        qrImg.onerror = () => {
-          setStaticQrUrl(qrData);
-        };
-
-        logoImg.onload = () => {
-          logoLoaded = true;
-          renderComposite();
-        };
-        logoImg.onerror = () => {
-          logoLoaded = false;
-          renderComposite();
-        };
-
-        qrImg.src = qrData;
-        logoImg.src = "/Logo Bgless.png";
+        });
       })
       .catch((err) => {
         console.error("Failed to generate demo QR code:", err);

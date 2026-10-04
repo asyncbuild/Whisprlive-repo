@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Maximize2, Minimize2, Radio, QrCode, Sparkles, MessageSquare, BarChart3, Cloud,
+  Maximize2, Minimize2, Radio, QrCode, MessageSquare, BarChart3, Cloud,
   Moon, Sun, CheckCircle2, Trophy, Clock, ArrowLeft
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -126,7 +126,6 @@ export default function StageProjectorPage() {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stageTheme, setStageTheme] = useState("dark"); // "dark" | "light" | "midnight"
-  const [quizRevealedData, setQuizRevealedData] = useState(null);
 
   const socketRef = useRef(null);
 

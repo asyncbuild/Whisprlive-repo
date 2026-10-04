@@ -15,11 +15,6 @@ export default function FeedbackWidget() {
   const [email, setEmail] = useState(user?.email || "");
   const [submitting, setSubmitting] = useState(false);
 
-  // Hide feedback widget on Stage Projector mode to keep presenter view clean
-  if (location.pathname.startsWith("/stage") || location.pathname.startsWith("/presenter")) {
-    return null;
-  }
-
   useEffect(() => {
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
@@ -29,6 +24,11 @@ export default function FeedbackWidget() {
       };
     }
   }, [isOpen]);
+
+  // Hide feedback widget on Stage Projector mode to keep presenter view clean
+  if (location.pathname.startsWith("/stage") || location.pathname.startsWith("/presenter")) {
+    return null;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

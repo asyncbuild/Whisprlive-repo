@@ -1,8 +1,7 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Brand from '../components/Brand';
-import ThemeToggle from '../components/ThemeToggle';
-import { ArrowLeft, Zap, Shield, Clock, Users } from 'lucide-react';
+import { ArrowLeft, Zap, Shield, Clock } from 'lucide-react';
 
 export default function AboutPage() {
   const navigate = useNavigate();

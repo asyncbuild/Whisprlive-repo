@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Sparkles, QrCode, MessageSquare, BarChart2, ShieldCheck,
-  ArrowRight, CheckCircle2, Play, Users, Zap, Radio, Crown
+  Sparkles, QrCode, MessageSquare, BarChart2,
+  ArrowRight, Play, Radio, Crown
 } from "lucide-react";
 import Brand from "../components/Brand";
 import ThemeToggle from "../components/ThemeToggle";
