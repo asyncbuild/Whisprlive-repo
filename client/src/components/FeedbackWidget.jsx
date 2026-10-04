@@ -16,7 +16,7 @@ export default function FeedbackWidget() {
   const [submitting, setSubmitting] = useState(false);
 
   // Hide feedback widget on Stage Projector mode to keep presenter view clean
-  if (location.pathname.startsWith("/stage")) {
+  if (location.pathname.startsWith("/stage") || location.pathname.startsWith("/presenter")) {
     return null;
   }
 

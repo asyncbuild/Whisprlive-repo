@@ -42,7 +42,7 @@ export const PLAN_LIMITS = {
     maxPollTemplates: Infinity,
     canSchedule: true,
     canExport: true,
-    exportFormats: ["txt", "csv", "json", "pdf"],
+    exportFormats: ["txt", "csv", "json"],
     canQuiz: true,
     canCustomSlug: true,
     canCustomBranding: false,

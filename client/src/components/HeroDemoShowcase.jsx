@@ -349,7 +349,7 @@ export default function HeroDemoShowcase() {
                             <img src={staticQrUrl || "/Logo Bgless.png"} alt="QR" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 2 }} />
                           </div>
                           <span className="url" style={{ fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            whisprlive.com/ask/WHISPR-782
+                            whisprlive.live/ask/WHISPR-782
                           </span>
                         </div>
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>

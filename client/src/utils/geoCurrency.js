@@ -16,18 +16,18 @@ export function detectGeoCurrencySync() {
       return {
         code: "INR",
         symbol: "₹",
-        price: 299,
-        formatted: "₹299",
-        originalFormatted: "₹499",
+        price: 499,
+        formatted: "₹499",
+        originalFormatted: "₹799",
         isIndia: true,
       };
     } else {
       return {
         code: "USD",
         symbol: "$",
-        price: 5,
-        formatted: "$5",
-        originalFormatted: "$9",
+        price: 7,
+        formatted: "$7",
+        originalFormatted: "$12",
         isIndia: false,
       };
     }
@@ -35,9 +35,9 @@ export function detectGeoCurrencySync() {
     return {
       code: "INR",
       symbol: "₹",
-      price: 299,
-      formatted: "₹299",
-      originalFormatted: "₹499",
+      price: 499,
+      formatted: "₹499",
+      originalFormatted: "₹799",
       isIndia: true,
     };
   }
@@ -58,9 +58,9 @@ export function useGeoCurrency() {
           const country = data.country_code.toUpperCase();
           if (isMounted) {
             if (country === "IN") {
-              setGeo({ code: "INR", symbol: "₹", price: 299, formatted: "₹299", originalFormatted: "₹499", isIndia: true });
+              setGeo({ code: "INR", symbol: "₹", price: 499, formatted: "₹499", originalFormatted: "₹799", isIndia: true });
             } else {
-              setGeo({ code: "USD", symbol: "$", price: 5, formatted: "$5", originalFormatted: "$9", isIndia: false });
+              setGeo({ code: "USD", symbol: "$", price: 7, formatted: "$7", originalFormatted: "$12", isIndia: false });
             }
           }
           return;
@@ -75,9 +75,9 @@ export function useGeoCurrency() {
             const country = data2.country.toUpperCase();
             if (isMounted) {
               if (country === "IN") {
-                setGeo({ code: "INR", symbol: "₹", price: 299, formatted: "₹299", originalFormatted: "₹499", isIndia: true });
+                setGeo({ code: "INR", symbol: "₹", price: 499, formatted: "₹499", originalFormatted: "₹799", isIndia: true });
               } else {
-                setGeo({ code: "USD", symbol: "$", price: 5, formatted: "$5", originalFormatted: "$9", isIndia: false });
+                setGeo({ code: "USD", symbol: "$", price: 7, formatted: "$7", originalFormatted: "$12", isIndia: false });
               }
             }
           }

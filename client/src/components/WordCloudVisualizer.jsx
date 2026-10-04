@@ -49,6 +49,7 @@ const CLOUD_COLORS_DARK = [
  */
 export default function WordCloudVisualizer({
   words = [],
+  wordCloud = [],
   minHeight = 280,
   maxHeight = null,
   interactive = true,
@@ -61,16 +62,22 @@ export default function WordCloudVisualizer({
   const isDark = propIsDark !== undefined ? propIsDark : themeIsDark;
   const [hoveredWord, setHoveredWord] = useState(null);
 
+  const effectiveWords = useMemo(() => {
+    if (words && words.length > 0) return words;
+    if (wordCloud && wordCloud.length > 0) return wordCloud;
+    return [];
+  }, [words, wordCloud]);
+
   const totalResponses = useMemo(() => {
-    return words.reduce((acc, w) => acc + (w.count || 1), 0);
-  }, [words]);
+    return effectiveWords.reduce((acc, w) => acc + (w.count || 1), 0);
+  }, [effectiveWords]);
 
   // Layout calculation using spiral collision detection
   const placedWords = useMemo(() => {
-    if (!words || words.length === 0) return [];
+    if (!effectiveWords || effectiveWords.length === 0) return [];
 
     // Sort descending by frequency
-    const sorted = [...words].sort((a, b) => (b.count || 1) - (a.count || 1));
+    const sorted = [...effectiveWords].sort((a, b) => (b.count || 1) - (a.count || 1));
 
     const W = 640;
     const H = 340;
@@ -187,9 +194,9 @@ export default function WordCloudVisualizer({
     });
 
     return placed;
-  }, [words, isDark]);
+  }, [effectiveWords, isDark]);
 
-  if (!words || words.length === 0) {
+  if (!effectiveWords || effectiveWords.length === 0) {
     return (
       <div
         className="wordcloud-empty-canvas"
@@ -200,11 +207,11 @@ export default function WordCloudVisualizer({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: isDark ? "rgba(255,255,255,0.02)" : "linear-gradient(180deg, #F8FAFC 0%, var(--surface-2) 100%)",
+          background: isDark ? "rgba(255,255,255,0.03)" : "linear-gradient(180deg, #F8FAFC 0%, var(--surface-2) 100%)",
           borderRadius: "var(--radius-md)",
           padding: "20px 16px",
           textAlign: "center",
-          border: "1px solid var(--border)",
+          border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid var(--border)",
           ...style
         }}
       >
@@ -213,9 +220,9 @@ export default function WordCloudVisualizer({
             width: 44,
             height: 44,
             borderRadius: "50%",
-            background: "rgba(37, 99, 235, 0.08)",
-            border: "1px solid rgba(37, 99, 235, 0.16)",
-            color: "var(--accent)",
+            background: isDark ? "rgba(59, 130, 246, 0.15)" : "rgba(37, 99, 235, 0.08)",
+            border: isDark ? "1px solid rgba(59, 130, 246, 0.3)" : "1px solid rgba(37, 99, 235, 0.16)",
+            color: isDark ? "#60A5FA" : "var(--accent)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -224,10 +231,10 @@ export default function WordCloudVisualizer({
         >
           <Cloud size={22} strokeWidth={2} />
         </div>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: isDark ? "#F8FAFC" : "var(--text)", letterSpacing: "-0.01em" }}>
           No audience words submitted yet
         </div>
-        <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "5px 0 0", maxWidth: 320, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 13, color: isDark ? "#94A3B8" : "var(--text-dim)", margin: "5px 0 0", maxWidth: 320, lineHeight: 1.5 }}>
           Words will appear live in an interactive visual cloud as attendees submit them.
         </p>
       </div>
@@ -239,9 +246,9 @@ export default function WordCloudVisualizer({
       className={`wordcloud-visualizer-container ${className}`}
       style={{
         position: "relative",
-        background: isDark ? "rgba(255, 255, 255, 0.02)" : "var(--surface-2)",
+        background: isDark ? "rgba(255, 255, 255, 0.03)" : "var(--surface-2)",
         borderRadius: "var(--radius-md)",
-        border: "1px solid var(--border)",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border)",
         overflow: "hidden",
         ...style
       }}
@@ -254,18 +261,18 @@ export default function WordCloudVisualizer({
             alignItems: "center",
             justifyContent: "space-between",
             padding: "8px 14px",
-            borderBottom: "1px solid var(--border)",
-            background: "rgba(0, 0, 0, 0.02)",
+            borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border)",
+            background: isDark ? "rgba(0, 0, 0, 0.2)" : "rgba(0, 0, 0, 0.02)",
             fontSize: 12,
-            color: "var(--text-dim)"
+            color: isDark ? "#94A3B8" : "var(--text-dim)"
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontWeight: 600, color: "var(--text)" }}>
+            <span style={{ fontWeight: 600, color: isDark ? "#F8FAFC" : "var(--text)" }}>
               {totalResponses} {totalResponses === 1 ? "response" : "responses"}
             </span>
             <span>•</span>
-            <span>{words.length} unique {words.length === 1 ? "word" : "words"}</span>
+            <span>{effectiveWords.length} unique {effectiveWords.length === 1 ? "word" : "words"}</span>
           </div>
         </div>
       )}

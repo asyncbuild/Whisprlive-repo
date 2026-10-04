@@ -27,6 +27,7 @@ import { OAuth2Client } from "google-auth-library"
 import { Resend } from "resend"
 import { fastCheckLocal, checkToxicity, clusterQuestions, generateSessionSummary } from "./services/aiService.js";
 import { validateImageBuffer, checkImageSafety } from "./utils/imageValidator.js";
+import { generateSessionPdfReport } from "./utils/pdfReport.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
@@ -37,6 +38,35 @@ const razorpay = new Razorpay({
 
 // In-Memory OTP Store for email verification: email -> { code, username, hashedPassword, expiresAt, attempts }
 const signupOtpStore = new Map();
+
+// Helper to auto-reconcile and expire monthly user plans (HOST/STUDIO) after exactly 1 month
+export async function reconcileUserPlan(user) {
+  if (!user) return null;
+  if (user.plan && user.plan !== "SOLO" && user.planExpiresAt && new Date() > new Date(user.planExpiresAt)) {
+    try {
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          plan: "SOLO",
+          planExpiresAt: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          plan: true,
+          planExpiresAt: true,
+          roomPasses: true,
+        },
+      });
+      return updated;
+    } catch (e) {
+      console.error("Error auto-expiring user plan:", e);
+      return { ...user, plan: "SOLO", planExpiresAt: null };
+    }
+  }
+  return user;
+}
 
 // Periodic cleanup of expired OTPs
 setInterval(() => {
@@ -390,7 +420,7 @@ app.post("/signin", authLimiter, async (req, res) => {
 
   try {
     const cleanEmail = email.toLowerCase().trim();
-    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (!user) {
       return res.status(400).json({ message: "User does not exist. Please sign up." });
     }
@@ -407,6 +437,9 @@ app.post("/signin", authLimiter, async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
+    // Auto-reconcile expired plans
+    user = await reconcileUserPlan(user);
+
     const secret = JWT_SECRET;
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
@@ -416,7 +449,14 @@ app.post("/signin", authLimiter, async (req, res) => {
     res.json({
       message: "Signin successful",
       token,
-      user: { id: user.id, email: user.email, username: user.username, plan: user.plan || "SOLO", roomPasses: user.roomPasses || 0 }
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        plan: user.plan || "SOLO",
+        planExpiresAt: user.planExpiresAt || null,
+        roomPasses: user.roomPasses || 0
+      }
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -488,8 +528,10 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
           passwordHash: `GOOGLE_AUTH_${googleId}`,
           plan: "SOLO"
         },
-        select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+        select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true },
       })
+    } else {
+      user = await reconcileUserPlan(user);
     }
     //generate app jwt token
     const secret = JWT_SECRET;
@@ -507,6 +549,7 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
         email: user.email,
         username: user.username,
         plan: user.plan || 'SOLO',
+        planExpiresAt: user.planExpiresAt || null,
         roomPasses: user.roomPasses || 0
       }
     })
@@ -521,10 +564,13 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
 //Fetch current user details and plans
 app.get("/api/user/me", verifyToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+      select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true },
     });
+    if (user) {
+      user = await reconcileUserPlan(user);
+    }
     res.json({ user })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -534,13 +580,31 @@ app.get("/api/user/me", verifyToken, async (req, res) => {
 // Razorpay Payment Routes
 // 1. Create Razorpay Order
 app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, async (req, res) => {
-  const { planType, currency } = req.body;
-  if (planType !== "ROOM_PASS") {
+  const { planType, billingCycle = "MONTHLY", currency } = req.body;
+  const validPlans = ["ROOM_PASS", "HOST", "STUDIO"];
+  if (!validPlans.includes(planType)) {
     return res.status(400).json({ message: "Invalid plan type" });
   }
 
   const isUSD = currency === "USD";
-  const amount = isUSD ? 500 : 29900; // $5 USD (500 cents) or ₹299 INR (29900 paise) - Limited time promotional price
+  const isYearly = billingCycle === "YEARLY";
+  let amount;
+
+  if (planType === "ROOM_PASS") {
+    amount = isUSD ? 700 : 49900; // $7 USD or ₹499 INR
+  } else if (planType === "HOST") {
+    if (isYearly) {
+      amount = isUSD ? 9900 : 799000; // $99/yr (~$8.25/mo) or ₹7,990/yr (~₹665/mo) - 2 Months Free (Save 20%)
+    } else {
+      amount = isUSD ? 1200 : 79900; // $12/mo or ₹799/mo
+    }
+  } else if (planType === "STUDIO") {
+    if (isYearly) {
+      amount = isUSD ? 19900 : 1499000; // $199/yr (~$16.50/mo) or ₹14,990/yr (~₹1,249/mo) - 2 Months Free (Save 20%)
+    } else {
+      amount = isUSD ? 2400 : 149900; // $24/mo or ₹1,499/mo
+    }
+  }
   const orderCurrency = isUSD ? "USD" : "INR";
 
   try {
@@ -550,7 +614,8 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
       receipt: `rcpt_${req.user.id.slice(-6)}_${Date.now().toString().slice(-6)}`,
       notes: {
         userId: req.user.id,
-        planType: "ROOM_PASS",
+        planType,
+        billingCycle: planType === "ROOM_PASS" ? "ONETIME" : billingCycle,
       },
     };
 
@@ -560,6 +625,7 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
       amount: order.amount,
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
+      billingCycle,
     });
   } catch (err) {
     console.error("Razorpay order error:", err);
@@ -567,9 +633,9 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
   }
 });
 
-// 2. Verify Payment Signature and Credit Room Pass
+// 2. Verify Payment Signature and Activate Plan / Credit Room Pass
 app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planType, billingCycle = "MONTHLY" } = req.body;
 
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return res.status(400).json({ message: "Missing payment parameters" });
@@ -596,25 +662,47 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
       return res.status(400).json({ message: "This payment has already been redeemed." });
     }
 
-    // Atomically record the payment and grant 1 Room Pass credit to user
-    const [_, updatedUser] = await prisma.$transaction([
+    const targetPlan = ["HOST", "STUDIO"].includes(planType) ? planType : "ROOM_PASS";
+    const isYearly = billingCycle === "YEARLY";
+
+    // Calculate expiration: 365 days for Yearly, 30 days for Monthly
+    let userUpdateData = {};
+    if (targetPlan === "ROOM_PASS") {
+      userUpdateData = { roomPasses: { increment: 1 } };
+    } else {
+      const expiry = new Date();
+      if (isYearly) {
+        expiry.setDate(expiry.getDate() + 365); // 1 full year
+      } else {
+        expiry.setDate(expiry.getDate() + 30); // 1 full month
+      }
+      userUpdateData = {
+        plan: targetPlan,
+        planExpiresAt: expiry,
+      };
+    }
+
+    // Atomically record the payment and update user subscription/passes
+    const [paymentRecord, updatedUser] = await prisma.$transaction([
       prisma.payment.create({
         data: {
           userId: req.user.id,
           razorpayOrderId: razorpay_order_id,
           razorpayPaymentId: razorpay_payment_id,
-          plan: "ROOM_PASS"
+          plan: targetPlan
         }
       }),
       prisma.user.update({
         where: { id: req.user.id },
-        data: { roomPasses: { increment: 1 } },
-        select: { id: true, email: true, username: true, plan: true, roomPasses: true }
+        data: userUpdateData,
+        select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true }
       })
     ]);
 
     res.json({
-      message: "Payment verified successfully!",
+      message: targetPlan === "ROOM_PASS" 
+        ? "1 Room Pass credited successfully!" 
+        : `${targetPlan} subscription activated successfully for ${isYearly ? '1 year' : '1 month'}!`,
       user: updatedUser,
     });
   } catch (err) {
@@ -651,11 +739,17 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
     return res.status(400).json({ error: "Invalid duration" });
   }
 
+  // Scheduled start detection
+  const isScheduled = startsAt && (new Date(startsAt).getTime() - Date.now() > 60000);
+
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { plan: true, roomPasses: true },
+      select: { id: true, plan: true, planExpiresAt: true, roomPasses: true },
     });
+    if (user) {
+      user = await reconcileUserPlan(user);
+    }
 
     const userPlan = user?.plan || "SOLO";
     const startOfMonth = new Date();
@@ -683,7 +777,6 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
     const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
 
     // Scheduled start validation for Solo tier
-    const isScheduled = startsAt && (new Date(startsAt).getTime() - Date.now() > 60000);
     if (isScheduled && !limits.canSchedule) {
       return res.status(403).json({
         error: "Scheduled starts are not supported on the Solo plan. Purchase a Room Pass to schedule sessions in advance.",
@@ -3003,8 +3096,13 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
 
     // Check tier export permission
     if (!limits.exportFormats.includes(requestedFormat)) {
+      const neededTier = requestedFormat === "csv" 
+        ? "a 24h Room Pass, Host, or Studio plan" 
+        : requestedFormat === "json" 
+        ? "the Host or Studio plan" 
+        : "the Studio plan";
       return res.status(403).json({
-        message: `Exporting in .${requestedFormat.toUpperCase()} format requires an upgrade to ${requestedFormat === "csv" ? "a 24h Room Pass or higher" : "the Host or Studio plan"}.`
+        message: `Exporting in .${requestedFormat.toUpperCase()} format requires ${neededTier}.`
       });
     }
 
@@ -3021,14 +3119,18 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
       }
     });
 
+    // 1. PDF Executive Report (Studio Exclusive)
+    if (requestedFormat === "pdf") {
+      return generateSessionPdfReport(res, room);
+    }
+
+    // 2. CSV Spreadsheet Export (Anonymous: No IDs, Device, or Location)
     if (requestedFormat === "csv") {
-      let csv = "ID,Question / Message,Status,Upvotes,Is Answered,Is Pinned,Host Reply,Device,Location,Created At\n";
-      room.messages.forEach(m => {
+      let csv = "Number,Question / Message,Status,Upvotes,Is Answered,Is Pinned,Host Reply,Submitted At\n";
+      room.messages.forEach((m, idx) => {
         const cleanContent = `"${(m.content || '').replace(/"/g, '""')}"`;
         const cleanReply = `"${(m.hostReply || '').replace(/"/g, '""')}"`;
-        const cleanLocation = `"${(m.location || 'Unknown').replace(/"/g, '""')}"`;
-        const cleanDevice = `"${(m.device || 'Unknown').replace(/"/g, '""')}"`;
-        csv += `${m.id},${cleanContent},${m.status},${m.upvotes},${m.isAnswered},${m.isPinned},${cleanReply},${cleanDevice},${cleanLocation},${m.createdAt.toISOString()}\n`;
+        csv += `${idx + 1},${cleanContent},${m.status},${m.upvotes},${m.isAnswered},${m.isPinned},${cleanReply},${m.createdAt.toISOString()}\n`;
       });
 
       res.setHeader("Content-Type", "text/csv");
@@ -3036,7 +3138,8 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
       return res.send(csv);
     }
 
-    if (requestedFormat === "json" || requestedFormat === "pdf") {
+    // 3. Full JSON Data Export (Anonymous: No DB IDs, Device, Location, or User hashes)
+    if (requestedFormat === "json") {
       return res.json({
         roomCode: room.roomCode,
         customSlug: room.customSlug,
@@ -3045,36 +3148,55 @@ app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
         totalQuestions: room.messages.length,
         answeredQuestions: room.messages.filter(m => m.isAnswered).length,
         totalUpvotes: room.messages.reduce((sum, m) => sum + (m.upvotes || 0), 0),
-        messages: room.messages,
-        polls: room.polls
+        messages: room.messages.map((m, idx) => ({
+          number: idx + 1,
+          content: m.content,
+          status: m.status,
+          upvotes: m.upvotes,
+          isAnswered: m.isAnswered,
+          isPinned: m.isPinned,
+          hostReply: m.hostReply,
+          submittedAt: m.createdAt
+        })),
+        polls: room.polls.map(p => ({
+          question: p.question,
+          type: p.type,
+          isQuiz: p.isQuiz,
+          options: p.options ? p.options.map(opt => ({
+            text: opt.text,
+            isCorrect: opt.isCorrect,
+            votes: p.responses ? p.responses.filter(r => r.optionId === opt.id).length : 0
+          })) : [],
+          totalResponses: p.responses ? p.responses.length : 0
+        }))
       });
     }
 
-    // Default plain text (.txt)
+    // 4. Default Plain Text (.txt) Export (Anonymous)
     let txt = `=================================================\n`;
     txt += `WHISPRLIVE LIVE SESSION REPORT & TRANSCRIPT\n`;
     txt += `Title: ${room.title}\n`;
     txt += `Room Code: ${room.roomCode}\n`;
-    if (room.customSlug) txt += `Custom URL: whisprlive.com/ask/${room.customSlug}\n`;
+    if (room.customSlug) txt += `Custom URL: whisprlive.live/ask/${room.customSlug}\n`;
     txt += `Date: ${new Date(room.createdAt).toLocaleString()}\n`;
     txt += `Total Questions: ${room.messages.length}\n`;
     txt += `=================================================\n\n`;
 
     txt += `--- AUDIENCE QUESTIONS & HOST REPLIES ---\n\n`;
     room.messages.forEach((m, idx) => {
-      txt += `[${idx + 1}] (${m.upvotes} upvotes) ${m.isAnswered ? "[ANSWERED] " : ""}${m.isPinned ? "[PINNED] " : ""}\n`;
+      txt += `[#${idx + 1}] (${m.upvotes} upvotes) ${m.isAnswered ? "[ANSWERED] " : ""}${m.isPinned ? "[PINNED] " : ""}\n`;
       txt += `Question: ${m.content}\n`;
       if (m.hostReply) txt += `Host Reply: ${m.hostReply}\n`;
-      txt += `Submitted: ${new Date(m.createdAt).toLocaleTimeString()} | Device: ${m.device || "Unknown"}\n\n`;
+      txt += `Submitted: ${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\n`;
     });
 
     if (room.polls && room.polls.length > 0) {
       txt += `--- LIVE POLLS, QUIZZES & WORD CLOUDS ---\n\n`;
       room.polls.forEach((p, pIdx) => {
         txt += `Poll #${pIdx + 1}: ${p.question} (${p.type}${p.isQuiz ? " - QUIZ" : ""})\n`;
-        if (p.type === "CHOICE") {
+        if (p.type === "CHOICE" && p.options) {
           p.options.forEach(opt => {
-            const votes = p.responses.filter(r => r.optionId === opt.id).length;
+            const votes = p.responses ? p.responses.filter(r => r.optionId === opt.id).length : 0;
             txt += `  - ${opt.text}: ${votes} votes ${opt.isCorrect ? "✓ (Correct Answer)" : ""}\n`;
           });
         }

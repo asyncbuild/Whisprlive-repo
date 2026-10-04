@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Maximize2, Minimize2, Radio, QrCode, Sparkles, MessageSquare, BarChart3,
+  Maximize2, Minimize2, Radio, QrCode, Sparkles, MessageSquare, BarChart3, Cloud,
   Moon, Sun, CheckCircle2, Trophy, Clock, ArrowLeft
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -21,57 +21,90 @@ async function generateWatermarkedQr(targetUrl, brandLogo) {
       color: { dark: "#000000", light: "#00000000" }
     });
 
-    return new Promise((resolve) => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 440;
-      canvas.height = 440;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return resolve(rawQr);
-
-      const qrImg = new Image();
-      const logoImg = new Image();
-
-      let qrLoaded = false;
-      let logoLoaded = false;
-
-      const composite = () => {
-        if (!qrLoaded) return;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, 440, 440);
-
-        if (logoLoaded && logoImg.width && logoImg.height) {
-          ctx.save();
-          ctx.globalAlpha = 0.38;
-          const maxDim = 360;
-          let drawW = maxDim;
-          let drawH = maxDim;
-          const aspect = logoImg.width / logoImg.height;
-          if (aspect > 1) {
-            drawW = maxDim;
-            drawH = maxDim / aspect;
+    const loadImage = (src) =>
+      new Promise((resolve) => {
+        if (!src) return resolve(null);
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => {
+          // If custom logo fails to load, fallback to default WhisprLive logo
+          if (src !== "/Logo Bgless.png") {
+            const fallback = new Image();
+            fallback.crossOrigin = "anonymous";
+            fallback.onload = () => resolve(fallback);
+            fallback.onerror = () => resolve(null);
+            fallback.src = "/Logo Bgless.png";
           } else {
-            drawH = maxDim;
-            drawW = maxDim * aspect;
+            resolve(null);
           }
-          const drawX = (440 - drawW) / 2;
-          const drawY = (440 - drawH) / 2;
-          ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
-          ctx.restore();
-        }
+        };
+        img.src = src;
+      });
 
-        ctx.drawImage(qrImg, 0, 0, 440, 440);
-        resolve(canvas.toDataURL("image/png"));
-      };
+    const [qrImg, logoImg] = await Promise.all([
+      loadImage(rawQr),
+      loadImage(brandLogo || "/Logo Bgless.png")
+    ]);
 
-      qrImg.onload = () => { qrLoaded = true; composite(); };
-      qrImg.onerror = () => resolve(rawQr);
+    if (!qrImg) return rawQr;
 
-      logoImg.onload = () => { logoLoaded = true; composite(); };
-      logoImg.onerror = () => { logoLoaded = false; composite(); };
+    const canvas = document.createElement("canvas");
+    canvas.width = 440;
+    canvas.height = 440;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return rawQr;
 
-      qrImg.src = rawQr;
-      logoImg.src = brandLogo || "/Logo Bgless.png";
-    });
+    // 1. Fill clean white base
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, 440, 440);
+
+    // 2. High-contrast QR matrix
+    ctx.drawImage(qrImg, 0, 0, 440, 440);
+
+    // 3. Center branded logo badge (High-error-correction safe)
+    if (logoImg && logoImg.width && logoImg.height) {
+      const badgeSize = 88;
+      const bx = (440 - badgeSize) / 2;
+      const by = (440 - badgeSize) / 2;
+
+      ctx.save();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(bx, by, badgeSize, badgeSize, 14);
+      } else {
+        ctx.rect(bx, by, badgeSize, badgeSize);
+      }
+      ctx.fill();
+
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#E2E8F0";
+      ctx.stroke();
+
+      const pad = 10;
+      const innerSize = badgeSize - pad * 2;
+      const aspect = logoImg.width / logoImg.height;
+      let lw = innerSize;
+      let lh = innerSize;
+      if (aspect > 1) {
+        lh = innerSize / aspect;
+      } else {
+        lw = innerSize * aspect;
+      }
+      const lx = bx + (badgeSize - lw) / 2;
+      const ly = by + (badgeSize - lh) / 2;
+      ctx.drawImage(logoImg, lx, ly, lw, lh);
+      ctx.restore();
+    }
+
+    return canvas.toDataURL("image/png");
   } catch (err) {
     console.error("Failed to generate watermarked QR:", err);
     return "";
@@ -87,7 +120,8 @@ export default function StageProjectorPage() {
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [activePoll, setActivePoll] = useState(null);
-  const [activeTab, setActiveTab] = useState("auto"); // "auto" | "spotlight" | "poll" | "feed"
+  const [activeTab, setActiveTab] = useState("qa"); // "qa" | "poll" | "wordcloud"
+  const [qaSubMode, setQaSubMode] = useState("feed"); // default to "feed" (Grid View) as requested
   const [spotlightMessageId, setSpotlightMessageId] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -109,6 +143,17 @@ export default function StageProjectorPage() {
         setActivePoll(data.activePoll || null);
         if (data.room.stageTheme) {
           setStageTheme(data.room.stageTheme);
+        }
+
+        // Auto-select tab based on active activity
+        if (data.activePoll && data.activePoll.isActive) {
+          if (data.activePoll.type === "WORD_CLOUD") {
+            setActiveTab("wordcloud");
+          } else {
+            setActiveTab("poll");
+          }
+        } else {
+          setActiveTab("qa");
         }
 
         // Set initial spotlight to pinned question if available
@@ -166,6 +211,7 @@ export default function StageProjectorPage() {
       );
       if (isPinned) {
         setSpotlightMessageId(messageId);
+        setActiveTab("qa");
       }
     });
 
@@ -199,6 +245,11 @@ export default function StageProjectorPage() {
     s.on("poll_created", (poll) => {
       setActivePoll(poll);
       setQuizRevealedData(null);
+      if (poll.type === "WORD_CLOUD") {
+        setActiveTab("wordcloud");
+      } else {
+        setActiveTab("poll");
+      }
     });
 
     s.on("poll_vote_update", (poll) => {
@@ -295,14 +346,6 @@ export default function StageProjectorPage() {
     return messages.find((m) => m.isPinned) || messages[0];
   }, [messages, spotlightMessageId]);
 
-  // Auto mode determination
-  const effectiveViewMode = useMemo(() => {
-    if (activeTab !== "auto") return activeTab;
-    if (activePoll && activePoll.isActive) return "poll";
-    if (spotlightQuestion) return "spotlight";
-    return "feed";
-  }, [activeTab, activePoll, spotlightQuestion]);
-
   if (loading) {
     return (
       <div className="stage-page-container stage-theme-dark stage-loading-screen">
@@ -340,56 +383,47 @@ export default function StageProjectorPage() {
       {/* Top Stage Header */}
       <header className="stage-top-bar">
         <div className="stage-brand-block">
-          {room?.brandLogo ? (
+          <div className="stage-whispr-badge">
+            <img src="/Logo Bgless.png" alt="WhisprLive Logo" className="stage-whispr-logo-img" />
+            <span className="stage-live-dot" />
+            <span><strong>WhisprLive</strong> Stage</span>
+          </div>
+          {room?.brandLogo && (
             <img src={room.brandLogo} alt="Event Logo" className="stage-custom-logo" />
-          ) : (
-            <div className="stage-whispr-badge">
-              <span className="stage-live-dot" />
-              <strong>WhisprLive</strong> Stage
-            </div>
           )}
           <h1 className="stage-room-title">{room?.title || "Live Q&A Session"}</h1>
         </div>
 
-        {/* Stage View Mode Toggles & Controls */}
+        {/* Stage View Mode Toggles (Q&A | Poll | Word Cloud) */}
         <div className="stage-controls">
           <div className="stage-mode-pill-group">
             <button
-              className={`stage-mode-pill ${activeTab === "auto" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("auto")}
-              title="Auto switch between polls and spotlight"
+              className={`stage-mode-pill ${activeTab === "qa" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("qa")}
+              title="Audience Q&A & Question Stream"
             >
-              <Sparkles size={14} /> Auto
+              <MessageSquare size={14} /> Q&A {messages.length > 0 ? `(${messages.length})` : ""}
             </button>
             <button
-              className={`stage-mode-pill ${activeTab === "spotlight" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("spotlight")}
-              title="Spotlight active question"
+              className={`stage-mode-pill ${activeTab === "poll" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("poll")}
+              title="Live Multiple Choice Poll / Quiz"
             >
-              <MessageSquare size={14} /> Spotlight
+              <BarChart3 size={14} /> Poll
             </button>
-            {activePoll && (
-              <button
-                className={`stage-mode-pill ${activeTab === "poll" ? "is-active" : ""}`}
-                onClick={() => setActiveTab("poll")}
-                title="Live Poll & Results"
-              >
-                <BarChart3 size={14} /> Live Poll
-              </button>
-            )}
             <button
-              className={`stage-mode-pill ${activeTab === "feed" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("feed")}
-              title="Live Questions Feed"
+              className={`stage-mode-pill ${activeTab === "wordcloud" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("wordcloud")}
+              title="Live Dynamic Word Cloud"
             >
-              Questions ({messages.length})
+              <Cloud size={14} /> Word Cloud
             </button>
           </div>
 
           <button
             className="stage-icon-btn"
-            onClick={() => setStageTheme((t) => (t === "dark" ? "midnight" : t === "midnight" ? "light" : "dark"))}
-            title="Toggle Stage Theme"
+            onClick={() => setStageTheme((t) => (t === "light" ? "dark" : "light"))}
+            title={stageTheme === "light" ? "Switch to Dark Theme" : "Switch to Light Theme"}
           >
             {stageTheme === "light" ? <Moon size={16} /> : <Sun size={16} />}
           </button>
@@ -408,36 +442,135 @@ export default function StageProjectorPage() {
       <main className="stage-main-grid">
         {/* Left / Center: Active Presentation Stage */}
         <section className="stage-content-area">
-          {effectiveViewMode === "poll" && activePoll ? (
-            <div className="stage-poll-card">
-              <div className="stage-poll-badge">
-                <BarChart3 size={16} />
-                <span>
-                  {activePoll.isQuiz
-                    ? "Live Audience Quiz"
-                    : activePoll.type === "WORD_CLOUD"
-                    ? "Live Dynamic Word Cloud"
-                    : "Live Audience Poll"}
-                </span>
-                {activePoll.isQuiz && activePoll.quizTimerSeconds > 0 && !activePoll.isQuizRevealed && (
-                  <span className="stage-quiz-timer-chip">
-                    <Clock size={13} /> {activePoll.quizTimerSeconds}s Timer
-                  </span>
-                )}
-                {activePoll.isQuizRevealed && (
-                  <span className="stage-quiz-revealed-chip">
-                    <Trophy size={13} /> Correct Answer Revealed!
-                  </span>
-                )}
-              </div>
+          {/* TAB 1: AUDIENCE Q&A (Default Grid View) */}
+          {activeTab === "qa" && (
+            messages.length > 0 ? (
+              qaSubMode === "spotlight" && spotlightQuestion ? (
+                <div className="stage-spotlight-card">
+                  <div className="stage-spotlight-top">
+                    <div className="stage-spotlight-badge">
+                      <Radio size={14} className="stage-live-pulse" />
+                      <span>{spotlightQuestion.isPinned ? "📌 Pinned Question" : "🔥 Question Spotlight"}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <button
+                        className="stage-mode-pill is-active"
+                        onClick={() => setQaSubMode("feed")}
+                        style={{ fontSize: 12, padding: "5px 12px" }}
+                        title="Return to Grid Stream"
+                      >
+                        ← Back to Question Grid
+                      </button>
+                      <div className="stage-spotlight-upvotes">
+                        <span>▲</span>
+                        <strong>{spotlightQuestion.upvotes || 0}</strong>
+                        <small>upvotes</small>
+                      </div>
+                    </div>
+                  </div>
 
-              <h2 className="stage-poll-question">{activePoll.question}</h2>
+                  <blockquote className="stage-spotlight-text">
+                    "{spotlightQuestion.content}"
+                  </blockquote>
 
-              {activePoll.type === "WORD_CLOUD" ? (
-                <div className="stage-wordcloud-box">
-                  <WordCloudVisualizer wordCloud={activePoll.wordCloud || []} />
+                  {spotlightQuestion.hostReply && (
+                    <div className="stage-spotlight-reply">
+                      <div className="stage-reply-label">🎤 Host Reply:</div>
+                      <p>{spotlightQuestion.hostReply}</p>
+                    </div>
+                  )}
+
+                  <div className="stage-spotlight-meta">
+                    <span>Submitted by audience</span>
+                    <span>Scan QR code on the right to participate</span>
+                  </div>
                 </div>
               ) : (
+                <div className="stage-feed-view">
+                  <div className="stage-feed-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <h2>Live Question Stream ({messages.length})</h2>
+                      <span>Audience questions in real time · Click any card to spotlight</span>
+                    </div>
+                    {spotlightQuestion && (
+                      <button
+                        className="stage-mode-pill"
+                        onClick={() => setQaSubMode("spotlight")}
+                        style={{ fontSize: 12, padding: "5px 12px", background: "rgba(255,255,255,0.1)" }}
+                      >
+                        Spotlight Active
+                      </button>
+                    )}
+                  </div>
+                  <div className="stage-feed-grid">
+                    {messages.map((m, i) => (
+                      <div
+                        key={m.id || i}
+                        className={`stage-feed-item ${m.id === spotlightMessageId ? "is-pinned" : ""} ${m.isAnswered ? "is-answered" : ""}`}
+                        onClick={() => {
+                          setSpotlightMessageId(m.id);
+                          setQaSubMode("spotlight");
+                        }}
+                      >
+                        <div className="stage-feed-item-top">
+                          <span className="stage-feed-upvote-chip">▲ {m.upvotes || 0}</span>
+                          {m.isPinned && <span className="stage-feed-pinned-badge">Pinned</span>}
+                          {m.isAnswered && <span className="stage-feed-answered-badge">Answered</span>}
+                          {m.hostReply && <span className="stage-feed-answered-badge" style={{ color: "#3B82F6" }}>Replied</span>}
+                        </div>
+                        <p className="stage-feed-item-text">{m.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="stage-spotlight-card" style={{ textAlign: "center", alignItems: "center" }}>
+                <div style={{
+                  width: 58,
+                  height: 58,
+                  borderRadius: "50%",
+                  background: "rgba(59, 130, 246, 0.12)",
+                  border: "1px solid rgba(59, 130, 246, 0.25)",
+                  color: "var(--stage-accent, #3B82F6)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16
+                }}>
+                  <MessageSquare size={30} />
+                </div>
+                <h2 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 8px" }}>Live Audience Q&A</h2>
+                <p style={{ fontSize: 15, opacity: 0.7, maxWidth: 420, margin: "0 0 20px", lineHeight: 1.5 }}>
+                  Audience members can scan the QR code to submit questions and upvote in real time.
+                </p>
+              </div>
+            )
+          )}
+
+          {/* TAB 2: LIVE MULTIPLE CHOICE POLL / QUIZ */}
+          {activeTab === "poll" && (
+            activePoll && activePoll.type !== "WORD_CLOUD" ? (
+              <div className="stage-poll-card">
+                <div className="stage-poll-badge">
+                  <BarChart3 size={16} />
+                  <span>
+                    {activePoll.isQuiz ? "Live Audience Quiz" : "Live Audience Poll"}
+                  </span>
+                  {activePoll.isQuiz && activePoll.quizTimerSeconds > 0 && !activePoll.isQuizRevealed && (
+                    <span className="stage-quiz-timer-chip">
+                      <Clock size={13} /> {activePoll.quizTimerSeconds}s Timer
+                    </span>
+                  )}
+                  {activePoll.isQuizRevealed && (
+                    <span className="stage-quiz-revealed-chip">
+                      <Trophy size={13} /> Correct Answer Revealed!
+                    </span>
+                  )}
+                </div>
+
+                <h2 className="stage-poll-question">{activePoll.question}</h2>
+
                 <div className="stage-poll-options-list">
                   {(activePoll.options || []).map((opt, i) => {
                     const isWinner = activePoll.isQuizRevealed && opt.isCorrect;
@@ -469,71 +602,64 @@ export default function StageProjectorPage() {
                     );
                   })}
                 </div>
-              )}
 
-              <div className="stage-poll-footer">
-                <span>Total Responses: <strong>{activePoll.totalVotes || 0}</strong></span>
-                <span>Scan QR code on the right to participate live</span>
-              </div>
-            </div>
-          ) : effectiveViewMode === "spotlight" && spotlightQuestion ? (
-            <div className="stage-spotlight-card">
-              <div className="stage-spotlight-top">
-                <div className="stage-spotlight-badge">
-                  <Radio size={14} className="stage-live-pulse" />
-                  <span>{spotlightQuestion.isPinned ? "📌 Pinned Question" : "🔥 Live Question Spotlight"}</span>
-                </div>
-                <div className="stage-spotlight-upvotes">
-                  <span>▲</span>
-                  <strong>{spotlightQuestion.upvotes || 0}</strong>
-                  <small>upvotes</small>
+                <div className="stage-poll-footer">
+                  <span>Total Responses: <strong>{activePoll.totalVotes || 0}</strong></span>
+                  <span>Scan QR code to cast your vote</span>
                 </div>
               </div>
-
-              <blockquote className="stage-spotlight-text">
-                "{spotlightQuestion.content}"
-              </blockquote>
-
-              {spotlightQuestion.hostReply && (
-                <div className="stage-spotlight-reply">
-                  <div className="stage-reply-label">🎤 Host Reply:</div>
-                  <p>{spotlightQuestion.hostReply}</p>
+            ) : (
+              <div className="stage-poll-card" style={{ textAlign: "center", alignItems: "center" }}>
+                <div style={{
+                  width: 58,
+                  height: 58,
+                  borderRadius: "50%",
+                  background: "rgba(59, 130, 246, 0.12)",
+                  border: "1px solid rgba(59, 130, 246, 0.25)",
+                  color: "var(--stage-accent, #3B82F6)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16
+                }}>
+                  <BarChart3 size={30} />
                 </div>
-              )}
+                <h2 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 8px" }}>Live Audience Poll</h2>
+                <p style={{ fontSize: 15, opacity: 0.7, maxWidth: 440, margin: "0 0 20px", lineHeight: 1.5 }}>
+                  No poll is currently active. Launch a multiple-choice poll or quiz from your host dashboard to display live results.
+                </p>
+              </div>
+            )
+          )}
 
-              <div className="stage-spotlight-meta">
-                <span>Submitted anonymously by participant</span>
-                {messages.length > 1 && (
-                  <div className="stage-spotlight-nav">
-                    <span>Use host controls to spotlight questions</span>
-                  </div>
+          {/* TAB 3: LIVE AUDIENCE WORD CLOUD */}
+          {activeTab === "wordcloud" && (
+            <div className="stage-poll-card">
+              <div className="stage-poll-badge">
+                <Cloud size={16} />
+                <span>Live Audience Word Cloud</span>
+                {activePoll?.type === "WORD_CLOUD" && (
+                  <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.8, textTransform: "none" }}>
+                    {activePoll.totalVotes || 0} submissions
+                  </span>
                 )}
               </div>
-            </div>
-          ) : (
-            <div className="stage-feed-view">
-              <div className="stage-feed-head">
-                <h2>Live Question Stream ({messages.length})</h2>
-                <span>Real-time audience submissions</span>
+
+              <h2 className="stage-poll-question">
+                {activePoll?.type === "WORD_CLOUD" ? activePoll.question : "Live Word Cloud Visualizer"}
+              </h2>
+
+              <div className="stage-wordcloud-box">
+                <WordCloudVisualizer
+                  words={activePoll?.type === "WORD_CLOUD" ? (activePoll.wordCloud || []) : []}
+                  isDark={stageTheme !== "light"}
+                  minHeight={340}
+                />
               </div>
-              <div className="stage-feed-grid">
-                {messages.slice(0, 12).map((m, i) => (
-                  <div
-                    key={m.id || i}
-                    className={`stage-feed-item ${m.isPinned ? "is-pinned" : ""} ${m.isAnswered ? "is-answered" : ""}`}
-                    onClick={() => {
-                      setSpotlightMessageId(m.id);
-                      setActiveTab("spotlight");
-                    }}
-                  >
-                    <div className="stage-feed-item-top">
-                      <span className="stage-feed-upvote-chip">▲ {m.upvotes || 0}</span>
-                      {m.isPinned && <span className="stage-feed-pinned-badge">Pinned</span>}
-                      {m.isAnswered && <span className="stage-feed-answered-badge">Answered</span>}
-                    </div>
-                    <p className="stage-feed-item-text">{m.content}</p>
-                  </div>
-                ))}
+
+              <div className="stage-poll-footer">
+                <span>Dynamic real-time frequency clustering</span>
+                <span>Scan QR code on the right to submit words</span>
               </div>
             </div>
           )}
@@ -542,9 +668,15 @@ export default function StageProjectorPage() {
         {/* Right Side: Sticky Audience QR Join Station */}
         <aside className="stage-qr-sidebar">
           <div className="stage-qr-box">
-            <span className="stage-qr-eyebrow">
-              <QrCode size={14} /> Join from your phone
-            </span>
+            <div className="stage-qr-header">
+              <span className="stage-qr-whispr-tag">
+                <img src="/Logo Bgless.png" alt="WhisprLive" style={{ width: 14, height: 14, objectFit: "contain" }} />
+                <span>WhisprLive Live Join</span>
+              </span>
+              <span className="stage-qr-eyebrow">
+                <QrCode size={13} /> Scan from Phone
+              </span>
+            </div>
             <div className="stage-qr-image-wrapper">
               {qrDataUrl ? (
                 <img src={qrDataUrl} alt={`QR code to join room ${joinSlug}`} className="stage-qr-image" />
@@ -553,27 +685,27 @@ export default function StageProjectorPage() {
               )}
             </div>
             <div className="stage-qr-instructions">
-              <p>Point phone camera to scan</p>
+              <p>Point camera to join & participate</p>
               <div className="stage-qr-code-pill">
-                whisprlive.com/ask/<strong>{joinSlug}</strong>
+                whisprlive.live/ask/<strong>{joinSlug}</strong>
               </div>
-              <span className="stage-qr-subtext">No download · No sign-in needed</span>
+              <span className="stage-qr-subtext">No app install · 100% Free & Anonymous</span>
             </div>
           </div>
         </aside>
       </main>
 
-      {/* Stage Watermark Footer */}
+      {/* Stage Watermark & Status Footer */}
       <footer className="stage-bottom-bar">
-        {room?.showWatermark ? (
-          <div className="stage-watermark">
-            <span>⚡ Powered by <strong>WhisprLive</strong></span>
-          </div>
-        ) : (
-          <div />
-        )}
+        <div className="stage-bottom-brand">
+          <img src="/Logo Bgless.png" alt="WhisprLive" style={{ width: 18, height: 18, objectFit: "contain" }} />
+          <span>Powered by <strong>WhisprLive</strong> · Interactive Audience Intelligence</span>
+        </div>
         <div className="stage-status-indicator">
-          <span className="stage-pulse-dot" /> Live Room Active
+          <span className="stage-pulse-dot" /> Live Stage Active
+        </div>
+        <div className="stage-shortcut-hint">
+          Press <strong>F</strong> for Fullscreen
         </div>
       </footer>
     </div>

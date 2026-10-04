@@ -12,6 +12,7 @@ model User {
   email        String    @unique
   passwordHash String
   plan         String   @default("SOLO") // SOLO, HOST, STUDIO
+  planExpiresAt DateTime? // Exactly 1 month expiry timestamp for HOST / STUDIO
   roomPasses   Int      @default(0)
   createdAt    DateTime  @default(now())
   rooms        Room[]

@@ -155,8 +155,10 @@ export default function LandingPage() {
     targetMap[key]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const handleCheckout = async (planType) => {
-    if (planType === 'SOLO') {
+  const [pricingBillingCycle, setPricingBillingCycle] = useState("YEARLY");
+
+  const handleCheckout = async (planType = "ROOM_PASS") => {
+    if (planType === "SOLO") {
       navigate(isLoggedIn ? "/dashboard" : "/signup");
       return;
     }
@@ -168,19 +170,28 @@ export default function LandingPage() {
       return;
     }
 
+    const isYearly = pricingBillingCycle === "YEARLY";
+    const targetCycle = planType === "ROOM_PASS" ? "ONETIME" : pricingBillingCycle;
+
     setLoadingPlan(planType);
     try {
       // 1. Create order on backend
-      const res = await API.post("/api/payments/razorpay/create-order", { planType, currency: geoCurrency.code });
+      const res = await API.post("/api/payments/razorpay/create-order", { 
+        planType, 
+        billingCycle: targetCycle,
+        currency: geoCurrency.code 
+      });
       const { orderId, amount, currency, keyId } = res.data;
 
       // 2. Open Razorpay Checkout modal
       const options = {
-        key: keyId || import.meta.env.RAZORPAY_KEY_ID,
+        key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount,
         currency,
         name: "WhisprLive",
-        description: "24-Hour Room Pass",
+        description: planType === "ROOM_PASS" 
+          ? "24-Hour Room Pass" 
+          : `${planType} Plan (${isYearly ? "1 Year" : "1 Month"})`,
         image: `${window.location.origin}/Logo Bgless.png`,
         order_id: orderId,
         handler: async (response) => {
@@ -190,13 +201,15 @@ export default function LandingPage() {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
+              planType,
+              billingCycle: targetCycle,
             });
 
             if (verifyRes.data?.user) {
               localStorage.setItem('whisprlive_user', JSON.stringify(verifyRes.data.user));
               if (refreshUser) refreshUser();
             }
-            toast.success("Payment successful! 1 Room Pass has been credited.");
+            toast.success(verifyRes.data?.message || "Payment successful!");
             navigate("/dashboard");
           } catch (err) {
             toast.error(err.response?.data?.message || "Signature verification failed");
@@ -443,145 +456,182 @@ export default function LandingPage() {
       <div ref={pricingRef}>
         <section className="section">
           <div className="container">
-            <div className="section-head">
+            <div className="section-head" style={{ marginBottom: 24 }}>
               <span className="section-eyebrow">Pricing</span>
               <h2>Start free. Upgrade when the rooms get bigger.</h2>
+              <p style={{ maxWidth: 540, margin: "8px auto 0", color: "var(--text-dim)", fontSize: 14.5 }}>
+                Flexible one-off event passes or full-featured monthly and annual subscriptions.
+              </p>
             </div>
-            <div className="pricing-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+
+            {/* Billing Cycle Smooth Animated Toggle */}
+            <div className="billing-toggle-wrapper">
+              <div className="billing-toggle-container">
+                <div className={`billing-toggle-pill ${pricingBillingCycle === "YEARLY" ? "yearly" : "monthly"}`} />
+                <button
+                  type="button"
+                  className={`billing-toggle-btn ${pricingBillingCycle === "MONTHLY" ? "active" : ""}`}
+                  onClick={() => setPricingBillingCycle("MONTHLY")}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  className={`billing-toggle-btn ${pricingBillingCycle === "YEARLY" ? "active" : ""}`}
+                  onClick={() => setPricingBillingCycle("YEARLY")}
+                >
+                  Yearly
+                </button>
+              </div>
+            </div>
+
+            <div className="pricing-grid">
               {/* Solo Free */}
-              <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                <div>
+              <div className="price-card">
+                <span className="price-tag" style={{ background: "var(--surface-2)", color: "var(--text-dim)", border: "1px solid var(--border)", boxShadow: "none" }}>Starter</span>
+                <div className="price-card-body">
                   <div className="price-plan">Solo (Free)</div>
-                  <div className="price-amount">{geoCurrency.symbol}0</div>
-                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>Forever free</p>
-                  <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> Unlimited live sessions</li>
-                    <li><Check size={15} /> Up to 100 questions / session</li>
-                    <li><Check size={15} /> Anonymous Q&amp;A &amp; instant live upvotes</li>
-                    <li><Check size={15} /> Live polls &amp; dynamic word clouds</li>
-                    <li><Check size={15} /> Up to 2 saved templates in library</li>
-                    <li><Check size={15} /> Real-time moderation &amp; host replies</li>
-                    <li><Check size={15} /> Instant TXT session export</li>
-                    <li><Check size={15} /> 15-minute room timers</li>
-                    <li><Check size={15} /> 7 days session history</li>
+                  <div className="price-amount-wrap">
+                    <span className="price-amount">{geoCurrency.symbol}0</span>
+                  </div>
+                  <p className="price-subtitle">Forever free · No credit card required</p>
+                  <ul className="price-list">
+                    <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 100 live participants</span></li>
+                    <li><Check size={14} /> <span><strong>Session Duration:</strong> 15m disposable room</span></li>
+                    <li><Check size={14} /> <span><strong>Anonymous Q&amp;A:</strong> Live audience upvotes</span></li>
+                    <li><Check size={14} /> <span><strong>Interactive Polls:</strong> Dynamic word clouds</span></li>
+                    <li><Check size={14} /> <span><strong>Host Moderation:</strong> Pin questions &amp; replies</span></li>
+                    <li><Check size={14} /> <span><strong>Data Export:</strong> Plain text (.txt) transcript</span></li>
+                    <li><Check size={14} /> <span><strong>Session Archive:</strong> 7 days cloud retention</span></li>
+                    <li><Check size={14} /> <span><strong>Audience Access:</strong> Instant stage QR &amp; link</span></li>
                   </ul>
                 </div>
                 <button
                   className={`btn ${isLoggedIn ? "btn-ghost" : "btn-primary"} btn-block`}
                   disabled={isLoggedIn}
                   onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
-                  style={{ marginTop: "24px" }}
                 >
-                  {isLoggedIn ? "Current Free Tier" : "Continue with Solo plan"}
+                  {isLoggedIn ? "Current Free Tier" : "Get Started Free"}
                 </button>
               </div>
 
               {/* 24h Room Pass */}
-              <div className="price-card featured" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
-                <span className="price-tag">Popular for Events</span>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                    <div className="price-plan" style={{ color: "var(--accent)", fontWeight: 700, margin: 0 }}>24h Room Pass</div>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(239, 68, 68, 0.12)", color: "#ef4444", padding: "3px 9px", borderRadius: 999, border: "1px solid rgba(239, 68, 68, 0.25)" }}>
-                      🔥 Limited Time Offer
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 6, marginBottom: 4 }}>
-                    <span style={{ fontSize: "38px", fontWeight: 800, color: "var(--text)", fontFamily: "var(--font-display)", letterSpacing: "-0.02em", lineHeight: 1 }}>
+              <div className="price-card">
+                <span className="price-tag">Event Pass</span>
+                <div className="price-card-body">
+                  <div className="price-plan" style={{ color: "var(--accent)" }}>24h Room Pass</div>
+                  <div className="price-amount-wrap">
+                    <span className="price-amount">
                       {geoCurrency.formatted}
                     </span>
-                    <span style={{ fontSize: "20px", color: "var(--text-dim)", textDecoration: "line-through", fontWeight: 600, opacity: 0.7 }}>
-                      {geoCurrency.originalFormatted || (geoCurrency.isIndia ? "₹499" : "$9")}
+                    <span style={{ fontSize: "15px", color: "var(--text-dim)", textDecoration: "line-through", fontWeight: 600, opacity: 0.75 }}>
+                      {geoCurrency.originalFormatted || (geoCurrency.isIndia ? "₹799" : "$12")}
                     </span>
                   </div>
-                  <p style={{ fontSize: "12.5px", color: "var(--text-dim)", margin: "4px 0 0" }}>One-time pass per event · Launch pricing</p>
-                  <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> 1 room active for full 24 hours</li>
-                    <li><Check size={15} /> Up to 500 questions / room</li>
-                    <li><Check size={15} /> Live audience quizzes &amp; answer reveal</li>
-                    <li><Check size={15} /> Unlimited live polls &amp; word clouds</li>
-                    <li><Check size={15} /> Unlimited poll templates in library</li>
-                    <li><Check size={15} /> Co-host &amp; moderator collaboration</li>
-                    <li><Check size={15} /> CSV spreadsheet &amp; TXT exports</li>
-                    <li><Check size={15} /> Audience device &amp; location insights</li>
-                    <li><Check size={15} /> Scheduled room start &amp; custom duration</li>
-                    <li><Check size={15} /> 30 days session history</li>
+                  <p className="price-subtitle">One-time pass per event · Single room</p>
+                  <ul className="price-list">
+                    <li><Check size={14} /> <span><strong>Dedicated Room:</strong> Full 24-hour event pass</span></li>
+                    <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 500 questions per room</span></li>
+                    <li><Check size={14} /> <span><strong>Live Quizzes:</strong> Instant answer reveals</span></li>
+                    <li><Check size={14} /> <span><strong>Unlimited Polls:</strong> Saved custom templates</span></li>
+                    <li><Check size={14} /> <span><strong>Unbranded Stage:</strong> No watermark on projector</span></li>
+                    <li><Check size={14} /> <span><strong>Data Exports:</strong> Full CSV spreadsheet &amp; TXT</span></li>
+                    <li><Check size={14} /> <span><strong>Team Controls:</strong> Co-host &amp; moderator tools</span></li>
+                    <li><Check size={14} /> <span><strong>Session Archive:</strong> 30 days history &amp; replay</span></li>
+                  </ul>
+                </div>
+                <button
+                  className="btn btn-secondary btn-block"
+                  disabled={loadingPlan === "ROOM_PASS"}
+                  onClick={() => handleCheckout("ROOM_PASS")}
+                >
+                  {loadingPlan === "ROOM_PASS" ? <><Loader2 size={14} className="spin" /> Processing...</> : `Buy Pass (${geoCurrency.formatted})`}
+                </button>
+              </div>
+
+              {/* Host Plan */}
+              <div className="price-card featured">
+                <span className="price-tag">Most Popular</span>
+                <div className="price-card-body">
+                  <div className="price-plan" style={{ color: "var(--accent)" }}>Host Plan</div>
+                  <div className="price-amount-wrap">
+                    <span className="price-amount">
+                      {pricingBillingCycle === "YEARLY" 
+                        ? (geoCurrency.isIndia ? "₹665/mo" : "$8.25/mo") 
+                        : (geoCurrency.isIndia ? "₹799/mo" : "$12/mo")}
+                    </span>
+                  </div>
+                  <p className="price-subtitle">
+                    {pricingBillingCycle === "YEARLY" 
+                      ? (geoCurrency.isIndia ? "365 days access · 2 mos free (Save 20%)" : "365 days access · 2 mos free (Save 20%)") 
+                      : "30 days full access · No auto-debit"}
+                  </p>
+                  <ul className="price-list">
+                    <li><Check size={14} /> <span><strong>Unlimited Rooms:</strong> 60m sessions each</span></li>
+                    <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 1,000 questions/room</span></li>
+                    <li><Check size={14} /> <span><strong>Custom Vanity URL:</strong> /ask/your-event</span></li>
+                    <li><Check size={14} /> <span><strong>AI Auto-Moderation:</strong> Toxicity filter</span></li>
+                    <li><Check size={14} /> <span><strong>Team Seats:</strong> Up to 3 co-hosts/mods</span></li>
+                    <li><Check size={14} /> <span><strong>Data Exports:</strong> Structured CSV &amp; JSON</span></li>
+                    <li><Check size={14} /> <span><strong>Full Interactivity:</strong> Quizzes &amp; clouds</span></li>
+                    <li><Check size={14} /> <span><strong>Priority Support:</strong> 90 days history &amp; SLA</span></li>
                   </ul>
                 </div>
                 <button
                   className="btn btn-primary btn-block"
-                  style={{ marginTop: "24px" }}
-                  disabled={loadingPlan === "ROOM_PASS"}
-                  onClick={() => handleCheckout("ROOM_PASS")}
+                  disabled={loadingPlan === "HOST"}
+                  onClick={() => handleCheckout("HOST")}
                 >
-                  {loadingPlan === "ROOM_PASS" ? "Redirecting..." : `Buy Room Pass (${geoCurrency.formatted})`}
+                  {loadingPlan === "HOST" ? (
+                    <><Loader2 size={14} className="spin" /> Processing...</>
+                  ) : pricingBillingCycle === "YEARLY" ? (
+                    `Upgrade Yearly (${geoCurrency.isIndia ? "₹7,990/yr" : "$99/yr"})`
+                  ) : (
+                    `Upgrade to Host (${geoCurrency.isIndia ? "₹799/mo" : "$12/mo"})`
+                  )}
                 </button>
               </div>
 
-              {/* Host Plan (Coming Soon) */}
-              <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div className="price-plan">Host</div>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: "var(--surface-2)", color: "var(--text-dim)", padding: "2px 8px", borderRadius: 999 }}>Soon</span>
+              {/* Studio Plan */}
+              <div className="price-card">
+                <span className="price-tag" style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}>Scale</span>
+                <div className="price-card-body">
+                  <div className="price-plan" style={{ color: "var(--accent)" }}>Studio Plan</div>
+                  <div className="price-amount-wrap">
+                    <span className="price-amount">
+                      {pricingBillingCycle === "YEARLY" 
+                        ? (geoCurrency.isIndia ? "₹1,249/mo" : "$16.50/mo") 
+                        : (geoCurrency.isIndia ? "₹1,499/mo" : "$24/mo")}
+                    </span>
                   </div>
-                  <div className="price-amount" style={{ fontSize: 22, marginTop: 6, fontWeight: 800 }}>
-                    {geoCurrency.isIndia ? "₹349/mo" : "$9/mo"}
-                  </div>
-                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>For active hosts &amp; speakers</p>
-                  <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> Unlimited rooms &amp; sessions</li>
-                    <li><Check size={15} /> Up to 1,000 questions / room</li>
-                    <li><Check size={15} /> Custom vanity slugs (e.g. /ask/your-event)</li>
-                    <li><Check size={15} /> AI live auto-moderation &amp; safety filtering</li>
-                    <li><Check size={15} /> Live quizzes, polls &amp; unlimited templates</li>
-                    <li><Check size={15} /> Up to 3 co-hosts per room</li>
-                    <li><Check size={15} /> CSV, PDF &amp; JSON session exports</li>
-                    <li><Check size={15} /> Audience device &amp; geo analytics</li>
-                    <li><Check size={15} /> 60-minute room timers &amp; scheduled starts</li>
-                    <li><Check size={15} /> 90 days session history</li>
-                    <li><Check size={15} /> Priority email &amp; chat support</li>
+                  <p className="price-subtitle">
+                    {pricingBillingCycle === "YEARLY" 
+                      ? (geoCurrency.isIndia ? "365 days access · 2 mos free (Save 20%)" : "365 days access · 2 mos free (Save 20%)") 
+                      : "30 days full access · No auto-debit"}
+                  </p>
+                  <ul className="price-list">
+                    <li><Check size={14} /> <span><strong>Extended Sessions:</strong> Unlimited 120m</span></li>
+                    <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 2,500 questions/room</span></li>
+                    <li><Check size={14} /> <span><strong>Custom Branding:</strong> Event logo &amp; colors</span></li>
+                    <li><Check size={14} /> <span><strong>AI Clustering:</strong> Question deduplication</span></li>
+                    <li><Check size={14} /> <span><strong>AI Executive Recap:</strong> Sentiment recap</span></li>
+                    <li><Check size={14} /> <span><strong>Unlimited Seats:</strong> Co-hosts &amp; moderators</span></li>
+                    <li><Check size={14} /> <span><strong>Executive Reports:</strong> Branded PDF export</span></li>
+                    <li><Check size={14} /> <span><strong>Dedicated SLA:</strong> 1 year archive &amp; support</span></li>
                   </ul>
                 </div>
                 <button
-                  className="btn btn-soft btn-block"
-                  style={{ marginTop: "24px" }}
-                  onClick={() => openWaitlist("HOST")}
+                  className="btn btn-secondary btn-block"
+                  disabled={loadingPlan === "STUDIO"}
+                  onClick={() => handleCheckout("STUDIO")}
                 >
-                  <Bell size={14} /> Notify Me
-                </button>
-              </div>
-
-              {/* Studio Plan (Coming Soon) */}
-              <div className="price-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div className="price-plan">Studio</div>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: "var(--surface-2)", color: "var(--text-dim)", padding: "2px 8px", borderRadius: 999 }}>Soon</span>
-                  </div>
-                  <div className="price-amount" style={{ fontSize: 22, marginTop: 6, fontWeight: 800 }}>
-                    {geoCurrency.isIndia ? "₹799/mo" : "$19/mo"}
-                  </div>
-                  <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>For conferences &amp; studios</p>
-                  <ul className="price-list" style={{ marginTop: "20px" }}>
-                    <li><Check size={15} /> Unlimited rooms &amp; concurrent sessions</li>
-                    <li><Check size={15} /> Up to 2,500 questions / room</li>
-                    <li><Check size={15} /> Custom event logo watermark on QR scanner &amp; stage</li>
-                    <li><Check size={15} /> AI smart question clustering &amp; deduplication</li>
-                    <li><Check size={15} /> AI executive recap &amp; sentiment analysis</li>
-                    <li><Check size={15} /> Custom vanity slugs (e.g. /ask/your-brand)</li>
-                    <li><Check size={15} /> Unlimited co-hosts &amp; moderator seats</li>
-                    <li><Check size={15} /> Full audience analytics &amp; all export formats</li>
-                    <li><Check size={15} /> 120-min+ timers &amp; multi-day passes</li>
-                    <li><Check size={15} /> 1 year session history &amp; 24/7 priority support</li>
-                  </ul>
-                </div>
-                <button
-                  className="btn btn-soft btn-block"
-                  style={{ marginTop: "24px" }}
-                  onClick={() => openWaitlist("STUDIO")}
-                >
-                  <Bell size={14} /> Notify Me
+                  {loadingPlan === "STUDIO" ? (
+                    <><Loader2 size={14} className="spin" /> Processing...</>
+                  ) : pricingBillingCycle === "YEARLY" ? (
+                    `Get Studio Yearly (${geoCurrency.isIndia ? "₹14,990/yr" : "$199/yr"})`
+                  ) : (
+                    `Get Studio Plan (${geoCurrency.isIndia ? "₹1,499/mo" : "$24/mo"})`
+                  )}
                 </button>
               </div>
             </div>

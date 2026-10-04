@@ -16,6 +16,7 @@ import WordCloudVisualizer from "../components/WordCloudVisualizer";
 import ThemeToggle from "../components/ThemeToggle";
 import OnboardingTour from "../components/OnboardingTour";
 import LiveReactionsOverlay from "../components/LiveReactionsOverlay";
+import PricingModal from "../components/PricingModal";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
@@ -166,9 +167,39 @@ export default function DashboardPage() {
       errorCorrectionLevel: "H",
       margin: 2,
       width: 440,
-      color: { dark: "#000000", light: "#00000000" } // Pure black modules over transparent background
+      color: { dark: "#000000", light: "#00000000" }
     })
-      .then((qrData) => {
+      .then(async (qrData) => {
+        const loadImage = (src) =>
+          new Promise((resolve) => {
+            if (!src) return resolve(null);
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = () => {
+              if (src !== "/Logo Bgless.png") {
+                const fallback = new Image();
+                fallback.crossOrigin = "anonymous";
+                fallback.onload = () => resolve(fallback);
+                fallback.onerror = () => resolve(null);
+                fallback.src = "/Logo Bgless.png";
+              } else {
+                resolve(null);
+              }
+            };
+            img.src = src;
+          });
+
+        const [qrImg, logoImg] = await Promise.all([
+          loadImage(qrData),
+          loadImage(session?.brandLogo || "/Logo Bgless.png")
+        ]);
+
+        if (!qrImg) {
+          setSessionQrUrl(qrData);
+          return;
+        }
+
         const canvas = document.createElement("canvas");
         canvas.width = 440;
         canvas.height = 440;
@@ -178,65 +209,56 @@ export default function DashboardPage() {
           return;
         }
 
-        const qrImg = new Image();
-        const logoImg = new Image();
+        // 1. Fill clean white base
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, 440, 440);
 
-        let qrLoaded = false;
-        let logoLoaded = false;
+        // 2. High-contrast QR matrix
+        ctx.drawImage(qrImg, 0, 0, 440, 440);
 
-        const renderComposite = () => {
-          if (!qrLoaded) return;
+        // 3. Center branded logo badge (High-error-correction safe)
+        if (logoImg && logoImg.width && logoImg.height) {
+          const badgeSize = 88;
+          const bx = (440 - badgeSize) / 2;
+          const by = (440 - badgeSize) / 2;
 
-          // 1. Fill clean white base
+          ctx.save();
           ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, 440, 440);
+          ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 2;
 
-          // 2. Draw branded logo watermark across the entire square (clearly visible while preserving scan contrast)
-          if (logoLoaded && logoImg.width && logoImg.height) {
-            ctx.save();
-            ctx.globalAlpha = 0.38; // Increased opacity so the logo watermark is clearly visible
-            const maxDimension = 360;
-            let drawW = maxDimension;
-            let drawH = maxDimension;
-            const aspect = logoImg.width / logoImg.height;
-            if (aspect > 1) {
-              drawW = maxDimension;
-              drawH = maxDimension / aspect;
-            } else {
-              drawH = maxDimension;
-              drawW = maxDimension * aspect;
-            }
-            const drawX = (440 - drawW) / 2;
-            const drawY = (440 - drawH) / 2;
-            ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
-            ctx.restore();
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(bx, by, badgeSize, badgeSize, 14);
+          } else {
+            ctx.rect(bx, by, badgeSize, badgeSize);
           }
+          ctx.fill();
 
-          // 3. Draw transparent QR code pattern on top
-          ctx.drawImage(qrImg, 0, 0, 440, 440);
+          ctx.shadowColor = "transparent";
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#E2E8F0";
+          ctx.stroke();
 
-          setSessionQrUrl(canvas.toDataURL("image/png"));
-        };
+          const pad = 10;
+          const innerSize = badgeSize - pad * 2;
+          const aspect = logoImg.width / logoImg.height;
+          let lw = innerSize;
+          let lh = innerSize;
+          if (aspect > 1) {
+            lh = innerSize / aspect;
+          } else {
+            lw = innerSize * aspect;
+          }
+          const lx = bx + (badgeSize - lw) / 2;
+          const ly = by + (badgeSize - lh) / 2;
+          ctx.drawImage(logoImg, lx, ly, lw, lh);
+          ctx.restore();
+        }
 
-        qrImg.onload = () => {
-          qrLoaded = true;
-          renderComposite();
-        };
-        qrImg.onerror = () => {
-          setSessionQrUrl(qrData);
-        };
-
-        logoImg.onload = () => {
-          logoLoaded = true;
-          renderComposite();
-        };
-        logoImg.onerror = () => {
-          logoLoaded = false;
-          renderComposite();
-        };
-
-        qrImg.src = qrData;
-        logoImg.src = session?.brandLogo || "/Logo Bgless.png";
+        setSessionQrUrl(canvas.toDataURL("image/png"));
       })
       .catch((err) => {
         console.error("Failed to generate QR code:", err);
@@ -421,6 +443,11 @@ export default function DashboardPage() {
   const username = currentUser?.username || currentUser?.email || "Host";
   const isSolo = !currentUser?.plan || currentUser?.plan === "SOLO";
   const isFreeSolo = isSolo && (currentUser?.roomPasses || 0) <= 0;
+  const planExpiresAt = currentUser?.planExpiresAt;
+  const daysUntilPlanExpiry = planExpiresAt 
+    ? Math.max(0, Math.ceil((new Date(planExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+  const isPlanExpiringSoon = daysUntilPlanExpiry !== null && daysUntilPlanExpiry <= 5 && !isSolo;
 
   // Auto-launch feature tour for freshly registered hosts
   useEffect(() => {
@@ -984,35 +1011,8 @@ export default function DashboardPage() {
   }, [tab]);
 
   // Export session messages
-  const exportSession = async (roomCode) => {
-    setExportingCode(roomCode);
-    try {
-      const res = await API.get(`/api/rooms/${roomCode}/export`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `session-${roomCode}-report.txt`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      if (err.response?.status === 403) {
-        toast.info("Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
-        openUpgradeModal();
-      } else if (err.response?.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const parsed = JSON.parse(text);
-          toast.error(parsed.error || parsed.message || "Failed to export session");
-        } catch {
-          toast.error("Failed to export session");
-        }
-      } else {
-        toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to export session");
-      }
-    } finally {
-      setExportingCode(null);
-    }
+  const exportSession = (roomCode) => {
+    openExportModal(roomCode);
   };
 
   const openSessionReport = async (sessionItem) => {
@@ -1335,7 +1335,13 @@ export default function DashboardPage() {
       });
 
       const blob = new Blob([res.data], {
-        type: exportFormat === "csv" ? "text/csv" : exportFormat === "json" ? "application/json" : "text/plain"
+        type: exportFormat === "csv" 
+          ? "text/csv" 
+          : exportFormat === "json" 
+          ? "application/json" 
+          : exportFormat === "pdf"
+          ? "application/pdf"
+          : "text/plain"
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -1679,7 +1685,7 @@ export default function DashboardPage() {
   );
 
   const handleProtectedNavigation = (action) => {
-    if (session && !isSessionCompleted && !isSessionScheduled) {
+    if (tab === "active" && session && !isSessionCompleted && !isSessionScheduled) {
       setPendingAction(() => action);
       setShowLeaveModal(true);
     } else {
@@ -1736,13 +1742,21 @@ export default function DashboardPage() {
                 letterSpacing: "0.04em",
                 whiteSpace: "nowrap",
                 flexShrink: 0,
-                lineHeight: 1
+                lineHeight: 1,
+                cursor: !isSolo ? "pointer" : "default",
+                transition: "all 0.2s ease"
               }}
+              onClick={!isSolo ? openUpgradeModal : undefined}
+              title={!isSolo ? "Click to view subscription details and renew" : "Current active plan"}
             >
               {currentUser?.plan === "STUDIO" && <Crown size={13} style={{ strokeWidth: 2.2, marginBottom: 1 }} />}
               {currentUser?.plan === "HOST" && <Sparkles size={13} style={{ strokeWidth: 2.2 }} />}
               <span style={{ fontWeight: 800 }}>{currentUser?.plan || "SOLO"}</span>
-              <span className="plan-text-suffix" style={{ fontWeight: 600, opacity: 0.85, marginLeft: 2 }}>PLAN</span>
+              <span className="plan-text-suffix" style={{ fontWeight: 600, opacity: 0.85, marginLeft: 2 }}>
+                {!isSolo && daysUntilPlanExpiry !== null 
+                  ? (daysUntilPlanExpiry === 0 ? "· Expiring" : `· ${daysUntilPlanExpiry}d`)
+                  : "PLAN"}
+              </span>
             </span>
 
             {currentUser?.roomPasses > 0 && (
@@ -1767,13 +1781,13 @@ export default function DashboardPage() {
               </span>
             )}
 
-            {/* Upgrade Button (visible only if free tier) */}
-            {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
+            {/* Upgrade Button (visible if free tier or expiring soon) */}
+            {(isSolo || isPlanExpiringSoon) && (
               <button
                 className="btn btn-primary btn-sm dash-upgrade-btn"
                 onClick={openUpgradeModal}
               >
-                <Sparkles size={12} /> Upgrade
+                <Sparkles size={12} /> {isPlanExpiringSoon ? "Renew Plan" : "Upgrade"}
               </button>
             )}
 
@@ -1792,6 +1806,39 @@ export default function DashboardPage() {
       </div>
 
       <div className="dash-body container">
+        {/* Plan Renewal Alert Banner if within 5 days of expiry */}
+        {isPlanExpiringSoon && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: "12px 18px",
+              borderRadius: "var(--radius-md)",
+              background: "linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.12))",
+              border: "1px solid rgba(245, 158, 11, 0.35)",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "var(--text)" }}>
+              <Bell size={16} style={{ color: "#f59e0b", flexShrink: 0 }} />
+              <span>
+                Your <strong>{currentUser.plan} Plan</strong> subscription {daysUntilPlanExpiry === 0 ? "expires today" : `renews/expires in ${daysUntilPlanExpiry} day${daysUntilPlanExpiry === 1 ? "" : "s"}`}. Renew now to keep your vanity slugs &amp; AI moderation uninterrupted.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}
+              onClick={openUpgradeModal}
+            >
+              <Sparkles size={12} /> Renew Plan
+            </button>
+          </div>
+        )}
+
         <div className="dash-head">
           <div>
             <h1>Sessions</h1>
@@ -2006,7 +2053,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, color: "var(--text-faint)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
-                    whisprlive.com/ask/
+                    whisprlive.live/ask/
                   </span>
                   <input
                     type="text"
@@ -4082,7 +4129,7 @@ export default function DashboardPage() {
                   )}
                 </label>
 
-                {/* JSON / Report Option */}
+                {/* JSON Session Data Option */}
                 <label
                   onClick={() => {
                     const isAllowed = currentUser?.plan === "HOST" || currentUser?.plan === "STUDIO";
@@ -4118,6 +4165,47 @@ export default function DashboardPage() {
                     </span>
                   ) : (
                     <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999 }}>
+                      Unlocked
+                    </span>
+                  )}
+                </label>
+
+                {/* PDF Executive Report Option (Studio Exclusive) */}
+                <label
+                  onClick={() => {
+                    const isAllowed = currentUser?.plan === "STUDIO";
+                    if (!isAllowed) {
+                      toast.info("Executive PDF reports are exclusive to the Studio Plan.");
+                      openUpgradeModal();
+                      return;
+                    }
+                    setExportFormat("pdf");
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    border: exportFormat === "pdf" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    background: exportFormat === "pdf" ? "var(--accent-soft)" : "var(--surface-2)",
+                    cursor: "pointer",
+                    opacity: currentUser?.plan !== "STUDIO" ? 0.7 : 1
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Crown size={18} style={{ color: "#F59E0B" }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>PDF Executive Summary Report (.pdf)</div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Ready-to-print branded executive summary & visual charts</div>
+                    </div>
+                  </div>
+                  {currentUser?.plan !== "STUDIO" ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 999, display: "flex", alignItems: "center", gap: 3 }}>
+                      <Lock size={10} /> Studio Only
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", background: "rgba(16, 185, 129, 0.15)", padding: "2px 8px", borderRadius: 999 }}>
                       Unlocked
                     </span>
                   )}
@@ -4453,6 +4541,16 @@ export default function DashboardPage() {
           </div>
         </aside>
       )}
+
+      {/* Subscription & Plans Upgrade Modal */}
+      <PricingModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentUser={currentUser}
+        onPaymentSuccess={(updated) => {
+          if (refreshUser) refreshUser();
+        }}
+      />
     </div>
   );
 }

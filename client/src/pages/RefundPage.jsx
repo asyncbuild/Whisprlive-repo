@@ -51,7 +51,8 @@ export default function RefundPage() {
               Due to the immediate digital fulfillment nature of our services:
             </p>
             <ul style={{ paddingLeft: 20, marginTop: 8 }}>
-              <li><strong>Room Passes &amp; Subscription Upgrades:</strong> All purchases are <strong>final, non-cancellable, and non-refundable</strong> once payment is completed.</li>
+              <li><strong>Room Passes &amp; Subscription Upgrades:</strong> All purchases provide instant digital activation and are <strong>final, non-cancellable, and non-refundable</strong> once payment is processed.</li>
+              <li><strong>Fixed Term Access:</strong> Plans and passes expire automatically at the end of the purchased duration (24 hours, 30 days, or 365 days) with zero recurring or auto-debit charges.</li>
               <li>Once a Room Pass credit is added to your account, it remains valid until consumed for a live session.</li>
               <li>Purchases cannot be cancelled or refunded once processed through the Razorpay payment gateway.</li>
             </ul>
