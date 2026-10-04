@@ -12,6 +12,7 @@ model User {
   email        String    @unique
   passwordHash String
   plan         String   @default("SOLO") // SOLO, HOST, STUDIO
+  planExpiresAt DateTime? // Exactly 1 month expiry timestamp for HOST / STUDIO
   roomPasses   Int      @default(0)
   createdAt    DateTime  @default(now())
   rooms        Room[]
@@ -24,6 +25,7 @@ model Room {
   id              String    @id @default(uuid())
   hostId          String
   roomCode        String    @unique
+  customSlug      String?   @unique
   title           String
   durationMinutes Int
   startsAt        DateTime @default(now())
@@ -32,6 +34,9 @@ model Room {
   showPublicFeed  Boolean   @default(true) // Host toggle: whether approved questions are visible to audience
   activityType    String    @default("ALL") // "ALL" | "POLL" | "WORD_CLOUD" | "QA"
   isPassUsed      Boolean   @default(false)
+  brandLogo       String?   // Studio plan: Custom uploaded logo URL
+  brandColor      String?   // Studio plan: Custom hex accent color (e.g. #6366f1)
+  stageTheme      String?   @default("dark") // "dark" | "light" | "midnight"
   createdAt       DateTime  @default(now())
   closedAt        DateTime?
 
@@ -51,6 +56,9 @@ model Message {
   isAnswered  Boolean  @default(false)
   isPinned    Boolean  @default(false)
   hostReply   String?
+  aiFlagged   Boolean  @default(false)
+  aiFlagReason String?
+  aiCategory  String?
 
   // Tracking Metadata
   device      String?  // e.g. "Mobile (Android 11)"
@@ -65,12 +73,15 @@ model Message {
 }
 
 model Poll {
-  id          String         @id @default(uuid())
-  roomId      String
-  question    String
-  type        String         @default("CHOICE") // "CHOICE", "WORD_CLOUD"
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
+  id               String         @id @default(uuid())
+  roomId           String
+  question         String
+  type             String         @default("CHOICE") // "CHOICE", "WORD_CLOUD"
+  isActive         Boolean        @default(true)
+  isQuiz           Boolean        @default(false)
+  quizTimerSeconds Int            @default(0)
+  isQuizRevealed   Boolean        @default(false)
+  createdAt        DateTime       @default(now())
 
   // Relations
   room        Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
@@ -83,6 +94,7 @@ model PollOption {
   pollId    String
   text      String
   votes     Int            @default(0)
+  isCorrect Boolean        @default(false)
 
   // Relations
   poll      Poll           @relation(fields: [pollId], references: [id], onDelete: Cascade)

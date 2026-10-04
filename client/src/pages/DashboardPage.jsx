@@ -4,7 +4,8 @@ import {
   Link2, Play, Trash2,
   Clock, User, LogOut, Radio, Check, Copy,
   MessageCircle, Square, CheckCircle2, Search, QrCode, X, AlertTriangle, Plus, Loader2, Calendar, Sparkles, Crown, Lock, Ticket, XCircle, Eye, Bell,
-  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download, Users
+  BarChart2, Pin, MessageSquare, Edit3, ArrowRight, ThumbsUp, Download, Users,
+  Monitor, Palette, Layers, FileText, Trophy, Upload, ChevronDown
 } from "lucide-react";
 import { io } from "socket.io-client";
 import QRCode from "qrcode";
@@ -14,6 +15,8 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
 import ThemeToggle from "../components/ThemeToggle";
 import OnboardingTour from "../components/OnboardingTour";
+import LiveReactionsOverlay from "../components/LiveReactionsOverlay";
+import PricingModal from "../components/PricingModal";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
@@ -78,8 +81,10 @@ export default function DashboardPage() {
   const [sortMode, setSortMode] = useState("new"); // new | top
   const [startMode, setStartMode] = useState("now"); // now | schedule
   const [scheduleTime, setScheduleTime] = useState("");
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
   const [usePass, setUsePass] = useState(false);
   const [activityType, setActivityType] = useState("ALL"); // "ALL" | "POLL" | "WORD_CLOUD" | "QA"
+  const [customSlug, setCustomSlug] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Loading states
@@ -97,11 +102,24 @@ export default function DashboardPage() {
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollType, setPollType] = useState("CHOICE"); // "CHOICE" | "WORD_CLOUD"
   const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [isQuiz, setIsQuiz] = useState(false);
+  const [quizCorrectIndex, setQuizCorrectIndex] = useState(0);
+  const [quizTimerSeconds, setQuizTimerSeconds] = useState(0);
+  const [revealingQuiz, setRevealingQuiz] = useState(false);
   const [submittingPoll, setSubmittingPoll] = useState(false);
   const [endingPoll, setEndingPoll] = useState(false);
   const [replyingMessageId, setReplyingMessageId] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [savingReplyId, setSavingReplyId] = useState(null);
+
+  // Studio & Host Features: Export, Branding
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState("txt");
+  const [exportRoomCode, setExportRoomCode] = useState(null);
+  const [showBrandingModal, setShowBrandingModal] = useState(false);
+  const [brandingLogo, setBrandingLogo] = useState("");
+  const [savingBranding, setSavingBranding] = useState(false);
+  const reactionsRef = useRef(null);
 
   // Poll Templates & Library States
   const [pollTemplates, setPollTemplates] = useState([]);
@@ -142,9 +160,39 @@ export default function DashboardPage() {
       errorCorrectionLevel: "H",
       margin: 2,
       width: 440,
-      color: { dark: "#000000", light: "#00000000" } // Pure black modules over transparent background
+      color: { dark: "#000000", light: "#00000000" }
     })
-      .then((qrData) => {
+      .then(async (qrData) => {
+        const loadImage = (src) =>
+          new Promise((resolve) => {
+            if (!src) return resolve(null);
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = () => {
+              if (src !== "/Logo Bgless.png") {
+                const fallback = new Image();
+                fallback.crossOrigin = "anonymous";
+                fallback.onload = () => resolve(fallback);
+                fallback.onerror = () => resolve(null);
+                fallback.src = "/Logo Bgless.png";
+              } else {
+                resolve(null);
+              }
+            };
+            img.src = src;
+          });
+
+        const [qrImg, logoImg] = await Promise.all([
+          loadImage(qrData),
+          loadImage(session?.brandLogo || "/Logo Bgless.png")
+        ]);
+
+        if (!qrImg) {
+          setSessionQrUrl(qrData);
+          return;
+        }
+
         const canvas = document.createElement("canvas");
         canvas.width = 440;
         canvas.height = 440;
@@ -154,70 +202,61 @@ export default function DashboardPage() {
           return;
         }
 
-        const qrImg = new Image();
-        const logoImg = new Image();
+        // 1. Fill clean white base
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, 440, 440);
 
-        let qrLoaded = false;
-        let logoLoaded = false;
+        // 2. High-contrast QR matrix
+        ctx.drawImage(qrImg, 0, 0, 440, 440);
 
-        const renderComposite = () => {
-          if (!qrLoaded) return;
+        // 3. Center branded logo badge (High-error-correction safe)
+        if (logoImg && logoImg.width && logoImg.height) {
+          const badgeSize = 88;
+          const bx = (440 - badgeSize) / 2;
+          const by = (440 - badgeSize) / 2;
 
-          // 1. Fill clean white base
+          ctx.save();
           ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, 440, 440);
+          ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 2;
 
-          // 2. Draw branded logo watermark across the entire square (clearly visible while preserving scan contrast)
-          if (logoLoaded && logoImg.width && logoImg.height) {
-            ctx.save();
-            ctx.globalAlpha = 0.38; // Increased opacity so the logo watermark is clearly visible
-            const maxDimension = 360;
-            let drawW = maxDimension;
-            let drawH = maxDimension;
-            const aspect = logoImg.width / logoImg.height;
-            if (aspect > 1) {
-              drawW = maxDimension;
-              drawH = maxDimension / aspect;
-            } else {
-              drawH = maxDimension;
-              drawW = maxDimension * aspect;
-            }
-            const drawX = (440 - drawW) / 2;
-            const drawY = (440 - drawH) / 2;
-            ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
-            ctx.restore();
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(bx, by, badgeSize, badgeSize, 14);
+          } else {
+            ctx.rect(bx, by, badgeSize, badgeSize);
           }
+          ctx.fill();
 
-          // 3. Draw transparent QR code pattern on top
-          ctx.drawImage(qrImg, 0, 0, 440, 440);
+          ctx.shadowColor = "transparent";
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#E2E8F0";
+          ctx.stroke();
 
-          setSessionQrUrl(canvas.toDataURL("image/png"));
-        };
+          const pad = 10;
+          const innerSize = badgeSize - pad * 2;
+          const aspect = logoImg.width / logoImg.height;
+          let lw = innerSize;
+          let lh = innerSize;
+          if (aspect > 1) {
+            lh = innerSize / aspect;
+          } else {
+            lw = innerSize * aspect;
+          }
+          const lx = bx + (badgeSize - lw) / 2;
+          const ly = by + (badgeSize - lh) / 2;
+          ctx.drawImage(logoImg, lx, ly, lw, lh);
+          ctx.restore();
+        }
 
-        qrImg.onload = () => {
-          qrLoaded = true;
-          renderComposite();
-        };
-        qrImg.onerror = () => {
-          setSessionQrUrl(qrData);
-        };
-
-        logoImg.onload = () => {
-          logoLoaded = true;
-          renderComposite();
-        };
-        logoImg.onerror = () => {
-          logoLoaded = false;
-          renderComposite();
-        };
-
-        qrImg.src = qrData;
-        logoImg.src = "/Logo Bgless.png";
+        setSessionQrUrl(canvas.toDataURL("image/png"));
       })
       .catch((err) => {
         console.error("Failed to generate QR code:", err);
       });
-  }, [session?.link]);
+  }, [session?.link, session?.brandLogo]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [waitlistPlan, setWaitlistPlan] = useState("HOST");
@@ -225,7 +264,6 @@ export default function DashboardPage() {
   const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
-  const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [showCollaboratorsModal, setShowCollaboratorsModal] = useState(false);
   const [collaborators, setCollaborators] = useState([]);
   const [collaboratorEmail, setCollaboratorEmail] = useState("");
@@ -235,9 +273,6 @@ export default function DashboardPage() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [sessionReport, setSessionReport] = useState(null);
   const [reportLoadingCode, setReportLoadingCode] = useState(null);
-  const [pastMessages, setPastMessages] = useState([]);
-  const [loadingMessagesCode, setLoadingMessagesCode] = useState(null);
-  const [pastModalQuery, setPastModalQuery] = useState("");
   const [upgradingPlan, setUpgradingPlan] = useState(null);
 
   // Lock background scroll when any modal is open
@@ -246,11 +281,12 @@ export default function DashboardPage() {
       showUpgradeModal ||
       showWaitlistModal ||
       showLeaveModal ||
-      showMessagesModal ||
       showCollaboratorsModal ||
       showReportModal ||
       showQrModal ||
       showPollModal ||
+      showExportModal ||
+      showBrandingModal ||
       showTour
     );
 
@@ -265,11 +301,12 @@ export default function DashboardPage() {
     showUpgradeModal,
     showWaitlistModal,
     showLeaveModal,
-    showMessagesModal,
     showCollaboratorsModal,
     showReportModal,
     showQrModal,
     showPollModal,
+    showExportModal,
+    showBrandingModal,
     showTour
   ]);
 
@@ -391,6 +428,11 @@ export default function DashboardPage() {
   const username = currentUser?.username || currentUser?.email || "Host";
   const isSolo = !currentUser?.plan || currentUser?.plan === "SOLO";
   const isFreeSolo = isSolo && (currentUser?.roomPasses || 0) <= 0;
+  const planExpiresAt = currentUser?.planExpiresAt;
+  const daysUntilPlanExpiry = planExpiresAt 
+    ? Math.max(0, Math.ceil((new Date(planExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+  const isPlanExpiringSoon = daysUntilPlanExpiry !== null && daysUntilPlanExpiry <= 5 && !isSolo;
 
   // Auto-launch feature tour for freshly registered hosts
   useEffect(() => {
@@ -550,7 +592,8 @@ export default function DashboardPage() {
         startsAt: startsAtIso,
         usePass,
         showPublicFeed,
-        activityType
+        activityType,
+        customSlug: customSlug.trim() || undefined
       };
       const res = await API.post("/api/rooms", payload);
       const roomCode = res.data.room;
@@ -561,7 +604,8 @@ export default function DashboardPage() {
         title: payload.title,
         duration,
         roomCode,
-        link: `${window.location.host}/ask/${roomCode}`,
+        customSlug: res.data.customSlug || undefined,
+        link: `${window.location.host}/ask/${res.data.customSlug || roomCode}`,
         started: startMode === "now",
         startsAt: startTime.toISOString(),
         expiresAt,
@@ -573,6 +617,7 @@ export default function DashboardPage() {
       localStorage.setItem("whisprlive_active_session", JSON.stringify(sessionData));
       setSession(sessionData);
       setTitle("");
+      setCustomSlug("");
       setMessages([]);
       setActivePoll(null);
 
@@ -640,6 +685,13 @@ export default function DashboardPage() {
       socket.emit("join_room", session.roomCode);
     }
 
+    // Live Floating Reactions
+    socket.on("live_reaction", (data) => {
+      if (data?.emoji && reactionsRef.current) {
+        reactionsRef.current.triggerReaction(data.emoji);
+      }
+    });
+
     // Real-time Co-host Invitations / Removal / Room Close
     socket.on("collaborator_added", ({ room, addedBy }) => {
       if (!room) return;
@@ -689,6 +741,9 @@ export default function DashboardPage() {
         answered: newMsg.status === "answered" || newMsg.isAnswered === true,
         isPinned: Boolean(newMsg.isPinned),
         hostReply: newMsg.hostReply || null,
+        aiFlagged: Boolean(newMsg.aiFlagged),
+        aiFlagReason: newMsg.aiFlagReason || null,
+        aiCategory: newMsg.aiCategory || null,
         ts: new Date(newMsg.createdAt || Date.now()).getTime()
       };
       setMessages((prev) => {
@@ -721,6 +776,10 @@ export default function DashboardPage() {
       );
     });
 
+    socket.on("message_deleted", ({ messageId }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    });
+
     socket.on("room_settings_updated", (data) => {
       if (typeof data?.showPublicFeed === "boolean") {
         setShowPublicFeed(data.showPublicFeed);
@@ -747,6 +806,11 @@ export default function DashboardPage() {
 
     socket.on("poll_updated", (poll) => {
       setActivePoll(poll);
+    });
+
+    socket.on("quiz_revealed", (poll) => {
+      setActivePoll(poll);
+      toast.info("🎯 Quiz answers have been revealed to audience!");
     });
 
     socket.on("poll_ended", () => {
@@ -931,38 +995,6 @@ export default function DashboardPage() {
     }
   }, [tab]);
 
-  // Export session messages
-  const exportSession = async (roomCode) => {
-    setExportingCode(roomCode);
-    try {
-      const res = await API.get(`/api/rooms/${roomCode}/export`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `session-${roomCode}-report.txt`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      if (err.response?.status === 403) {
-        toast.info("Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
-        openUpgradeModal();
-      } else if (err.response?.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const parsed = JSON.parse(text);
-          toast.error(parsed.error || parsed.message || "Failed to export session");
-        } catch {
-          toast.error("Failed to export session");
-        }
-      } else {
-        toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to export session");
-      }
-    } finally {
-      setExportingCode(null);
-    }
-  };
-
   const openSessionReport = async (sessionItem) => {
     const code = sessionItem.roomCode || sessionItem.id;
     setReportLoadingCode(code);
@@ -983,43 +1015,7 @@ export default function DashboardPage() {
     }
   };
 
-  const openShowMessagesModal = async (sessionItem) => {
-    const code = sessionItem.roomCode || sessionItem.id;
-    const isUnlocked = !isSolo || sessionItem.isPassUsed;
 
-    if (!isUnlocked) {
-      toast.info("Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
-      openUpgradeModal();
-      return;
-    }
-
-    setLoadingMessagesCode(code);
-    try {
-      const res = await API.get(`/api/rooms/${code}/messages`);
-      const rawMsgs = res.data.messages || [];
-      const formatted = rawMsgs.map((m) => ({
-        id: m.id,
-        guest: m.guestName || "Anonymous",
-        text: m.content,
-        votes: m.upvotes || 0,
-        answered: m.isAnswered || m.status === "answered",
-        ts: new Date(m.createdAt).getTime()
-      }));
-      setPastMessages(formatted);
-      setSelectedPastSession(sessionItem);
-      setPastModalQuery("");
-      setShowMessagesModal(true);
-    } catch (err) {
-      if (err.response?.status === 403) {
-        toast.info("Viewing past session responses is a premium feature. Upgrade to Host plan or use a Room Pass!");
-        openUpgradeModal();
-      } else {
-        toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to load session messages");
-      }
-    } finally {
-      setLoadingMessagesCode(null);
-    }
-  };
 
   // Host manually starts session early
   const startSessionEarly = () => {
@@ -1153,6 +1149,22 @@ export default function DashboardPage() {
     }
   };
 
+  const deleteMessage = async (id) => {
+    if (!session?.roomCode) return;
+    const previousMessages = [...messages];
+    // 1. Instant optimistic UI removal (< 0.1ms)
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    toast.success("Question deleted");
+
+    try {
+      await API.delete(`/api/rooms/${session.roomCode}/messages/${id}`);
+    } catch (err) {
+      // Revert if API failed
+      setMessages(previousMessages);
+      toast.error(err.response?.data?.message || "Failed to delete question on server");
+    }
+  };
+
   const togglePublicFeedVisibility = async (newVal) => {
     if (!session?.roomCode) return;
     setShowPublicFeed(newVal);
@@ -1187,10 +1199,17 @@ export default function DashboardPage() {
 
     setSubmittingPoll(true);
     try {
+      const formattedOptions = pollType === "CHOICE" ? pollOptions.map((opt, idx) => ({
+        text: opt.trim(),
+        isCorrect: isQuiz ? idx === quizCorrectIndex : false
+      })).filter((o) => o.text !== "") : [];
+
       const res = await API.post(`/api/rooms/${session.roomCode}/polls`, {
         question: pollQuestion.trim(),
         type: pollType,
-        options: pollOptions.filter((o) => o.trim() !== "")
+        options: formattedOptions,
+        isQuiz,
+        quizTimerSeconds: isQuiz ? parseInt(quizTimerSeconds, 10) || 0 : 0
       });
       setActivePoll(res.data?.poll);
 
@@ -1215,15 +1234,127 @@ export default function DashboardPage() {
       setPollQuestion("");
       setTemplateFormTitle("");
       setPollOptions(["", ""]);
+      setIsQuiz(false);
+      setQuizCorrectIndex(0);
+      setQuizTimerSeconds(0);
       setSaveAsTemplate(false);
       setModalPollTab("active");
-      toast.success("🚀 Live poll launched to audience!");
+      toast.success(isQuiz ? "🎯 Live Quiz launched to audience!" : "🚀 Live poll launched to audience!");
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to launch poll");
     } finally {
       setSubmittingPoll(false);
     }
   };
+
+  const handleRevealQuiz = async () => {
+    if (!session?.roomCode || !activePoll) return;
+    setRevealingQuiz(true);
+    try {
+      const res = await API.post(`/api/rooms/${session.roomCode}/polls/${activePoll.id}/reveal`);
+      setActivePoll(res.data?.poll);
+      toast.success("🎯 Correct quiz answer revealed to audience!");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to reveal quiz answer");
+    } finally {
+      setRevealingQuiz(false);
+    }
+  };
+
+  // Export Modal Handlers
+  const openExportModal = (code) => {
+    setExportRoomCode(code || session?.roomCode);
+    setExportFormat("txt");
+    setShowExportModal(true);
+  };
+
+  const handleDownloadExport = async () => {
+    const code = exportRoomCode || session?.roomCode;
+    if (!code) return;
+    setExportingCode(code);
+    try {
+      const res = await API.get(`/api/rooms/${code}/export?format=${exportFormat}`, {
+        responseType: "blob"
+      });
+
+      const blob = new Blob([res.data], {
+        type: exportFormat === "csv" 
+          ? "text/csv" 
+          : exportFormat === "json" 
+          ? "application/json" 
+          : exportFormat === "pdf"
+          ? "application/pdf"
+          : "text/plain"
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `whisprlive-${code}-${exportFormat}.${exportFormat}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`Session exported as ${exportFormat.toUpperCase()}!`);
+      setShowExportModal(false);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        toast.error(err.response?.data?.message || "Export format not permitted in current tier.");
+      } else {
+        toast.error("Failed to export session data");
+      }
+    } finally {
+      setExportingCode(null);
+    }
+  };
+
+  // Custom Branding Modal Handlers (Studio)
+  const openBrandingModal = () => {
+    setBrandingLogo(session?.brandLogo || "");
+    setShowBrandingModal(true);
+  };
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Logo file size must be 2MB or less");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBrandingLogo(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveBranding = async (e) => {
+    e?.preventDefault();
+    if (!session?.roomCode) return;
+    setSavingBranding(true);
+    try {
+      await API.post(`/api/rooms/${session.roomCode}/branding`, {
+        brandLogo: brandingLogo || null,
+        brandColor: "#2563EB",
+        stageTheme: "dark"
+      });
+      setSession((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, brandLogo: brandingLogo || null };
+        try {
+          localStorage.setItem("whisprlive_active_session", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      toast.success(brandingLogo ? "✨ Custom Logo saved & applied to QR scanner!" : "Logo removed. Default WhisprLive watermark restored.");
+      setShowBrandingModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save logo. Ensure image is under 2MB and safe.");
+    } finally {
+      setSavingBranding(false);
+    }
+  };
+
+
 
   const handleEndPoll = async () => {
     if (!session?.roomCode || !activePoll) return;
@@ -1463,8 +1594,53 @@ export default function DashboardPage() {
     session && (session.isEnded || (secondsLeft <= 0 && session.started !== false)) && !isSessionScheduled
   );
 
+  const getScheduleDescription = (timeStr) => {
+    if (!timeStr) return "";
+    const parts = timeStr.split(":").map(Number);
+    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return "";
+    const [hh, mm] = parts;
+    const now = new Date();
+    const target = new Date();
+    target.setSeconds(0, 0);
+    target.setHours(hh, mm);
+
+    let isTomorrow = false;
+    if (target.getTime() <= now.getTime()) {
+      target.setDate(target.getDate() + 1);
+      isTomorrow = true;
+    }
+
+    const diffMinutes = Math.max(1, Math.round((target.getTime() - now.getTime()) / 60000));
+    const hours = Math.floor(diffMinutes / 60);
+    const mins = diffMinutes % 60;
+    const relText = hours > 0 ? (mins > 0 ? `in ${hours}h ${mins}m` : `in ${hours}h`) : `in ${mins}m`;
+
+    const formattedTime = target.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+    return `${isTomorrow ? "Tomorrow" : "Today"} at ${formattedTime} (${relText})`;
+  };
+
+  const setOffsetTime = (minutes) => {
+    const target = new Date(Date.now() + minutes * 60000);
+    const m = target.getMinutes();
+    const remainder = m % 5;
+    if (remainder !== 0) {
+      target.setMinutes(m + (5 - remainder));
+    }
+    const hh = String(target.getHours()).padStart(2, "0");
+    const mm = String(target.getMinutes()).padStart(2, "0");
+    setScheduleTime(`${hh}:${mm}`);
+  };
+
+  const setTimeFrom12h = (h12, min, ampm) => {
+    let h24 = h12 % 12;
+    if (ampm === "PM") h24 += 12;
+    const hh = String(h24).padStart(2, "0");
+    const mm = String(min).padStart(2, "0");
+    setScheduleTime(`${hh}:${mm}`);
+  };
+
   const handleProtectedNavigation = (action) => {
-    if (session && !isSessionCompleted && !isSessionScheduled) {
+    if (tab === "active" && session && !isSessionCompleted && !isSessionScheduled) {
       setPendingAction(() => action);
       setShowLeaveModal(true);
     } else {
@@ -1495,34 +1671,45 @@ export default function DashboardPage() {
             <span
               className={`plan-badge ${(!currentUser?.plan || currentUser?.plan === "SOLO") ? "plan-badge-solo" : ""}`}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
                 fontSize: 11,
                 fontWeight: 700,
                 padding: "4px 10px",
                 borderRadius: "999px",
                 background: (currentUser?.plan === "STUDIO")
-                  ? "var(--accent-soft)"
+                  ? "rgba(37, 99, 235, 0.08)"
                   : (currentUser?.plan === "HOST")
-                    ? "var(--live-soft)"
+                    ? "rgba(255, 90, 54, 0.08)"
                     : "var(--surface-2)",
                 color: (currentUser?.plan === "STUDIO")
-                  ? "var(--accent)"
+                  ? "#2563EB"
                   : (currentUser?.plan === "HOST")
-                    ? "var(--live)"
-                    : "var(--text)",
-                border: "1px solid var(--border)",
-                alignItems: "center",
-                gap: 4,
+                    ? "#FF5A36"
+                    : "var(--text-dim)",
+                border: (currentUser?.plan === "STUDIO")
+                  ? "1px solid rgba(37, 99, 235, 0.25)"
+                  : (currentUser?.plan === "HOST")
+                    ? "1px solid rgba(255, 90, 54, 0.25)"
+                    : "1px solid var(--border)",
                 textTransform: "uppercase",
                 letterSpacing: "0.04em",
                 whiteSpace: "nowrap",
                 flexShrink: 0,
-                lineHeight: 1
+                lineHeight: 1,
+                cursor: !isSolo ? "pointer" : "default",
+                transition: "all 0.2s ease"
               }}
+              onClick={!isSolo ? openUpgradeModal : undefined}
+              title={!isSolo ? "Click to view subscription details and renew" : "Current active plan"}
             >
-              {currentUser?.plan === "STUDIO" && <Crown size={12} />}
-              {currentUser?.plan === "HOST" && <Sparkles size={12} />}
-              <span>{currentUser?.plan || "SOLO"}</span>
-              <span className="plan-text-suffix"> PLAN</span>
+              {currentUser?.plan === "STUDIO" && <Crown size={13} style={{ strokeWidth: 2.2, marginBottom: 1 }} />}
+              {currentUser?.plan === "HOST" && <Sparkles size={13} style={{ strokeWidth: 2.2 }} />}
+              <span style={{ fontWeight: 800 }}>{currentUser?.plan || "SOLO"}</span>
+              <span className="plan-text-suffix" style={{ fontWeight: 600, opacity: 0.85, marginLeft: 2 }}>
+                PLAN
+              </span>
             </span>
 
             {currentUser?.roomPasses > 0 && (
@@ -1547,13 +1734,13 @@ export default function DashboardPage() {
               </span>
             )}
 
-            {/* Upgrade Button (visible only if free tier) */}
-            {(!currentUser?.plan || currentUser?.plan === "SOLO") && (
+            {/* Upgrade Button (visible if free tier or expiring soon) */}
+            {(isSolo || isPlanExpiringSoon) && (
               <button
                 className="btn btn-primary btn-sm dash-upgrade-btn"
                 onClick={openUpgradeModal}
               >
-                <Sparkles size={12} /> Upgrade
+                <Sparkles size={12} /> {isPlanExpiringSoon ? "Renew Plan" : "Upgrade"}
               </button>
             )}
 
@@ -1572,6 +1759,39 @@ export default function DashboardPage() {
       </div>
 
       <div className="dash-body container">
+        {/* Plan Renewal Alert Banner if within 5 days of expiry */}
+        {isPlanExpiringSoon && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: "12px 18px",
+              borderRadius: "var(--radius-md)",
+              background: "linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.12))",
+              border: "1px solid rgba(245, 158, 11, 0.35)",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "var(--text)" }}>
+              <Bell size={16} style={{ color: "#f59e0b", flexShrink: 0 }} />
+              <span>
+                Your <strong>{currentUser.plan} Plan</strong> subscription {daysUntilPlanExpiry === 0 ? "expires today" : `renews/expires in ${daysUntilPlanExpiry} day${daysUntilPlanExpiry === 1 ? "" : "s"}`}. Renew now to keep your vanity slugs &amp; AI moderation uninterrupted.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}
+              onClick={openUpgradeModal}
+            >
+              <Sparkles size={12} /> Renew Plan
+            </button>
+          </div>
+        )}
+
         <div className="dash-head">
           <div>
             <h1>Sessions</h1>
@@ -1727,46 +1947,266 @@ export default function DashboardPage() {
 
               <div className="schedule-row" style={{ marginTop: 20 }}>
                 <span className="schedule-label">Start timing:</span>
-                <div className="chip-row">
-                  <button className={`chip ${startMode === "now" ? "active" : ""}`} onClick={() => setStartMode("now")}>
+                <div className="chip-row" style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", position: "relative" }}>
+                  <button className={`chip ${startMode === "now" ? "active" : ""}`} onClick={() => { setStartMode("now"); setShowCustomTimePicker(false); }}>
                     Start immediately
                   </button>
                   <button
                     className={`chip ${startMode === "schedule" ? "active" : ""}`}
                     onClick={() => {
-                      const hasPasses = (currentUser?.roomPasses || 0) > 0;
-                      const isSoloUser = (!currentUser?.plan || currentUser?.plan === "SOLO") && !hasPasses;
-                      if (isSoloUser) {
-                        toast.info("Scheduled starts require a Room Pass. Upgrade to schedule sessions in advance.");
-                        openUpgradeModal();
-                        return;
-                      }
                       setStartMode("schedule");
+                      if (!scheduleTime) {
+                        setOffsetTime(30);
+                      }
                     }}
                   >
                     Schedule for specific time
-                    {((!currentUser?.plan || currentUser?.plan === "SOLO") && (currentUser?.roomPasses || 0) <= 0) && (
-                      <span style={{ fontSize: 10, background: "var(--accent-soft)", color: "var(--accent)", padding: "1px 6px", borderRadius: 999, marginLeft: 6 }}>
-                        Pass Required
-                      </span>
-                    )}
                   </button>
-                </div>
 
-                {startMode === "schedule" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, width: "100%" }}>
-                    <input
-                      type="time"
-                      className="time-input"
-                      value={scheduleTime}
-                      onChange={(e) => setScheduleTime(e.target.value)}
-                      required
-                    />
-                    <span style={{ fontSize: 13, color: "var(--text-dim)" }}>
-                      {scheduleTime ? `Room will open at ${scheduleTime}` : "Select start time"}
+                  {startMode === "schedule" && (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", position: "relative" }}>
+                      {/* Quick Presets */}
+                      {[
+                        { label: "+15m", mins: 15 },
+                        { label: "+30m", mins: 30 },
+                        { label: "+1h", mins: 60 },
+                        { label: "+2h", mins: 120 }
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          className="chip"
+                          style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 999 }}
+                          onClick={() => {
+                            setOffsetTime(preset.mins);
+                            setShowCustomTimePicker(false);
+                          }}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+
+                      {/* Custom Time Selector Trigger */}
+                      <button
+                        type="button"
+                        className="btn btn-soft btn-sm"
+                        onClick={() => setShowCustomTimePicker((prev) => !prev)}
+                        style={{
+                          height: 30,
+                          fontSize: 12.5,
+                          padding: "4px 10px",
+                          gap: 6,
+                          borderRadius: "var(--radius-sm)",
+                          background: showCustomTimePicker ? "var(--accent-soft)" : "var(--surface-2)",
+                          border: showCustomTimePicker ? "1px solid var(--accent)" : "1px solid var(--border)",
+                          color: "var(--text)"
+                        }}
+                      >
+                        <Clock size={13} style={{ color: "var(--accent)" }} />
+                        {scheduleTime ? (() => {
+                          const [hhStr, mmStr] = scheduleTime.split(":");
+                          const h24 = parseInt(hhStr, 10) || 12;
+                          const mm = mmStr || "00";
+                          const ampm = h24 >= 12 ? "PM" : "AM";
+                          const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                          return `${h12}:${mm} ${ampm}`;
+                        })() : "Custom Time"}
+                        <ChevronDown size={12} style={{ opacity: 0.7 }} />
+                      </button>
+
+                      {/* Dynamic Schedule Preview Badge */}
+                      {scheduleTime && (
+                        <span style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "var(--accent)",
+                          background: "var(--accent-soft)",
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          whiteSpace: "nowrap"
+                        }}>
+                          {getScheduleDescription(scheduleTime)}
+                        </span>
+                      )}
+
+                      {/* Custom Time Picker Popover Card */}
+                      {showCustomTimePicker && (() => {
+                        const [hhStr, mmStr] = (scheduleTime || "12:00").split(":");
+                        const h24 = parseInt(hhStr, 10) || 12;
+                        const currentMinute = parseInt(mmStr, 10) || 0;
+                        const currentAmpm = h24 >= 12 ? "PM" : "AM";
+                        const currentHour12 = h24 % 12 === 0 ? 12 : h24 % 12;
+
+                        return (
+                          <div
+                            className="custom-time-popover"
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 8px)",
+                              left: 0,
+                              zIndex: 150,
+                              background: "var(--surface)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "var(--radius-md)",
+                              boxShadow: "0 12px 32px rgba(0,0,0,0.22)",
+                              padding: "16px",
+                              width: 320,
+                              maxWidth: "92vw"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Select Start Time</span>
+                              {/* AM / PM Toggle */}
+                              <div style={{ display: "flex", background: "var(--surface-2)", borderRadius: 999, padding: 2, border: "1px solid var(--border)" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setTimeFrom12h(currentHour12, currentMinute, "AM")}
+                                  style={{
+                                    border: "none",
+                                    background: currentAmpm === "AM" ? "var(--accent)" : "transparent",
+                                    color: currentAmpm === "AM" ? "#fff" : "var(--text-dim)",
+                                    borderRadius: 999,
+                                    padding: "3px 10px",
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  AM
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTimeFrom12h(currentHour12, currentMinute, "PM")}
+                                  style={{
+                                    border: "none",
+                                    background: currentAmpm === "PM" ? "var(--accent)" : "transparent",
+                                    color: currentAmpm === "PM" ? "#fff" : "var(--text-dim)",
+                                    borderRadius: 999,
+                                    padding: "3px 10px",
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  PM
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Hours grid (1 to 12) */}
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                Hour
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
+                                  <button
+                                    key={h}
+                                    type="button"
+                                    onClick={() => setTimeFrom12h(h, currentMinute, currentAmpm)}
+                                    style={{
+                                      padding: "6px 0",
+                                      textAlign: "center",
+                                      fontSize: 12.5,
+                                      fontWeight: currentHour12 === h ? 700 : 500,
+                                      borderRadius: "var(--radius-sm)",
+                                      border: currentHour12 === h ? "1px solid var(--accent)" : "1px solid var(--border)",
+                                      background: currentHour12 === h ? "var(--accent)" : "var(--surface-2)",
+                                      color: currentHour12 === h ? "#fff" : "var(--text)",
+                                      cursor: "pointer"
+                                    }}
+                                  >
+                                    {h}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Minutes grid (:00, :15, :30, :45) */}
+                            <div style={{ marginBottom: 14 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                Minute
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                                {[0, 15, 30, 45].map((m) => {
+                                  const isSelected = Math.abs(currentMinute - m) <= 2 || currentMinute === m;
+                                  return (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setTimeFrom12h(currentHour12, m, currentAmpm)}
+                                      style={{
+                                        padding: "6px 0",
+                                        textAlign: "center",
+                                        fontSize: 12.5,
+                                        fontWeight: isSelected ? 700 : 500,
+                                        borderRadius: "var(--radius-sm)",
+                                        border: isSelected ? "1px solid var(--accent)" : "1px solid var(--border)",
+                                        background: isSelected ? "var(--accent)" : "var(--surface-2)",
+                                        color: isSelected ? "#fff" : "var(--text)",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      :{String(m).padStart(2, "0")}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Popover Footer */}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                              <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                                {scheduleTime ? getScheduleDescription(scheduleTime) : ""}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setShowCustomTimePicker(false)}
+                                style={{ padding: "4px 12px", fontSize: 12 }}
+                              >
+                                Done
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Custom Vanity URL Slug (Host & Studio plans) */}
+              <div className="new-session-slug-row" style={{ marginTop: 16, padding: "14px 16px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Sparkles size={14} style={{ color: "var(--accent)" }} /> Custom Vanity URL Slug (Optional)
+                  </label>
+                  {(!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS") && (
+                    <span
+                      onClick={openUpgradeModal}
+                      style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
+                      <Lock size={10} /> Host & Studio Plans
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, color: "var(--text-faint)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+                    whisprlive.live/ask/
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="e.g. keynote-qna"
+                    value={customSlug}
+                    onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ""))}
+                    disabled={!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS"}
+                    style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13.5, background: (!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS") ? "var(--surface-3)" : "var(--surface)" }}
+                  />
+                </div>
               </div>
 
               {/* Audience Feed Visibility Setting - Full Width */}
@@ -1853,8 +2293,8 @@ export default function DashboardPage() {
                         {session.title}
                       </div>
                       <div className="mono" style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 4 }}>
-                        {session.duration}-minute session · Room Code:{" "}
-                        <strong style={{ color: "var(--accent)" }}>{session.roomCode}</strong>
+                        {session.duration}-minute session · {session.customSlug ? "Slug: " : "Room Code: "}
+                        <strong style={{ color: "var(--accent)" }}>{session.customSlug ? `/ask/${session.customSlug}` : session.roomCode}</strong>
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1972,6 +2412,29 @@ export default function DashboardPage() {
                         {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied Link" : "Copy Link"}
                       </button>
                       <button
+                        className="btn btn-soft btn-sm"
+                        onClick={() => window.open(`/stage/${session.customSlug || session.roomCode}`, "_blank")}
+                        title="Open Fullscreen Presenter / Projector Stage View"
+                      >
+                        <Monitor size={14} /> Stage View
+                      </button>
+                      <button
+                        className="btn btn-soft btn-sm"
+                        onClick={() => openExportModal(session.roomCode)}
+                        title="Export session transcripts & data"
+                      >
+                        <Download size={14} /> Export
+                      </button>
+                      {currentUser?.plan === "STUDIO" && (
+                        <button
+                          className="btn btn-soft btn-sm"
+                          onClick={openBrandingModal}
+                          title="Custom Branding & Stage Styling"
+                        >
+                          <Palette size={14} /> Branding
+                        </button>
+                      )}
+                      <button
                         className="btn btn-primary btn-sm"
                         onClick={() => (activePoll ? openActivePollModal() : openSessionPollModal())}
                         title={activePoll ? "View active live poll results or saved drafts" : "Open saved poll drafts to launch to audience"}
@@ -1983,7 +2446,7 @@ export default function DashboardPage() {
                         }}
                       >
                         <BarChart2 size={14} />
-                        {activePoll ? "Live Poll 🔴" : "Live Polls"}
+                        {activePoll ? (activePoll.isQuiz ? "Live Quiz 🎯" : "Live Poll 🔴") : "Live Polls"}
                       </button>
                     </div>
 
@@ -2013,13 +2476,15 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Active Live Poll HUD Widget (Visible on Host screen in Real-Time) */}
+                {/* Active Live Poll & Quiz HUD Widget (Visible on Host screen in Real-Time) */}
                 {activePoll && (
                   <div className="host-active-poll-hud" style={{
                     marginBottom: 16,
                     padding: "16px 20px",
-                    background: "linear-gradient(145deg, rgba(255, 90, 54, 0.06) 0%, var(--surface-1) 100%)",
-                    border: "1px solid rgba(255, 90, 54, 0.35)",
+                    background: activePoll.isQuiz
+                      ? "linear-gradient(145deg, rgba(16, 185, 129, 0.08) 0%, var(--surface-1) 100%)"
+                      : "linear-gradient(145deg, rgba(255, 90, 54, 0.06) 0%, var(--surface-1) 100%)",
+                    border: activePoll.isQuiz ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid rgba(255, 90, 54, 0.35)",
                     borderRadius: "var(--radius-lg)",
                     boxShadow: "0 4px 20px rgba(0, 0, 0, 0.25)"
                   }}>
@@ -2035,18 +2500,33 @@ export default function DashboardPage() {
                           textTransform: "uppercase",
                           padding: "3px 10px",
                           borderRadius: 999,
-                          background: "rgba(255, 90, 54, 0.15)",
-                          color: "var(--primary)",
-                          border: "1px solid rgba(255, 90, 54, 0.4)"
+                          background: activePoll.isQuiz ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 90, 54, 0.15)",
+                          color: activePoll.isQuiz ? "#10B981" : "var(--primary)",
+                          border: activePoll.isQuiz ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid rgba(255, 90, 54, 0.4)"
                         }}>
-                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--primary)" }} />
-                          LIVE {activePoll.type === "WORD_CLOUD" ? "WORD CLOUD" : "POLL"}
+                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: activePoll.isQuiz ? "#10B981" : "var(--primary)" }} />
+                          {activePoll.isQuiz ? "LIVE QUIZ 🎯" : `LIVE ${activePoll.type === "WORD_CLOUD" ? "WORD CLOUD" : "POLL"}`}
                         </span>
                         <span style={{ fontSize: 13, color: "var(--text-dim)", fontWeight: 500 }}>
                           {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"} received
                         </span>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {activePoll.isQuiz && !activePoll.isQuizRevealed && (
+                          <button
+                            className="btn btn-primary btn-xs"
+                            onClick={handleRevealQuiz}
+                            disabled={revealingQuiz}
+                            style={{ fontSize: 12, padding: "5px 12px", background: "linear-gradient(135deg, #10B981 0%, #059669 100%)", border: "none" }}
+                          >
+                            {revealingQuiz ? "Revealing..." : "Reveal Correct Answer 🎯"}
+                          </button>
+                        )}
+                        {activePoll.isQuiz && activePoll.isQuizRevealed && (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#10B981", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <CheckCircle2 size={13} /> Answer Revealed
+                          </span>
+                        )}
                         <button
                           className="btn btn-soft btn-xs"
                           onClick={openActivePollModal}
@@ -2071,23 +2551,28 @@ export default function DashboardPage() {
 
                     {activePoll.type === "CHOICE" ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {activePoll.options.map((opt) => (
-                          <div key={opt.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
-                              <span style={{ fontWeight: 500, color: "var(--text)" }}>{opt.text}</span>
-                              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{opt.percentage}% ({opt.votes})</span>
+                        {activePoll.options.map((opt) => {
+                          const isCorrect = activePoll.isQuizRevealed && opt.isCorrect;
+                          return (
+                            <div key={opt.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
+                                <span style={{ fontWeight: isCorrect ? 700 : 500, color: isCorrect ? "#10B981" : "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                                  {opt.text} {isCorrect && <CheckCircle2 size={14} style={{ color: "#10B981" }} />}
+                                </span>
+                                <span style={{ fontWeight: 600, color: isCorrect ? "#10B981" : "var(--primary)" }}>{opt.percentage}% ({opt.votes})</span>
+                              </div>
+                              <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
+                                <div style={{
+                                  height: "100%",
+                                  width: `${opt.percentage}%`,
+                                  background: isCorrect ? "linear-gradient(90deg, #10B981 0%, #059669 100%)" : "linear-gradient(90deg, #FF5A36 0%, #EA580C 100%)",
+                                  borderRadius: 999,
+                                  transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                                }} />
+                              </div>
                             </div>
-                            <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
-                              <div style={{
-                                height: "100%",
-                                width: `${opt.percentage}%`,
-                                background: "linear-gradient(90deg, #FF5A36 0%, #EA580C 100%)",
-                                borderRadius: 999,
-                                transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
-                              }} />
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <WordCloudVisualizer
@@ -2206,6 +2691,15 @@ export default function DashboardPage() {
                                         <CheckCircle2 size={11} /> Answered
                                       </span>
                                     )}
+                                    {m.aiFlagged && (
+                                      <span
+                                        className="bubble-tag"
+                                        style={{ background: "rgba(239, 68, 68, 0.15)", color: "#EF4444", border: "1px solid rgba(239, 68, 68, 0.35)", fontSize: 10.5 }}
+                                        title={m.aiFlagReason || "Flagged by AI moderation filter"}
+                                      >
+                                        <AlertTriangle size={10} /> AI Flagged: {m.aiCategory || "Toxicity"}
+                                      </span>
+                                    )}
                                     <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)", display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4 }}>
                                       <ThumbsUp size={11} /> {m.votes || 0}
                                     </span>
@@ -2231,8 +2725,17 @@ export default function DashboardPage() {
                                       className={`answer-btn ${m.answered ? "done" : ""}`}
                                       onClick={() => toggleAnswered(m.id)}
                                       title={m.answered ? "Mark as unanswered" : "Mark as answered"}
+                                      style={{ marginRight: 4 }}
                                     >
                                       <Check size={14} />
+                                    </button>
+                                    <button
+                                      className="answer-btn delete-btn"
+                                      onClick={() => deleteMessage(m.id)}
+                                      title="Delete question permanently"
+                                      style={{ color: "#EF4444" }}
+                                    >
+                                      <Trash2 size={13} />
                                     </button>
                                   </div>
                                 </div>
@@ -2348,14 +2851,14 @@ export default function DashboardPage() {
                       </div>
                       <span className="past-card-date" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                         <Clock size={13} style={{ color: "var(--accent)" }} />
-                        {dateStr} · Code: <strong style={{ color: "var(--text)" }}>{code}</strong>
+                        {dateStr} · {p.customSlug ? "Slug: " : "Code: "}<strong style={{ color: "var(--text)" }}>{p.customSlug ? `/ask/${p.customSlug}` : code}</strong>
                       </span>
                     </div>
                     <div className="past-card-stats">
                       <div className="stat"><span className="stat-num">{responseCount}</span><span className="stat-label">Responses</span></div>
                       <div className="stat"><span className="stat-num">{durMinutes}m</span><span className="stat-label">Duration</span></div>
                     </div>
-                    <div className="past-card-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div className="past-card-actions">
                       <button
                         className="btn btn-primary btn-sm past-recap-btn"
                         onClick={() => openSessionReport(p)}
@@ -2364,27 +2867,13 @@ export default function DashboardPage() {
                         {reportLoadingCode === code ? <Loader2 size={13} className="spin" /> : <BarChart2 size={13} />}
                         {reportLoadingCode === code ? "Loading..." : "Recap"}
                       </button>
-                      {(() => {
-                        const isUnlocked = !isSolo || p.isPassUsed;
-
-                        return (
-                          <button
-                            className="btn btn-soft btn-sm past-messages-btn"
-                            onClick={() => openShowMessagesModal(p)}
-                            disabled={loadingMessagesCode === code}
-                            title={!isUnlocked ? "Unlock responses with Host plan or Room Pass" : "View session messages"}
-                          >
-                            {loadingMessagesCode === code ? (
-                              <Loader2 size={13} className="spin" />
-                            ) : !isUnlocked ? (
-                              <Lock size={13} style={{ color: "var(--accent)" }} />
-                            ) : (
-                              <Eye size={13} />
-                            )}
-                            {loadingMessagesCode === code ? "Loading..." : "Show Messages"}
-                          </button>
-                        );
-                      })()}
+                      <button
+                        className="btn btn-soft btn-sm"
+                        onClick={() => openExportModal(code)}
+                        title="Export session data (.txt, .csv, .json, .pdf)"
+                      >
+                        <Download size={13} /> Export
+                      </button>
                     </div>
                   </div>
                 );
@@ -2710,13 +3199,14 @@ export default function DashboardPage() {
                       <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500 }}> /pass</span>
                     </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>1 room for 24 hours</li>
-                      <li>Up to 500 messages / room</li>
+                      <li>1 room active for 24 hours</li>
+                      <li>Up to 500 questions / room</li>
                       <li>Unlimited live polls &amp; word clouds</li>
                       <li>Unlimited poll templates in library</li>
-                      <li>Scheduled start supported</li>
-                      <li>30 days history retention</li>
-                      <li>Export responses</li>
+                      <li>Co-host &amp; moderator collaboration</li>
+                      <li>Audience device &amp; location insights</li>
+                      <li>Scheduled room start &amp; custom duration</li>
+                      <li>30 days session history</li>
                     </ul>
                   </div>
                   <button
@@ -2740,13 +3230,15 @@ export default function DashboardPage() {
                       {geoCurrency.isIndia ? "₹349/mo" : "$9/mo"}
                     </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>Unlimited rooms</li>
-                      <li>Up to 1,000 messages / room</li>
+                      <li>Unlimited rooms &amp; sessions</li>
+                      <li>Up to 1,000 questions / room</li>
                       <li>Unlimited live polls &amp; word clouds</li>
                       <li>Unlimited poll templates in library</li>
-                      <li>60-min room timers</li>
-                      <li>Scheduled start</li>
-                      <li>90 days history retention</li>
+                      <li>Up to 3 co-hosts per room</li>
+                      <li>Audience device &amp; location analytics</li>
+                      <li>60-minute room timers &amp; scheduled starts</li>
+                      <li>90 days session history</li>
+                      <li>Priority email &amp; chat support</li>
                     </ul>
                   </div>
                   <button
@@ -2769,14 +3261,15 @@ export default function DashboardPage() {
                       {geoCurrency.isIndia ? "₹799/mo" : "$19/mo"}
                     </div>
                     <ul style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 14, margin: "10px 0", lineHeight: 1.5 }}>
-                      <li>Unlimited rooms</li>
-                      <li>Up to 2,500 messages / room</li>
+                      <li>Unlimited rooms &amp; concurrent sessions</li>
+                      <li>Up to 2,500 questions / room</li>
                       <li>Unlimited live polls &amp; word clouds</li>
                       <li>Unlimited poll templates in library</li>
-                      <li>120-min room timers</li>
-                      <li>1 year history retention</li>
-                      <li>Export (.txt &amp; CSV)</li>
-                      <li>Priority email support</li>
+                      <li>Unlimited co-hosts &amp; moderator seats</li>
+                      <li>Full audience analytics &amp; insights</li>
+                      <li>120-min+ timers &amp; multi-day passes</li>
+                      <li>1 year session history</li>
+                      <li>Dedicated priority 24/7 support</li>
                     </ul>
                   </div>
                   <button
@@ -2983,26 +3476,9 @@ export default function DashboardPage() {
                   {sessionReport.room.title} · {formatFullDateTime(sessionReport.room.createdAt)} · Code: {sessionReport.room.roomCode}
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    if (sessionReport.canExport) {
-                      exportSession(sessionReport.room.roomCode);
-                    } else {
-                      setShowReportModal(false);
-                      openUpgradeModal();
-                    }
-                  }}
-                  disabled={exportingCode === sessionReport.room.roomCode}
-                >
-                  {sessionReport.canExport ? <Download size={13} /> : <Lock size={13} />}
-                  {exportingCode === sessionReport.room.roomCode ? "Exporting..." : sessionReport.canExport ? "Export report" : "Unlock export"}
-                </button>
-                <button className="modal-close-btn" onClick={() => setShowReportModal(false)} aria-label="Close recap">
-                  <X size={16} />
-                </button>
-              </div>
+              <button className="modal-close-btn" onClick={() => setShowReportModal(false)} aria-label="Close recap">
+                <X size={16} />
+              </button>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 10, margin: "18px 0 24px" }}>
@@ -3080,90 +3556,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Show Messages Modal Window */}
-      {showMessagesModal && selectedPastSession && (
-        <div className="modal-overlay" onClick={() => setShowMessagesModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, width: "90%" }}>
-            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 14 }}>
-              <div>
-                <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700 }}>
-                  {selectedPastSession.title || "Session Messages"}
-                </h3>
-                <div className="mono" style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 4 }}>
-                  Room Code: <strong style={{ color: "var(--accent)" }}>{selectedPastSession.roomCode || selectedPastSession.id}</strong> · {pastMessages.length} responses
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => exportSession(selectedPastSession.roomCode || selectedPastSession.id)}
-                  disabled={exportingCode === (selectedPastSession.roomCode || selectedPastSession.id)}
-                >
-                  {exportingCode === (selectedPastSession.roomCode || selectedPastSession.id) ? (
-                    <Loader2 size={13} className="spin" />
-                  ) : (
-                    <Download size={13} />
-                  )}
-                  Export
-                </button>
-                <button className="modal-close-btn" onClick={() => setShowMessagesModal(false)}>
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
 
-            <div style={{ marginTop: 14 }}>
-              <div className="feed-search" style={{ marginBottom: 14 }}>
-                <Search size={14} />
-                <input
-                  placeholder="Search questions in this session..."
-                  value={pastModalQuery}
-                  onChange={(e) => setPastModalQuery(e.target.value)}
-                />
-              </div>
-
-              <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingRight: 4 }}>
-                {pastMessages.filter((m) =>
-                  pastModalQuery.trim()
-                    ? (m.text + " " + m.guest).toLowerCase().includes(pastModalQuery.trim().toLowerCase())
-                    : true
-                ).length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-faint)", fontSize: 14 }}>
-                    {pastMessages.length === 0 ? "No questions were submitted during this session." : "No questions match your search."}
-                  </div>
-                ) : (
-                  pastMessages
-                    .filter((m) =>
-                      pastModalQuery.trim()
-                        ? (m.text + " " + m.guest).toLowerCase().includes(pastModalQuery.trim().toLowerCase())
-                        : true
-                    )
-                    .map((m) => (
-                      <div className={`bubble ${m.answered ? "answered" : ""}`} key={m.id} style={{ background: "var(--surface-2)" }}>
-                        <div className="bubble-top">
-                          <div className="bubble-meta">
-                            <span className="bubble-avatar">
-                              {m.guest?.charAt(0)?.toUpperCase() || "G"}
-                            </span>
-                            <span>{m.guest}</span>
-                            {m.answered && <span className="bubble-tag"><CheckCircle2 size={11} /> Answered</span>}
-                          </div>
-                        </div>
-                        <div className="bubble-text">{m.text}</div>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-
-            <div className="modal-actions" style={{ marginTop: 18, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowMessagesModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Live Poll & Word Cloud Host Modal */}
       {showPollModal && (
         <div className="modal-overlay" onClick={closePollModal}>
@@ -3491,12 +3884,28 @@ export default function DashboardPage() {
 
                     {pollType === "CHOICE" && (
                       <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text)" }}>
-                          Options (Minimum 2)
-                        </label>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                            Options (Minimum 2) {isQuiz && <span style={{ color: "#10B981", fontSize: 12 }}>— Select the correct answer</span>}
+                          </label>
+                        </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {pollOptions.map((opt, idx) => (
                             <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              {isQuiz && (
+                                <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }} title="Mark as correct answer">
+                                  <input
+                                    type="radio"
+                                    name="quizCorrectOption"
+                                    checked={quizCorrectIndex === idx}
+                                    onChange={() => setQuizCorrectIndex(idx)}
+                                    style={{ cursor: "pointer", accentColor: "#10B981", width: 16, height: 16 }}
+                                  />
+                                  <span style={{ fontSize: 12, fontWeight: quizCorrectIndex === idx ? 700 : 500, color: quizCorrectIndex === idx ? "#10B981" : "var(--text-dim)" }}>
+                                    {quizCorrectIndex === idx ? "Correct" : ""}
+                                  </span>
+                                </label>
+                              )}
                               <input
                                 type="text"
                                 placeholder={`Option ${idx + 1}`}
@@ -3507,13 +3916,17 @@ export default function DashboardPage() {
                                   setPollOptions(updated);
                                 }}
                                 required={idx < 2}
-                                style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13.5 }}
+                                style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: isQuiz && quizCorrectIndex === idx ? "1px solid #10B981" : "1px solid var(--border)", fontSize: 13.5 }}
                               />
                               {pollOptions.length > 2 && (
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                  onClick={() => {
+                                    const nextOpts = pollOptions.filter((_, i) => i !== idx);
+                                    setPollOptions(nextOpts);
+                                    if (quizCorrectIndex >= nextOpts.length) setQuizCorrectIndex(0);
+                                  }}
                                   style={{ padding: "6px 8px" }}
                                 >
                                   <X size={14} />
@@ -3531,6 +3944,55 @@ export default function DashboardPage() {
                           >
                             + Add Option
                           </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Quiz Mode Settings */}
+                    {pollType === "CHOICE" && (
+                      <div style={{ padding: "12px 14px", background: isQuiz ? "rgba(16, 185, 129, 0.08)" : "var(--surface-2)", border: isQuiz ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
+                            <input
+                              type="checkbox"
+                              checked={isQuiz}
+                              onChange={(e) => {
+                                const hasPass = (currentUser?.roomPasses || 0) > 0;
+                                const isSolo = (!currentUser?.plan || currentUser?.plan === "SOLO") && !hasPass;
+                                if (isSolo && e.target.checked) {
+                                  toast.info("Live Quiz Mode is available on 24h Room Pass, Host, and Studio plans.");
+                                  openUpgradeModal();
+                                  return;
+                                }
+                                setIsQuiz(e.target.checked);
+                              }}
+                              style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#10B981" }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                              <Trophy size={14} style={{ color: "#10B981" }} /> Live Quiz Mode
+                            </span>
+                          </label>
+                          {isQuiz && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <Clock size={13} style={{ color: "var(--text-dim)" }} />
+                              <select
+                                value={quizTimerSeconds}
+                                onChange={(e) => setQuizTimerSeconds(Number(e.target.value))}
+                                style={{ padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 12, background: "var(--surface)", color: "var(--text)" }}
+                              >
+                                <option value={0}>No Timer</option>
+                                <option value={15}>15 Seconds</option>
+                                <option value={30}>30 Seconds</option>
+                                <option value={45}>45 Seconds</option>
+                                <option value={60}>60 Seconds</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                        {isQuiz && (
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 6 }}>
+                            Audience members lock in their answer and you can reveal the correct answer with full results whenever you are ready!
+                          </div>
                         )}
                       </div>
                     )}
@@ -3592,6 +4054,341 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Export Session Modal */}
+      {showExportModal && (
+        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, width: "92%" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Download size={20} style={{ color: "var(--accent)" }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Export Session Data</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowExportModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 16 }}>
+                Download audience questions, answers, live polls, and engagement statistics for session <strong>{exportRoomCode || session?.roomCode}</strong>.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Plain TXT Option */}
+                <label
+                  onClick={() => setExportFormat("txt")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    border: exportFormat === "txt" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    background: exportFormat === "txt" ? "var(--accent-soft)" : "var(--surface-2)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+                    <FileText size={18} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Plain Text Transcript (.txt)</div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Questions, answers & poll tallies in readable text</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: "50%",
+                    border: exportFormat === "txt" ? "5px solid var(--accent)" : "2px solid var(--border)",
+                    background: exportFormat === "txt" ? "#fff" : "transparent",
+                    flexShrink: 0,
+                    marginLeft: 12,
+                    transition: "all 0.15s ease"
+                  }} />
+                </label>
+
+                {/* CSV Option */}
+                {(() => {
+                  const hasPass = (currentUser?.roomPasses || 0) > 0;
+                  const isLocked = (!currentUser?.plan || currentUser?.plan === "SOLO") && !hasPass;
+                  return (
+                    <label
+                      onClick={() => {
+                        if (isLocked) {
+                          toast.info("CSV spreadsheet export requires 24h Room Pass, Host, or Studio plan.");
+                          openUpgradeModal();
+                          return;
+                        }
+                        setExportFormat("csv");
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 14px",
+                        borderRadius: "var(--radius-sm)",
+                        border: exportFormat === "csv" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                        background: exportFormat === "csv" ? "var(--accent-soft)" : "var(--surface-2)",
+                        cursor: "pointer",
+                        opacity: isLocked ? 0.75 : 1,
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+                        <Layers size={18} style={{ color: "#10B981", flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>CSV Spreadsheet (.csv)</div>
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Structured rows for Excel, Sheets, and analytics</div>
+                        </div>
+                      </div>
+                      {isLocked ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 8px", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 10 }}>
+                          <Lock size={10} /> Pass / Host
+                        </span>
+                      ) : (
+                        <div style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: "50%",
+                          border: exportFormat === "csv" ? "5px solid var(--accent)" : "2px solid var(--border)",
+                          background: exportFormat === "csv" ? "#fff" : "transparent",
+                          flexShrink: 0,
+                          marginLeft: 12,
+                          transition: "all 0.15s ease"
+                        }} />
+                      )}
+                    </label>
+                  );
+                })()}
+
+                {/* JSON Session Data Option */}
+                {(() => {
+                  const isLocked = currentUser?.plan !== "HOST" && currentUser?.plan !== "STUDIO";
+                  return (
+                    <label
+                      onClick={() => {
+                        if (isLocked) {
+                          toast.info("Full JSON session report requires Host or Studio plan.");
+                          openUpgradeModal();
+                          return;
+                        }
+                        setExportFormat("json");
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 14px",
+                        borderRadius: "var(--radius-sm)",
+                        border: exportFormat === "json" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                        background: exportFormat === "json" ? "var(--accent-soft)" : "var(--surface-2)",
+                        cursor: "pointer",
+                        opacity: isLocked ? 0.75 : 1,
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+                        <Sparkles size={18} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Full JSON Session Report (.json)</div>
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Complete raw data with timestamps and poll breakdown</div>
+                        </div>
+                      </div>
+                      {isLocked ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 8px", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 10 }}>
+                          <Lock size={10} /> Host / Studio
+                        </span>
+                      ) : (
+                        <div style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: "50%",
+                          border: exportFormat === "json" ? "5px solid var(--accent)" : "2px solid var(--border)",
+                          background: exportFormat === "json" ? "#fff" : "transparent",
+                          flexShrink: 0,
+                          marginLeft: 12,
+                          transition: "all 0.15s ease"
+                        }} />
+                      )}
+                    </label>
+                  );
+                })()}
+
+                {/* PDF Executive Report Option (Studio Exclusive) */}
+                {(() => {
+                  const isLocked = currentUser?.plan !== "STUDIO";
+                  return (
+                    <label
+                      onClick={() => {
+                        if (isLocked) {
+                          toast.info("Executive PDF reports are exclusive to the Studio Plan.");
+                          openUpgradeModal();
+                          return;
+                        }
+                        setExportFormat("pdf");
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 14px",
+                        borderRadius: "var(--radius-sm)",
+                        border: exportFormat === "pdf" ? "2px solid var(--accent)" : "1px solid var(--border)",
+                        background: exportFormat === "pdf" ? "var(--accent-soft)" : "var(--surface-2)",
+                        cursor: "pointer",
+                        opacity: isLocked ? 0.75 : 1,
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+                        <Crown size={18} style={{ color: "#F59E0B", flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>PDF Executive Summary Report (.pdf)</div>
+                          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Ready-to-print branded executive summary & visual charts</div>
+                        </div>
+                      </div>
+                      {isLocked ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", background: "rgba(245, 158, 11, 0.15)", padding: "3px 8px", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 10 }}>
+                          <Lock size={10} /> Studio
+                        </span>
+                      ) : (
+                        <div style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: "50%",
+                          border: exportFormat === "pdf" ? "5px solid var(--accent)" : "2px solid var(--border)",
+                          background: exportFormat === "pdf" ? "#fff" : "transparent",
+                          flexShrink: 0,
+                          marginLeft: 12,
+                          transition: "all 0.15s ease"
+                        }} />
+                      )}
+                    </label>
+                  );
+                })()}
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowExportModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleDownloadExport}
+                  disabled={exportingCode === (exportRoomCode || session?.roomCode)}
+                >
+                  {exportingCode === (exportRoomCode || session?.roomCode) ? (
+                    <>Exporting... <Loader2 size={13} className="spin" /></>
+                  ) : (
+                    <><Download size={14} /> Download {exportFormat.toUpperCase()}</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Branding & Stage Settings Modal (Studio Plan) */}
+      {showBrandingModal && (
+        <div className="modal-overlay" onClick={() => setShowBrandingModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500, width: "92%" }}>
+            <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Palette size={20} style={{ color: "var(--accent)" }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Custom Event Logo</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowBrandingModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBranding} style={{ marginTop: 16 }}>
+              {/* Logo Upload Section */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+                  Event / Organization Logo
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  {brandingLogo ? (
+                    <div style={{ width: 68, height: 68, borderRadius: "var(--radius-md)", border: "1px solid var(--border)", padding: 6, background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                      <img src={brandingLogo} alt="Brand Logo Preview" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                    </div>
+                  ) : (
+                    <div style={{ width: 68, height: 68, borderRadius: "var(--radius-md)", border: "1.5px dashed var(--border)", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-faint)", flexShrink: 0 }}>
+                      <Palette size={24} style={{ opacity: 0.5 }} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="file"
+                      id="branding-logo-file-input"
+                      accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml"
+                      onChange={handleLogoUpload}
+                      style={{ display: "none" }}
+                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <label
+                        htmlFor="branding-logo-file-input"
+                        className="btn btn-soft btn-sm"
+                        style={{
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontWeight: 600,
+                          padding: "7px 14px",
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: 12.5,
+                          border: "1px solid var(--border)",
+                          background: "var(--surface-2)"
+                        }}
+                      >
+                        <Upload size={14} style={{ color: "var(--accent)" }} />
+                        {brandingLogo ? "Change Logo Image" : "Upload Logo Image"}
+                      </label>
+                      {brandingLogo && (
+                        <button
+                          type="button"
+                          onClick={() => setBrandingLogo("")}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: "var(--accent)", fontSize: 12, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
+                          <Trash2 size={13} /> Remove
+                        </button>
+                      )}
+                    </div>
+                    <span style={{ display: "block", fontSize: 11.5, color: "var(--text-dim)", marginTop: 6 }}>
+                      Supports PNG, JPG, SVG, WebP (max 2MB). Automatically watermarked onto audience QR scanner!
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowBrandingModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingBranding}>
+                  {savingBranding ? (
+                    <>Saving... <Loader2 size={13} className="spin" /></>
+                  ) : (
+                    "Save Logo Settings ✨"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Real-time Floating Reactions Particle Overlay */}
+      <LiveReactionsOverlay ref={reactionsRef} />
+
       {/* Feature Walkthrough Onboarding Tour for New Users */}
       <OnboardingTour
         isOpen={showTour}
@@ -3626,6 +4423,16 @@ export default function DashboardPage() {
           </div>
         </aside>
       )}
+
+      {/* Subscription & Plans Upgrade Modal */}
+      <PricingModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentUser={currentUser}
+        onPaymentSuccess={() => {
+          if (refreshUser) refreshUser();
+        }}
+      />
     </div>
   );
 }

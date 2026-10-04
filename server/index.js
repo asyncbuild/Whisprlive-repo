@@ -25,6 +25,9 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library"
 import { Resend } from "resend"
+import { fastCheckLocal, checkToxicity, clusterQuestions, generateSessionSummary } from "./services/aiService.js";
+import { validateImageBuffer, checkImageSafety } from "./utils/imageValidator.js";
+import { generateSessionPdfReport } from "./utils/pdfReport.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
@@ -35,6 +38,35 @@ const razorpay = new Razorpay({
 
 // In-Memory OTP Store for email verification: email -> { code, username, hashedPassword, expiresAt, attempts }
 const signupOtpStore = new Map();
+
+// Helper to auto-reconcile and expire monthly user plans (HOST/STUDIO) after exactly 1 month
+export async function reconcileUserPlan(user) {
+  if (!user) return null;
+  if (user.plan && user.plan !== "SOLO" && user.planExpiresAt && new Date() > new Date(user.planExpiresAt)) {
+    try {
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          plan: "SOLO",
+          planExpiresAt: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          plan: true,
+          planExpiresAt: true,
+          roomPasses: true,
+        },
+      });
+      return updated;
+    } catch (e) {
+      console.error("Error auto-expiring user plan:", e);
+      return { ...user, plan: "SOLO", planExpiresAt: null };
+    }
+  }
+  return user;
+}
 
 // Periodic cleanup of expired OTPs
 setInterval(() => {
@@ -60,7 +92,7 @@ app.use((req, res, next) => {
   res.setHeader("Permissions-Policy", 'ch-ua-model="*"');
   next();
 });
-app.use(express.json())
+app.use(express.json({ limit: "5mb" }))
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "WhisprLive API Server is running" });
@@ -388,7 +420,7 @@ app.post("/signin", authLimiter, async (req, res) => {
 
   try {
     const cleanEmail = email.toLowerCase().trim();
-    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (!user) {
       return res.status(400).json({ message: "User does not exist. Please sign up." });
     }
@@ -405,6 +437,9 @@ app.post("/signin", authLimiter, async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
+    // Auto-reconcile expired plans
+    user = await reconcileUserPlan(user);
+
     const secret = JWT_SECRET;
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
@@ -414,7 +449,14 @@ app.post("/signin", authLimiter, async (req, res) => {
     res.json({
       message: "Signin successful",
       token,
-      user: { id: user.id, email: user.email, username: user.username, plan: user.plan || "SOLO", roomPasses: user.roomPasses || 0 }
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        plan: user.plan || "SOLO",
+        planExpiresAt: user.planExpiresAt || null,
+        roomPasses: user.roomPasses || 0
+      }
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -486,8 +528,10 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
           passwordHash: `GOOGLE_AUTH_${googleId}`,
           plan: "SOLO"
         },
-        select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+        select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true },
       })
+    } else {
+      user = await reconcileUserPlan(user);
     }
     //generate app jwt token
     const secret = JWT_SECRET;
@@ -505,6 +549,7 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
         email: user.email,
         username: user.username,
         plan: user.plan || 'SOLO',
+        planExpiresAt: user.planExpiresAt || null,
         roomPasses: user.roomPasses || 0
       }
     })
@@ -519,10 +564,13 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
 //Fetch current user details and plans
 app.get("/api/user/me", verifyToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, email: true, username: true, plan: true, roomPasses: true },
+      select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true },
     });
+    if (user) {
+      user = await reconcileUserPlan(user);
+    }
     res.json({ user })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -532,13 +580,31 @@ app.get("/api/user/me", verifyToken, async (req, res) => {
 // Razorpay Payment Routes
 // 1. Create Razorpay Order
 app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, async (req, res) => {
-  const { planType, currency } = req.body;
-  if (planType !== "ROOM_PASS") {
+  const { planType, billingCycle = "MONTHLY", currency } = req.body;
+  const validPlans = ["ROOM_PASS", "HOST", "STUDIO"];
+  if (!validPlans.includes(planType)) {
     return res.status(400).json({ message: "Invalid plan type" });
   }
 
   const isUSD = currency === "USD";
-  const amount = isUSD ? 500 : 29900; // $5 USD (500 cents) or ₹299 INR (29900 paise) - Limited time promotional price
+  const isYearly = billingCycle === "YEARLY";
+  let amount;
+
+  if (planType === "ROOM_PASS") {
+    amount = isUSD ? 700 : 49900; // $7 USD or ₹499 INR
+  } else if (planType === "HOST") {
+    if (isYearly) {
+      amount = isUSD ? 9900 : 799000; // $99/yr (~$8.25/mo) or ₹7,990/yr (~₹665/mo) - 2 Months Free (Save 20%)
+    } else {
+      amount = isUSD ? 1200 : 79900; // $12/mo or ₹799/mo
+    }
+  } else if (planType === "STUDIO") {
+    if (isYearly) {
+      amount = isUSD ? 19900 : 1499000; // $199/yr (~$16.50/mo) or ₹14,990/yr (~₹1,249/mo) - 2 Months Free (Save 20%)
+    } else {
+      amount = isUSD ? 2400 : 149900; // $24/mo or ₹1,499/mo
+    }
+  }
   const orderCurrency = isUSD ? "USD" : "INR";
 
   try {
@@ -548,7 +614,8 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
       receipt: `rcpt_${req.user.id.slice(-6)}_${Date.now().toString().slice(-6)}`,
       notes: {
         userId: req.user.id,
-        planType: "ROOM_PASS",
+        planType,
+        billingCycle: planType === "ROOM_PASS" ? "ONETIME" : billingCycle,
       },
     };
 
@@ -558,6 +625,7 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
       amount: order.amount,
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
+      billingCycle,
     });
   } catch (err) {
     console.error("Razorpay order error:", err);
@@ -565,9 +633,9 @@ app.post("/api/payments/razorpay/create-order", verifyToken, paymentLimiter, asy
   }
 });
 
-// 2. Verify Payment Signature and Credit Room Pass
+// 2. Verify Payment Signature and Activate Plan / Credit Room Pass
 app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planType, billingCycle = "MONTHLY" } = req.body;
 
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return res.status(400).json({ message: "Missing payment parameters" });
@@ -594,25 +662,47 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
       return res.status(400).json({ message: "This payment has already been redeemed." });
     }
 
-    // Atomically record the payment and grant 1 Room Pass credit to user
-    const [_, updatedUser] = await prisma.$transaction([
+    const targetPlan = ["HOST", "STUDIO"].includes(planType) ? planType : "ROOM_PASS";
+    const isYearly = billingCycle === "YEARLY";
+
+    // Calculate expiration: 365 days for Yearly, 30 days for Monthly
+    let userUpdateData = {};
+    if (targetPlan === "ROOM_PASS") {
+      userUpdateData = { roomPasses: { increment: 1 } };
+    } else {
+      const expiry = new Date();
+      if (isYearly) {
+        expiry.setDate(expiry.getDate() + 365); // 1 full year
+      } else {
+        expiry.setDate(expiry.getDate() + 30); // 1 full month
+      }
+      userUpdateData = {
+        plan: targetPlan,
+        planExpiresAt: expiry,
+      };
+    }
+
+    // Atomically record the payment and update user subscription/passes
+    const [paymentRecord, updatedUser] = await prisma.$transaction([
       prisma.payment.create({
         data: {
           userId: req.user.id,
           razorpayOrderId: razorpay_order_id,
           razorpayPaymentId: razorpay_payment_id,
-          plan: "ROOM_PASS"
+          plan: targetPlan
         }
       }),
       prisma.user.update({
         where: { id: req.user.id },
-        data: { roomPasses: { increment: 1 } },
-        select: { id: true, email: true, username: true, plan: true, roomPasses: true }
+        data: userUpdateData,
+        select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true }
       })
     ]);
 
     res.json({
-      message: "Payment verified successfully!",
+      message: targetPlan === "ROOM_PASS" 
+        ? "1 Room Pass credited successfully!" 
+        : `${targetPlan} subscription activated successfully for ${isYearly ? '1 year' : '1 month'}!`,
       user: updatedUser,
     });
   } catch (err) {
@@ -622,30 +712,44 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
 });
 
 // Room & Session Routes
-async function findRoomAccess(roomCode, userId) {
-  const ownedRoom = await prisma.room.findFirst({ where: { roomCode, hostId: userId } });
+async function findRoomAccess(roomCodeOrSlug, userId) {
+  const ownedRoom = await prisma.room.findFirst({
+    where: {
+      OR: [{ roomCode: roomCodeOrSlug }, { customSlug: roomCodeOrSlug }],
+      hostId: userId
+    }
+  });
   if (ownedRoom) return { room: ownedRoom, isHost: true };
 
   const sharedRoom = await prisma.room.findFirst({
-    where: { roomCode, collaborators: { some: { userId } } }
+    where: {
+      OR: [{ roomCode: roomCodeOrSlug }, { customSlug: roomCodeOrSlug }],
+      collaborators: { some: { userId } }
+    }
   });
   return sharedRoom ? { room: sharedRoom, isHost: false } : null;
 }
 
 // Create new session Route
 app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
-  const { title, durationMinutes, startsAt, usePass, showPublicFeed, activityType } = req.body;
+  const { title, durationMinutes, startsAt, usePass, showPublicFeed, activityType, customSlug } = req.body;
   const parsedDuration = parseInt(durationMinutes, 10);
 
   if (isNaN(parsedDuration) || parsedDuration <= 0) {
     return res.status(400).json({ error: "Invalid duration" });
   }
 
+  // Scheduled start detection
+  const isScheduled = startsAt && (new Date(startsAt).getTime() - Date.now() > 60000);
+
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { plan: true, roomPasses: true },
+      select: { id: true, plan: true, planExpiresAt: true, roomPasses: true },
     });
+    if (user) {
+      user = await reconcileUserPlan(user);
+    }
 
     const userPlan = user?.plan || "SOLO";
     const startOfMonth = new Date();
@@ -661,10 +765,10 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
       },
     });
 
-    // Automatically apply Room Pass when a host explicitly requests one or exceeds free duration.
+    // Automatically apply Room Pass only when a user is on SOLO tier and has passes.
     let isUsingPass = false;
-    if (user.roomPasses > 0) {
-      if (usePass || (userPlan === "SOLO" && parsedDuration > 15)) {
+    if (user.roomPasses > 0 && userPlan === "SOLO") {
+      if (usePass || parsedDuration > 15 || isScheduled) {
         isUsingPass = true;
       }
     }
@@ -673,11 +777,37 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
     const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
 
     // Scheduled start validation for Solo tier
-    const isScheduled = startsAt && (new Date(startsAt).getTime() - Date.now() > 60000);
     if (isScheduled && !limits.canSchedule) {
       return res.status(403).json({
         error: "Scheduled starts are not supported on the Solo plan. Purchase a Room Pass to schedule sessions in advance.",
       });
+    }
+
+    // Custom vanity slug handling (Host & Studio plans)
+    let validatedSlug = null;
+    if (customSlug && typeof customSlug === "string" && customSlug.trim() !== "") {
+      const cleanSlug = customSlug.trim().toLowerCase();
+      if (!limits.canCustomSlug) {
+        return res.status(403).json({
+          error: "Custom room vanity URLs are available exclusively on the Host and Studio plans. Upgrade to claim custom links.",
+        });
+      }
+      if (!/^[a-z0-9_-]{3,30}$/.test(cleanSlug)) {
+        return res.status(400).json({
+          error: "Custom URL must be 3-30 characters long and contain only letters, numbers, hyphens, and underscores.",
+        });
+      }
+      const existingSlug = await prisma.room.findFirst({
+        where: {
+          OR: [{ roomCode: cleanSlug }, { customSlug: cleanSlug }],
+        },
+      });
+      if (existingSlug) {
+        return res.status(409).json({
+          error: "This custom URL slug is already in use. Please choose another unique link.",
+        });
+      }
+      validatedSlug = cleanSlug;
     }
 
     // Monthly cap check for paid tiers that define one. SOLO is intentionally unlimited.
@@ -711,6 +841,7 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
       data: {
         hostId: req.user.id,
         roomCode,
+        customSlug: validatedSlug,
         title: title || "Ask me anything...",
         durationMinutes: parsedDuration,
         startsAt: sessionStartTime,
@@ -724,7 +855,8 @@ app.post("/api/rooms", verifyToken, roomCreationLimiter, async (req, res) => {
     res.status(201).json({
       message: "Session created successfully",
       room: roomCode,
-      shareableUrl: `/ask/${newRoom.roomCode}`,
+      customSlug: validatedSlug,
+      shareableUrl: `/ask/${validatedSlug || newRoom.roomCode}`,
       isPassUsed: isUsingPass,
       showPublicFeed: newRoom.showPublicFeed,
       activityType: newRoom.activityType,
@@ -1181,91 +1313,9 @@ app.delete("/api/rooms/:roomId", verifyToken, async (req, res) => {
     })
     res.json({ message: "Room deleted successfully" })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: err.message });
   }
-})
-
-// Export messages as a plain text file
-app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
-  const { roomId } = req.params
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { plan: true, roomPasses: true }
-    })
-    const room = await prisma.room.findFirst({
-      where: { roomCode: roomId, hostId: req.user.id },
-      include: {
-        messages: { orderBy: { createdAt: 'desc' } },
-        polls: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            options: { orderBy: { id: 'asc' } },
-            responses: { select: { word: true } }
-          }
-        }
-      }
-    })
-    if (!room) {
-      return res.status(404).json({ message: "Room not found or unauthorized" })
-    }
-    const limits = PLAN_LIMITS[user?.plan || "SOLO"]
-    const roomLimits = room.isPassUsed ? PLAN_LIMITS.ROOM_PASS : limits;
-    const retentionMs = (roomLimits.historyRetentionDays || 7) * 24 * 60 * 60 * 1000;
-    const isBeyondRetention = Date.now() - new Date(room.createdAt).getTime() > retentionMs;
-    // An unused pass must not unlock unrelated historical sessions.
-    const hasRoomEntitlement = room.isPassUsed;
-
-    if (isBeyondRetention || (!limits.canExport && !hasRoomEntitlement)) {
-      return res.status(403).json({
-        error: "Exporting responses is a premium feature. Upgrade to Host plan or use a Room Pass."
-      });
-    }
-    const answeredCount = room.messages.filter((message) => message.isAnswered || message.status === 'answered').length;
-    const totalUpvotes = room.messages.reduce((total, message) => total + (message.upvotes || 0), 0);
-    const reportLines = [
-      'WHISPRLIVE SESSION REPORT',
-      `Session: ${room.title || 'Untitled session'}`,
-      `Room code: ${room.roomCode}`,
-      `Date: ${new Date(room.createdAt).toLocaleString()}`,
-      `Duration: ${room.durationMinutes} minutes`,
-      '',
-      'SUMMARY',
-      `Responses: ${room.messages.length}`,
-      `Answered: ${answeredCount}`,
-      `Upvotes: ${totalUpvotes}`,
-      `Polls: ${room.polls.length}`,
-      `Poll responses: ${room.polls.reduce((total, poll) => total + poll.responses.length, 0)}`,
-      '',
-      'QUESTIONS',
-      ...room.messages.map((message, index) => [
-        `${index + 1}. ${message.content}`,
-        `   ${message.upvotes || 0} upvotes · ${message.isAnswered || message.status === 'answered' ? 'Answered' : 'Unanswered'} · ${new Date(message.createdAt).toLocaleString()}`
-      ].join('\n'))
-    ];
-
-    for (const poll of room.polls) {
-      reportLines.push('', `POLL: ${poll.question}`, `Responses: ${poll.responses.length}`);
-      if (poll.type === 'WORD_CLOUD') {
-        const words = new Map();
-        for (const response of poll.responses) {
-          const word = response.word?.trim();
-          if (word) words.set(word, (words.get(word) || 0) + 1);
-        }
-        reportLines.push(...[...words.entries()].sort((a, b) => b[1] - a[1]).map(([word, count]) => `- ${word}: ${count}`));
-      } else {
-        reportLines.push(...poll.options.map((option) => `- ${option.text}: ${option.votes}`));
-      }
-    }
-
-    const safeTitle = (room.title || 'session').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'session';
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}-report.txt"`);
-    res.send(reportLines.join('\n'));
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
+});
 
 //public routes
 //check room status
@@ -1274,6 +1324,7 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
   if (roomId.toLowerCase() === "demo") {
     return res.json({
       title: "Interactive WhisprLive Demo Room",
+      roomCode: "demo",
       startsAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 24 * 3600000).toISOString(),
       status: "Active",
@@ -1284,15 +1335,22 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
   }
   try {
     const room = await prisma.room.findFirst({
-      where: { roomCode: roomId },
+      where: {
+        OR: [{ roomCode: roomId }, { customSlug: roomId }]
+      },
       select: {
         id: true,
+        roomCode: true,
+        customSlug: true,
         title: true,
         startsAt: true,
         expiresAt: true,
         isAccepting: true,
         showPublicFeed: true,
         activityType: true,
+        brandLogo: true,
+        brandColor: true,
+        stageTheme: true,
       }
     })
     if (!room) {
@@ -1303,12 +1361,18 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
     const isExpired = now > new Date(room.expiresAt) || !room.isAccepting
     const canSend = !isNotStarted && !isExpired && room.isAccepting
     res.json({
+      id: room.id,
+      roomCode: room.roomCode,
+      customSlug: room.customSlug,
       title: room.title,
       startsAt: room.startsAt,
       expiresAt: room.expiresAt,
       isAccepting: room.isAccepting,
       showPublicFeed: room.showPublicFeed,
       activityType: room.activityType || "ALL",
+      brandLogo: room.brandLogo,
+      brandColor: room.brandColor,
+      stageTheme: room.stageTheme || "dark",
       status: isNotStarted ? 'Scheduled' : isExpired ? 'Expired' : 'Active',
       canSend
     })
@@ -1317,10 +1381,59 @@ app.get("/api/rooms/public/:roomId", async (req, res) => {
   }
 })
 
-//Send message to a specific room 
+// In-Memory Active Room Cache — Eliminates Neon DB query latency (< 0.05ms)
+const activeRoomCache = new Map();
+
+async function getOrHydrateActiveRoom(roomId) {
+  if (!roomId) return null;
+  const cached = activeRoomCache.get(roomId);
+  if (cached) {
+    return cached;
+  }
+
+  const room = await prisma.room.findFirst({
+    where: {
+      OR: [{ roomCode: roomId }, { customSlug: roomId }]
+    },
+    include: {
+      host: { select: { plan: true } },
+      _count: { select: { messages: true } }
+    }
+  });
+
+  if (!room) return null;
+
+  const activeTier = room.isPassUsed ? 'ROOM_PASS' : (room.host.plan || 'SOLO');
+  const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+  const roomData = {
+    id: room.id,
+    roomCode: room.roomCode,
+    customSlug: room.customSlug,
+    startsAt: new Date(room.startsAt),
+    expiresAt: new Date(room.expiresAt),
+    isAccepting: room.isAccepting,
+    isPassUsed: room.isPassUsed,
+    hostPlan: room.host.plan,
+    activeTier,
+    limits,
+    maxMessagesAllowed: limits.maxMessages,
+    tierName: activeTier === "SOLO" ? "free tier" : activeTier,
+    dbMessageCount: room._count.messages
+  };
+
+  activeRoomCache.set(room.roomCode, roomData);
+  if (room.customSlug) {
+    activeRoomCache.set(room.customSlug, roomData);
+  }
+
+  return roomData;
+}
+
+//Send message to a specific room (RAM-First: < 2ms)
 app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (req, res) => {
   const { roomId } = req.params
-  const { content } = req.body
+  const content = req.body.content || req.body.text;
   if (!content || content.trim() === "") {
     return res.status(400).json({ message: "Message is required" })
   }
@@ -1341,36 +1454,36 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     });
   }
   try {
-    const room = await prisma.room.findUnique({
-      where: { roomCode: roomId },
-      include: {
-        host: { select: { plan: true } },
-        collaborators: { select: { userId: true } },
-        _count: { select: { messages: true } }
-      }
-    })
+    const room = await getOrHydrateActiveRoom(roomId);
     if (!room) {
       return res.status(404).json({ message: "Room not found" })
     }
-    // Check plan message limit
-    const activeTier = room.isPassUsed ? 'ROOM_PASS' : (room.host.plan || 'SOLO');
-    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
-    const maxMessagesAllowed = limits.maxMessages;
-    const tierName = activeTier === "SOLO" ? "free tier" : activeTier;
+    const canonicalRoomCode = room.roomCode;
 
-    // Use cache count if available, else DB count
-    const cached = roomMessagesCache.get(roomId);
-    const currentCount = cached ? cached.messageCount : room._count.messages;
+    // Check plan message limit from RAM
+    const limits = room.limits;
+    const maxMessagesAllowed = room.maxMessagesAllowed;
+    const tierName = room.tierName;
+
+    const cached = roomMessagesCache.get(canonicalRoomCode);
+    const currentCount = cached ? cached.messageCount : (room.dbMessageCount || 0);
 
     if (currentCount >= maxMessagesAllowed) {
-      // Automatically end session in database
-      await prisma.room.update({
-        where: { id: room.id },
-        data: { isAccepting: false, expiresAt: new Date() }
-      });
-      evictRoomMessagesCache(roomId);
+      room.isAccepting = false;
+      // Automatically end session in database asynchronously
+      (async () => {
+        try {
+          await prisma.room.update({
+            where: { id: room.id },
+            data: { isAccepting: false, expiresAt: new Date() }
+          });
+        } catch (e) {}
+      })();
+      evictRoomMessagesCache(canonicalRoomCode);
+      activeRoomCache.delete(canonicalRoomCode);
+      if (room.customSlug) activeRoomCache.delete(room.customSlug);
       const capacityReason = `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`;
-      await notifyRoomEnded(roomId, room.id, capacityReason);
+      await notifyRoomEnded(canonicalRoomCode, room.id, capacityReason);
       return res.status(403).json({
         message: capacityReason,
         isExpired: true
@@ -1378,10 +1491,10 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
     }
 
     const now = new Date()
-    if (now < new Date(room.startsAt)) {
+    if (now < room.startsAt) {
       return res.status(400).json({ message: "Session has not started yet" })
     }
-    if (now > new Date(room.expiresAt)) {
+    if (now > room.expiresAt) {
       return res.status(400).json({ message: "Session has expired" })
     }
     if (!room.isAccepting) {
@@ -1394,17 +1507,27 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       : null;
     const finalDeviceModel = clientDeviceModel || (metadata.deviceModel ? String(metadata.deviceModel).slice(0, 100) : null);
 
-    // 1. Generate a temporary in-memory message object with a UUID (< 1ms)
+    // 1. Instant Baseline Content & Toxicity Check (< 0.1ms, zero latency)
+    const localTox = fastCheckLocal(content.trim());
+    let aiFlagged = localTox.isFlagged;
+    let aiFlagReason = localTox.reason;
+    let aiCategory = localTox.category;
+    let messageStatus = aiFlagged ? "rejected" : "accepted";
+
+    // 2. Generate a temporary in-memory message object with a UUID (< 1ms)
     const tempId = crypto.randomUUID();
     const msgData = {
       id: tempId,
       roomId: room.id,
       content: content.trim(),
-      status: "accepted",
+      status: messageStatus,
       upvotes: 0,
       isAnswered: false,
       isPinned: false,
       hostReply: null,
+      aiFlagged,
+      aiFlagReason,
+      aiCategory,
       device: metadata.device,
       deviceModel: finalDeviceModel,
       location: metadata.location,
@@ -1412,26 +1535,28 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       createdAt: now
     };
 
-    // 2. Instantly insert into in-memory cache (< 1ms)
+    // 3. Instantly insert into in-memory cache (< 1ms)
     if (cached) {
       cached.messages.set(tempId, msgData);
       cached.messageCount += 1;
     } else {
-      // Hydrate cache on first message for this room
-      const freshCache = await getOrHydrateRoomMessages(roomId);
+      const freshCache = await getOrHydrateRoomMessages(canonicalRoomCode);
       if (freshCache) {
         freshCache.messages.set(tempId, msgData);
         freshCache.messageCount += 1;
       }
     }
 
-    // 3. Instant WebSocket broadcast to all participants in the room (sanitized without PII)
+    // 4. Instant WebSocket broadcast (< 1ms)
     const publicMsg = buildPublicMessage(msgData);
-    io.to(roomId).emit("new_message", publicMsg);
+    io.to(canonicalRoomCode).emit("new_message", publicMsg);
+    if (room.customSlug && room.customSlug !== canonicalRoomCode) {
+      io.to(room.customSlug).emit("new_message", publicMsg);
+    }
 
-    // 4. Return sanitized HTTP response (Audience sees confirmation in < 5ms without PII)
+    // 5. Immediate HTTP response to client (sub-10ms response time)
     res.status(201).json({
-      message: "Message sent successfully",
+      message: aiFlagged ? "Message submitted" : "Message sent successfully",
       newMessage: publicMsg,
       data: {
         id: tempId,
@@ -1439,15 +1564,61 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
       }
     });
 
-    // 5. Asynchronously persist to PostgreSQL in the background (non-blocking)
+    // 6. Asynchronously persist to PostgreSQL and run Cloud Gemini AI check in the background
     (async () => {
       try {
+        let finalStatus = messageStatus;
+        let finalAiFlagged = aiFlagged;
+        let finalAiReason = aiFlagReason;
+        let finalAiCategory = aiCategory;
+
+        // If not already flagged by fast local rules, run Cloud Gemini 1.5 Flash Deep Check
+        if (!finalAiFlagged && (limits.canAiModeration || Boolean(process.env.GEMINI_API_KEY))) {
+          try {
+            const deepCheck = await checkToxicity(content.trim());
+            if (deepCheck && deepCheck.isFlagged) {
+              finalAiFlagged = true;
+              finalAiReason = deepCheck.reason || "Flagged by AI moderation";
+              finalAiCategory = deepCheck.category || "Toxicity";
+              finalStatus = "rejected";
+
+              // Update in-memory cache
+              const currentCache = roomMessagesCache.get(canonicalRoomCode);
+              if (currentCache && currentCache.messages.has(tempId)) {
+                const memMsg = currentCache.messages.get(tempId);
+                memMsg.status = "rejected";
+                memMsg.aiFlagged = true;
+                memMsg.aiFlagReason = finalAiReason;
+                memMsg.aiCategory = finalAiCategory;
+              }
+
+              // Real-time broadcast to hide from Stage and Public Feed immediately
+              const statusPayload = {
+                messageId: tempId,
+                status: "rejected",
+                aiFlagged: true,
+                aiFlagReason: finalAiReason,
+                aiCategory: finalAiCategory
+              };
+              io.to(canonicalRoomCode).emit("message_status_changed", statusPayload);
+              if (room.customSlug && room.customSlug !== canonicalRoomCode) {
+                io.to(room.customSlug).emit("message_status_changed", statusPayload);
+              }
+            }
+          } catch (cloudErr) {
+            console.warn("Background AI moderation check error:", cloudErr.message);
+          }
+        }
+
         const dbMessage = await prisma.message.create({
           data: {
             id: tempId,
             roomId: room.id,
             content: content.trim(),
-            status: "accepted",
+            status: finalStatus,
+            aiFlagged: finalAiFlagged,
+            aiFlagReason: finalAiReason,
+            aiCategory: finalAiCategory,
             device: metadata.device,
             deviceModel: finalDeviceModel,
             location: metadata.location,
@@ -1456,7 +1627,7 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
         });
 
         // Ensure cache timestamp is synced
-        const currentCache = roomMessagesCache.get(roomId);
+        const currentCache = roomMessagesCache.get(canonicalRoomCode);
         if (currentCache && currentCache.messages.has(tempId)) {
           const msg = currentCache.messages.get(tempId);
           msg.createdAt = dbMessage.createdAt;
@@ -1469,10 +1640,10 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
             where: { id: room.id },
             data: { isAccepting: false, expiresAt: new Date() }
           });
-          console.log(`Room ${roomId} reached ${tierName} capacity (${maxMessagesAllowed} messages). Session automatically ended.`);
+          console.log(`Room ${canonicalRoomCode} reached ${tierName} capacity (${maxMessagesAllowed} messages). Session automatically ended.`);
           const capacityReason = `This room has reached its ${tierName} limit of ${maxMessagesAllowed} messages and has automatically ended.`;
-          await notifyRoomEnded(roomId, room.id, capacityReason);
-          evictRoomMessagesCache(roomId);
+          await notifyRoomEnded(canonicalRoomCode, room.id, capacityReason);
+          evictRoomMessagesCache(canonicalRoomCode);
         }
       } catch (dbErr) {
         console.error("Background DB message write error:", dbErr.message);
@@ -1498,10 +1669,14 @@ function buildPublicMessage(msg) {
   return {
     id: msg.id,
     content: msg.content,
+    status: msg.status || "accepted",
     upvotes: msg.upvotes,
     isAnswered: msg.isAnswered,
     isPinned: msg.isPinned,
     hostReply: msg.hostReply,
+    aiFlagged: Boolean(msg.aiFlagged),
+    aiFlagReason: msg.aiFlagReason || null,
+    aiCategory: msg.aiCategory || null,
     createdAt: msg.createdAt
   };
 }
@@ -1519,6 +1694,9 @@ function buildHostMessage(msg) {
     isAnswered: msg.isAnswered,
     isPinned: msg.isPinned,
     hostReply: msg.hostReply,
+    aiFlagged: Boolean(msg.aiFlagged),
+    aiFlagReason: msg.aiFlagReason || null,
+    aiCategory: msg.aiCategory || null,
     device: msg.device,
     deviceModel: msg.deviceModel,
     location: msg.location,
@@ -1980,6 +2158,53 @@ app.patch("/api/rooms/:roomId/messages/:messageId/pin", verifyToken, async (req,
   }
 });
 
+// Host deletes/rejects a message (Cache-First: < 2ms)
+app.delete("/api/rooms/:roomId/messages/:messageId", verifyToken, async (req, res) => {
+  const { roomId, messageId } = req.params;
+  try {
+    const access = await findRoomAccess(roomId, req.user.id);
+    const room = access?.room;
+    if (!room) {
+      return res.status(404).json({ message: "Room not found or unauthorized" });
+    }
+    const targetMessage = await prisma.message.findFirst({
+      where: { id: messageId, roomId: room.id },
+      select: { id: true }
+    });
+    if (!targetMessage) return res.status(404).json({ message: "Message not found in this room" });
+
+    // 1. Instant in-memory cache eviction
+    const canonicalRoomCode = room.roomCode;
+    const cached = roomMessagesCache.get(canonicalRoomCode);
+    if (cached) {
+      cached.messages.delete(messageId);
+      cached.messageCount = Math.max(0, cached.messageCount - 1);
+    }
+
+    // 2. Instant WebSocket broadcast to remove from all attendee feeds, stage, and host dashboard
+    io.to(canonicalRoomCode).emit("message_deleted", { messageId });
+    if (room.customSlug && room.customSlug !== canonicalRoomCode) {
+      io.to(room.customSlug).emit("message_deleted", { messageId });
+    }
+
+    // 3. Immediate HTTP response
+    res.json({ message: "Message deleted successfully", messageId });
+
+    // 4. Background DB deletion
+    (async () => {
+      try {
+        await prisma.message.delete({
+          where: { id: messageId }
+        });
+      } catch (dbErr) {
+        console.error("Background DB message delete error:", dbErr.message);
+      }
+    })();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // In-Memory Fast Cache for Ultra-Low Latency Live Polls & Word Clouds
 const activePollCache = new Map();
 const roomToActivePollId = new Map();
@@ -1993,6 +2218,9 @@ function buildPublicPoll(cached) {
     question: cached.question,
     type: cached.type,
     isActive: cached.isActive,
+    isQuiz: cached.isQuiz || false,
+    quizTimerSeconds: cached.quizTimerSeconds || 0,
+    isQuizRevealed: cached.isQuizRevealed || false,
     totalVotes: cached.totalVotes,
     options: cached.options,
     wordCloud: cached.wordCloud,
@@ -2013,12 +2241,12 @@ async function getOrHydrateActivePoll(roomIdOrCode, pollId) {
 
   const whereClause = pollId
     ? { id: pollId }
-    : { room: { roomCode: roomIdOrCode }, isActive: true };
+    : { room: { OR: [{ roomCode: roomIdOrCode }, { customSlug: roomIdOrCode }] }, isActive: true };
 
   const poll = await prisma.poll.findFirst({
     where: whereClause,
     include: {
-      room: { select: { roomCode: true, id: true } },
+      room: { select: { roomCode: true, customSlug: true, id: true } },
       options: {
         orderBy: { id: "asc" }
       },
@@ -2038,7 +2266,8 @@ async function getOrHydrateActivePoll(roomIdOrCode, pollId) {
         id: opt.id,
         text: opt.text,
         votes: optVotes,
-        percentage
+        percentage,
+        isCorrect: poll.isQuizRevealed ? opt.isCorrect : undefined,
       };
     });
   }
@@ -2066,6 +2295,9 @@ async function getOrHydrateActivePoll(roomIdOrCode, pollId) {
     question: poll.question,
     type: poll.type,
     isActive: poll.isActive,
+    isQuiz: poll.isQuiz || false,
+    quizTimerSeconds: poll.quizTimerSeconds || 0,
+    isQuizRevealed: poll.isQuizRevealed || false,
     totalVotes,
     options: formattedOptions,
     wordCloud,
@@ -2079,6 +2311,9 @@ async function getOrHydrateActivePoll(roomIdOrCode, pollId) {
     if (poll.room?.roomCode) {
       roomToActivePollId.set(poll.room.roomCode, poll.id);
     }
+    if (poll.room?.customSlug) {
+      roomToActivePollId.set(poll.room.customSlug, poll.id);
+    }
   }
 
   return cached;
@@ -2090,10 +2325,10 @@ async function formatActivePoll(pollId) {
   return buildPublicPoll(cached);
 }
 
-// Host creates a new Live Poll / Word Cloud prompt
+// Host creates a new Live Poll / Quiz / Word Cloud prompt
 app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
   const { roomId } = req.params;
-  const { question, type, options } = req.body;
+  const { question, type, options, isQuiz, quizTimerSeconds } = req.body;
 
   if (!question || question.trim() === "") {
     return res.status(400).json({ message: "Poll question/prompt is required" });
@@ -2102,7 +2337,10 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
     return res.status(400).json({ message: "Poll question must be 200 characters or fewer" });
   }
   if (Array.isArray(options)) {
-    const tooLong = options.some((o) => typeof o === "string" && o.length > 100);
+    const tooLong = options.some((o) => {
+      const txt = typeof o === "string" ? o : (o?.text || "");
+      return txt.length > 100;
+    });
     if (tooLong) return res.status(400).json({ message: "Poll option text must be 100 characters or fewer" });
   }
   const pollType = type === "WORD_CLOUD" ? "WORD_CLOUD" : "CHOICE";
@@ -2114,13 +2352,27 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
       return res.status(404).json({ message: "Room not found or unauthorized" });
     }
 
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const activeTier = room.isPassUsed ? "ROOM_PASS" : (user?.plan || "SOLO");
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+    // Check Live Quiz permission
+    const isQuizMode = Boolean(isQuiz);
+    if (isQuizMode && !limits.canQuiz) {
+      return res.status(403).json({
+        message: "Live Quiz Mode with countdowns and leaderboards is available on 24h Room Pass, Host, and Studio plans."
+      });
+    }
+
     // Deactivate previous active poll in memory cache
-    const prevPollId = roomToActivePollId.get(roomId);
+    const canonicalRoomCode = room.roomCode;
+    const prevPollId = roomToActivePollId.get(canonicalRoomCode) || roomToActivePollId.get(roomId);
     if (prevPollId && activePollCache.has(prevPollId)) {
       activePollCache.get(prevPollId).isActive = false;
       activePollCache.delete(prevPollId);
     }
-    roomToActivePollId.delete(roomId);
+    roomToActivePollId.delete(canonicalRoomCode);
+    if (room.customSlug) roomToActivePollId.delete(room.customSlug);
 
     // Automatically deactivate previous active polls in this room in DB
     await prisma.poll.updateMany({
@@ -2128,15 +2380,30 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
       data: { isActive: false }
     });
 
+    const parsedOptions = Array.isArray(options) ? options.map(opt => {
+      if (typeof opt === "string") {
+        return { text: opt.trim(), isCorrect: false, votes: 0 };
+      }
+      return {
+        text: (opt.text || "").trim(),
+        isCorrect: Boolean(opt.isCorrect),
+        votes: 0
+      };
+    }).filter(o => o.text !== "") : [];
+
     const newPoll = await prisma.poll.create({
       data: {
         roomId: room.id,
         question: question.trim(),
         type: pollType,
         isActive: true,
-        options: pollType === "CHOICE" && Array.isArray(options) ? {
-          create: options.filter((o) => typeof o === "string" && o.trim() !== "").map((o) => ({
-            text: o.trim(),
+        isQuiz: isQuizMode,
+        quizTimerSeconds: parseInt(quizTimerSeconds, 10) || 0,
+        isQuizRevealed: false,
+        options: pollType === "CHOICE" && parsedOptions.length > 0 ? {
+          create: parsedOptions.map((o) => ({
+            text: o.text,
+            isCorrect: o.isCorrect,
             votes: 0
           }))
         } : undefined
@@ -2152,16 +2419,20 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
       id: opt.id,
       text: opt.text,
       votes: 0,
-      percentage: 0
+      percentage: 0,
+      isCorrect: opt.isCorrect,
     }));
 
     const cached = {
       id: newPoll.id,
       roomId: newPoll.roomId,
-      roomCode: roomId,
+      roomCode: canonicalRoomCode,
       question: newPoll.question,
       type: newPoll.type,
       isActive: true,
+      isQuiz: newPoll.isQuiz,
+      quizTimerSeconds: newPoll.quizTimerSeconds,
+      isQuizRevealed: false,
       totalVotes: 0,
       options: initialOptions,
       wordCloud: [],
@@ -2171,10 +2442,14 @@ app.post("/api/rooms/:roomId/polls", verifyToken, async (req, res) => {
     };
 
     activePollCache.set(newPoll.id, cached);
-    roomToActivePollId.set(roomId, newPoll.id);
+    roomToActivePollId.set(canonicalRoomCode, newPoll.id);
+    if (room.customSlug) roomToActivePollId.set(room.customSlug, newPoll.id);
 
     const formatted = buildPublicPoll(cached);
-    io.to(roomId).emit("poll_created", formatted);
+    io.to(canonicalRoomCode).emit("poll_created", formatted);
+    if (room.customSlug && room.customSlug !== canonicalRoomCode) {
+      io.to(room.customSlug).emit("poll_created", formatted);
+    }
 
     res.status(201).json({ message: "Poll created successfully", poll: formatted });
   } catch (err) {
@@ -2226,7 +2501,8 @@ app.get("/api/rooms/public/:roomId/poll/active", async (req, res) => {
 // Public Audience: Cast a vote or submit a word (Instant sub-10ms response + WebSocket broadcast)
 app.post("/api/rooms/public/:roomId/poll/:pollId/vote", pollVoteLimiter, async (req, res) => {
   const { roomId, pollId } = req.params;
-  const { optionId, word, voterId } = req.body;
+  const { optionId, word } = req.body;
+  const voterId = req.body.voterId || req.body.guestId;
 
   if (!voterId) {
     return res.status(400).json({ message: "Voter ID is required" });
@@ -2555,6 +2831,385 @@ app.post("/api/rooms/:roomId/polls/launch-template/:templateId", verifyToken, as
   } catch (err) {
     console.error("Launch template poll error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Host reveals the correct answer for a Live Quiz
+app.post("/api/rooms/:roomId/polls/:pollId/reveal", verifyToken, async (req, res) => {
+  const { roomId, pollId } = req.params;
+  try {
+    const access = await findRoomAccess(roomId, req.user.id);
+    if (!access) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const poll = await prisma.poll.update({
+      where: { id: pollId },
+      data: { isQuizRevealed: true },
+      include: { options: true }
+    });
+
+    const correctOption = poll.options.find(o => o.isCorrect);
+
+    if (activePollCache.has(pollId)) {
+      const cached = activePollCache.get(pollId);
+      cached.isQuizRevealed = true;
+      cached.options = cached.options.map(opt => ({
+        ...opt,
+        isCorrect: poll.options.find(o => o.id === opt.id)?.isCorrect || false
+      }));
+    }
+
+    const canonicalRoomCode = access.room.roomCode;
+    io.to(canonicalRoomCode).emit("quiz_revealed", {
+      pollId,
+      correctOptionId: correctOption?.id || null,
+      correctOptionText: correctOption?.text || null
+    });
+    if (access.room.customSlug && access.room.customSlug !== canonicalRoomCode) {
+      io.to(access.room.customSlug).emit("quiz_revealed", {
+        pollId,
+        correctOptionId: correctOption?.id || null,
+        correctOptionText: correctOption?.text || null
+      });
+    }
+
+    res.json({ message: "Quiz answer revealed successfully", poll });
+  } catch (err) {
+    console.error("Quiz reveal error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stage / Projector View Data Endpoint
+app.get("/api/rooms/stage/:roomId", async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const room = await prisma.room.findFirst({
+      where: {
+        OR: [{ roomCode: roomId }, { customSlug: roomId }]
+      },
+      include: {
+        host: { select: { plan: true, username: true } },
+        messages: {
+          where: { status: "accepted" },
+          orderBy: [{ isPinned: "desc" }, { upvotes: "desc" }, { createdAt: "desc" }],
+          take: 60
+        }
+      }
+    });
+
+    if (!room) {
+      return res.status(404).json({ message: "Stage room not found" });
+    }
+
+    const activeTier = room.isPassUsed ? "ROOM_PASS" : (room.host.plan || "SOLO");
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+    const activePoll = await getOrHydrateActivePoll(room.roomCode, null);
+
+    res.json({
+      room: {
+        id: room.id,
+        roomCode: room.roomCode,
+        customSlug: room.customSlug,
+        title: room.title,
+        startsAt: room.startsAt,
+        expiresAt: room.expiresAt,
+        isAccepting: room.isAccepting,
+        activityType: room.activityType,
+        brandLogo: room.brandLogo,
+        brandColor: room.brandColor,
+        stageTheme: room.stageTheme || "dark",
+        showWatermark: limits.stageWatermark, // true for SOLO, false for paid/passes
+        tier: activeTier,
+      },
+      stageWatermark: limits.stageWatermark,
+      stageTheme: room.stageTheme || "dark",
+      brandLogo: room.brandLogo,
+      brandColor: room.brandColor,
+      messages: room.messages.map(buildPublicMessage),
+      activePoll: buildPublicPoll(activePoll)
+    });
+  } catch (err) {
+    console.error("Stage room fetch error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Studio Plan: Update Room Branding (Logo, Custom Colors & Stage Theme)
+app.post("/api/rooms/:roomId/branding", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  const { brandColor, stageTheme, brandLogo, brandLogoBase64, brandLogoMime } = req.body;
+  const rawLogo = brandLogo || brandLogoBase64;
+
+  try {
+    const access = await findRoomAccess(roomId, req.user.id);
+    if (!access) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const activeTier = access.room.isPassUsed ? "ROOM_PASS" : (user?.plan || "SOLO");
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+    if (!limits.canCustomBranding) {
+      return res.status(403).json({
+        message: "Custom branding and logo uploads are exclusive to the Studio plan. Upgrade to unlock white-labeling."
+      });
+    }
+
+    let validBrandLogo = undefined;
+
+    if (rawLogo) {
+      const mimeMatch = rawLogo.match(/^data:(image\/[a-z0-9+.-]+);base64,/i);
+      const mime = brandLogoMime || (mimeMatch ? mimeMatch[1] : "image/png");
+      const cleanBase64 = rawLogo.replace(/^data:image\/[a-z0-9+.-]+;base64,/i, "");
+      const buffer = Buffer.from(cleanBase64, "base64");
+
+      // 1. Validate file size and magic byte signatures
+      const validation = validateImageBuffer(buffer, mime);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error });
+      }
+
+      // 2. Server-side NSFW / Inappropriate content check
+      const safety = await checkImageSafety(cleanBase64, mime);
+      if (!safety.safe) {
+        return res.status(400).json({ message: safety.error });
+      }
+
+      validBrandLogo = `data:${mime};base64,${cleanBase64}`;
+    } else if (brandLogo === null || brandLogo === "") {
+      validBrandLogo = null;
+    }
+
+    const updated = await prisma.room.update({
+      where: { id: access.room.id },
+      data: {
+        ...(validBrandLogo !== undefined && { brandLogo: validBrandLogo }),
+        ...(brandColor && { brandColor }),
+        ...(stageTheme && { stageTheme }),
+      }
+    });
+
+    const canonicalRoomCode = access.room.roomCode;
+    io.to(canonicalRoomCode).emit("branding_updated", {
+      brandLogo: updated.brandLogo,
+      brandColor: updated.brandColor,
+      stageTheme: updated.stageTheme,
+    });
+    if (access.room.customSlug && access.room.customSlug !== canonicalRoomCode) {
+      io.to(access.room.customSlug).emit("branding_updated", {
+        brandLogo: updated.brandLogo,
+        brandColor: updated.brandColor,
+        stageTheme: updated.stageTheme,
+      });
+    }
+
+    res.json({ message: "Room branding updated successfully", room: updated });
+  } catch (err) {
+    console.error("Branding update error:", err);
+    res.status(500).json({ message: "Failed to update branding: " + err.message });
+  }
+});
+
+// Studio Plan: AI Semantic Question Clustering
+app.get("/api/rooms/:roomId/ai/cluster", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const access = await findRoomAccess(roomId, req.user.id);
+    if (!access) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const activeTier = access.room.isPassUsed ? "ROOM_PASS" : (user?.plan || "SOLO");
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+    if (!limits.canAiClustering) {
+      return res.status(403).json({
+        message: "AI Semantic Question Clustering is exclusive to the Studio plan. Upgrade to cluster audience questions."
+      });
+    }
+
+    const messages = await prisma.message.findMany({
+      where: { roomId: access.room.id, status: "accepted" },
+      select: { id: true, content: true }
+    });
+
+    const rawClusters = await clusterQuestions(messages);
+    const idToContent = new Map(messages.map((m) => [m.id, m.content]));
+    const clusters = (rawClusters || []).map((c) => ({
+      topic: c.topic || "General Discussion",
+      questionIds: c.questionIds || [],
+      questions: (c.questionIds || []).map((id) => idToContent.get(id) || id),
+      summary: c.summary || ""
+    }));
+
+    res.json({ clusters });
+  } catch (err) {
+    console.error("AI cluster error:", err);
+    res.status(500).json({ message: "AI clustering failed: " + err.message });
+  }
+});
+
+// Studio Plan: AI Session Executive Summary & Sentiment Analysis
+app.get("/api/rooms/:roomId/ai/summary", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const access = await findRoomAccess(roomId, req.user.id);
+    if (!access) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const activeTier = access.room.isPassUsed ? "ROOM_PASS" : (user?.plan || "SOLO");
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+    if (!limits.canAiSummary) {
+      return res.status(403).json({
+        message: "AI Executive Summaries & Sentiment Analysis are exclusive to the Studio plan. Upgrade to generate reports."
+      });
+    }
+
+    const room = await prisma.room.findUnique({
+      where: { id: access.room.id },
+      include: {
+        messages: { where: { status: "accepted" } },
+        polls: { include: { options: true, responses: true } }
+      }
+    });
+
+    const summaryData = await generateSessionSummary(room.messages, room.polls, room.title);
+    res.json({ summary: summaryData });
+  } catch (err) {
+    console.error("AI summary error:", err);
+    res.status(500).json({ message: "AI summary generation failed: " + err.message });
+  }
+});
+
+// Export Session Data (TXT, CSV, JSON/PDF Data)
+app.get("/api/rooms/:roomId/export", verifyToken, async (req, res) => {
+  const { roomId } = req.params;
+  const { format = "txt" } = req.query;
+  const requestedFormat = String(format).toLowerCase();
+
+  try {
+    const access = await findRoomAccess(roomId, req.user.id);
+    if (!access) return res.status(404).json({ message: "Room not found or unauthorized" });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const activeTier = access.room.isPassUsed ? "ROOM_PASS" : (user?.plan || "SOLO");
+    const limits = PLAN_LIMITS[activeTier] || PLAN_LIMITS.SOLO;
+
+    // Check tier export permission
+    if (!limits.exportFormats.includes(requestedFormat)) {
+      const neededTier = requestedFormat === "csv" 
+        ? "a 24h Room Pass, Host, or Studio plan" 
+        : requestedFormat === "json" 
+        ? "the Host or Studio plan" 
+        : "the Studio plan";
+      return res.status(403).json({
+        message: `Exporting in .${requestedFormat.toUpperCase()} format requires ${neededTier}.`
+      });
+    }
+
+    const room = await prisma.room.findUnique({
+      where: { id: access.room.id },
+      include: {
+        messages: { orderBy: { createdAt: "asc" } },
+        polls: {
+          include: {
+            options: { orderBy: { id: "asc" } },
+            responses: true
+          }
+        }
+      }
+    });
+
+    // 1. PDF Executive Report (Studio Exclusive)
+    if (requestedFormat === "pdf") {
+      return generateSessionPdfReport(res, room);
+    }
+
+    // 2. CSV Spreadsheet Export (Anonymous: No IDs, Device, or Location)
+    if (requestedFormat === "csv") {
+      let csv = "Number,Question / Message,Status,Upvotes,Is Answered,Is Pinned,Host Reply,Submitted At\n";
+      room.messages.forEach((m, idx) => {
+        const cleanContent = `"${(m.content || '').replace(/"/g, '""')}"`;
+        const cleanReply = `"${(m.hostReply || '').replace(/"/g, '""')}"`;
+        csv += `${idx + 1},${cleanContent},${m.status},${m.upvotes},${m.isAnswered},${m.isPinned},${cleanReply},${m.createdAt.toISOString()}\n`;
+      });
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="whisprlive-${room.roomCode}-transcript.csv"`);
+      return res.send(csv);
+    }
+
+    // 3. Full JSON Data Export (Anonymous: No DB IDs, Device, Location, or User hashes)
+    if (requestedFormat === "json") {
+      return res.json({
+        roomCode: room.roomCode,
+        customSlug: room.customSlug,
+        title: room.title,
+        createdAt: room.createdAt,
+        totalQuestions: room.messages.length,
+        answeredQuestions: room.messages.filter(m => m.isAnswered).length,
+        totalUpvotes: room.messages.reduce((sum, m) => sum + (m.upvotes || 0), 0),
+        messages: room.messages.map((m, idx) => ({
+          number: idx + 1,
+          content: m.content,
+          status: m.status,
+          upvotes: m.upvotes,
+          isAnswered: m.isAnswered,
+          isPinned: m.isPinned,
+          hostReply: m.hostReply,
+          submittedAt: m.createdAt
+        })),
+        polls: room.polls.map(p => ({
+          question: p.question,
+          type: p.type,
+          isQuiz: p.isQuiz,
+          options: p.options ? p.options.map(opt => ({
+            text: opt.text,
+            isCorrect: opt.isCorrect,
+            votes: p.responses ? p.responses.filter(r => r.optionId === opt.id).length : 0
+          })) : [],
+          totalResponses: p.responses ? p.responses.length : 0
+        }))
+      });
+    }
+
+    // 4. Default Plain Text (.txt) Export (Anonymous)
+    let txt = `=================================================\n`;
+    txt += `WHISPRLIVE LIVE SESSION REPORT & TRANSCRIPT\n`;
+    txt += `Title: ${room.title}\n`;
+    txt += `Room Code: ${room.roomCode}\n`;
+    if (room.customSlug) txt += `Custom URL: whisprlive.live/ask/${room.customSlug}\n`;
+    txt += `Date: ${new Date(room.createdAt).toLocaleString()}\n`;
+    txt += `Total Questions: ${room.messages.length}\n`;
+    txt += `=================================================\n\n`;
+
+    txt += `--- AUDIENCE QUESTIONS & HOST REPLIES ---\n\n`;
+    room.messages.forEach((m, idx) => {
+      txt += `[#${idx + 1}] (${m.upvotes} upvotes) ${m.isAnswered ? "[ANSWERED] " : ""}${m.isPinned ? "[PINNED] " : ""}\n`;
+      txt += `Question: ${m.content}\n`;
+      if (m.hostReply) txt += `Host Reply: ${m.hostReply}\n`;
+      txt += `Submitted: ${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\n`;
+    });
+
+    if (room.polls && room.polls.length > 0) {
+      txt += `--- LIVE POLLS, QUIZZES & WORD CLOUDS ---\n\n`;
+      room.polls.forEach((p, pIdx) => {
+        txt += `Poll #${pIdx + 1}: ${p.question} (${p.type}${p.isQuiz ? " - QUIZ" : ""})\n`;
+        if (p.type === "CHOICE" && p.options) {
+          p.options.forEach(opt => {
+            const votes = p.responses ? p.responses.filter(r => r.optionId === opt.id).length : 0;
+            txt += `  - ${opt.text}: ${votes} votes ${opt.isCorrect ? "✓ (Correct Answer)" : ""}\n`;
+          });
+        }
+        txt += `\n`;
+      });
+    }
+
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Content-Disposition", `attachment; filename="whisprlive-${room.roomCode}-transcript.txt"`);
+    return res.send(txt);
+  } catch (err) {
+    console.error("Export error:", err);
+    res.status(500).json({ message: "Failed to export session data" });
   }
 });
 

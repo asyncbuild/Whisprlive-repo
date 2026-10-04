@@ -14,6 +14,7 @@ import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RefundPage from './pages/RefundPage';
 import WelcomePage from './pages/WelcomePage';
+import StageProjectorPage from './pages/StageProjectorPage';
 import NotFoundPage from './pages/NotFoundPage';
 import FeedbackWidget from './components/FeedbackWidget';
 
@@ -72,6 +73,10 @@ export default function App() {
 
               {/* Dynamic route for the public audience link */}
               <Route path="/ask/:roomCode" element={<PublicAskPage />} />
+
+              {/* Stage / Projector View for Live Events & Screens */}
+              <Route path="/stage/:roomCode" element={<StageProjectorPage />} />
+              <Route path="/presenter/:roomCode" element={<StageProjectorPage />} />
 
               {/* Custom 404 Not Found Page */}
               <Route path="*" element={<NotFoundPage />} />

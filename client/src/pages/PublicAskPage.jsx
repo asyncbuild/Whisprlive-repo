@@ -1,13 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Clock, Send, Radio, Check, Loader2, Calendar, ThumbsUp,
-  MessageSquare, BarChart2, Pin, Sparkles
+  MessageSquare, BarChart2, Pin, Sparkles, Trophy, CheckCircle2, XCircle
 } from "lucide-react";
 import { io } from "socket.io-client";
 import Brand from "../components/Brand";
 import LoadingSpinner from "../components/LoadingSpinner";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
+import LiveReactionsOverlay from "../components/LiveReactionsOverlay";
+import LiveReactionDock from "../components/LiveReactionDock";
 import ThemeToggle from "../components/ThemeToggle";
 import API from "../api/axios";
 import { useToast } from "../context/ToastContext";
@@ -88,6 +90,13 @@ export default function PublicAskPage() {
     }
   });
 
+  const socketRef = useRef(null);
+
+  const handleSendReaction = (emoji) => {
+    if (!socketRef.current || !roomCode) return;
+    socketRef.current.emit("send_reaction", { roomCode, emoji });
+  };
+
   // 1. Fetch live session status from server
   const fetchStatus = async () => {
     if (roomCode?.toLowerCase() === "demo") {
@@ -130,7 +139,8 @@ export default function PublicAskPage() {
   const fetchPublicMessages = async () => {
     try {
       const res = await API.get(`/api/rooms/public/${roomCode}/messages`);
-      setMessages(res.data?.messages || []);
+      const valid = (res.data?.messages || []).filter((m) => !m.aiFlagged && m.status !== "rejected");
+      setMessages(valid);
     } catch (err) {
       console.error("Failed to load public messages:", err);
     }
@@ -167,6 +177,8 @@ export default function PublicAskPage() {
       reconnectionDelay: 1000
     });
 
+    socketRef.current = socket;
+
     const joinRoomAndSync = () => {
       socket.emit("join_room", roomCode);
       fetchStatus();
@@ -186,6 +198,7 @@ export default function PublicAskPage() {
 
     // Real-time audience feed & moderation events
     socket.on("new_message", (newMsg) => {
+      if (newMsg.status === "rejected" || newMsg.aiFlagged) return; // Block toxic / AI flagged messages from audience feed
       setMessages((prev) => {
         if (prev.some((m) => m.id === newMsg.id)) return prev;
         return [
@@ -201,6 +214,10 @@ export default function PublicAskPage() {
           ...prev
         ];
       });
+    });
+
+    socket.on("message_deleted", ({ messageId }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
     });
 
     socket.on("message_upvoted", ({ messageId, upvotes }) => {
@@ -245,7 +262,7 @@ export default function PublicAskPage() {
     socket.on("poll_created", (poll) => {
       setActivePoll(poll);
       setActiveTab("poll");
-      const label = poll.type === "WORD_CLOUD" ? "Word Cloud" : "Live Poll";
+      const label = poll.isQuiz ? "Audience Quiz" : poll.type === "WORD_CLOUD" ? "Word Cloud" : "Live Poll";
       toast.info(`📊 Host launched a new ${label}!`);
     });
 
@@ -257,6 +274,33 @@ export default function PublicAskPage() {
       setActivePoll(null);
       setActiveTab((prev) => (prev === "poll" ? "ask" : prev));
       toast.info("Active poll has ended.");
+    });
+
+    socket.on("quiz_revealed", (data) => {
+      setActivePoll((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isQuizRevealed: true,
+          options: (prev.options || []).map((o) => ({
+            ...o,
+            isCorrect: o.id === data.correctOptionId
+          }))
+        };
+      });
+      toast.info("🎯 The correct quiz answer has been revealed!");
+    });
+
+    socket.on("branding_updated", (branding) => {
+      setRoomInfo((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          brandLogo: branding.brandLogo,
+          brandColor: branding.brandColor,
+          stageTheme: branding.stageTheme,
+        };
+      });
     });
 
     // Mobile visibility sync: Re-check status when user unlocks phone or switches back to tab
@@ -299,44 +343,46 @@ export default function PublicAskPage() {
     return () => clearInterval(interval);
   }, [roomInfo]);
 
-  // 6. Submit anonymous message
+  // 6. Submit anonymous message (Optimistic 0ms UI)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!text.trim() || isSubmitting) return;
+    const cleanText = text.trim();
+    if (!cleanText || isSubmitting) return;
 
-    setIsSubmitting(true);
+    // Instant optimistic clearing (< 0.1ms)
+    setText("");
+    setSent(true);
+    setTimeout(() => setSent(false), 2800);
+
     if (roomCode?.toLowerCase() === "demo" || roomInfo?.isDemo) {
-      setTimeout(() => {
-        const demoMsg = {
-          id: "demo-" + Date.now(),
-          content: text.trim(),
-          upvotes: 1,
-          isAnswered: false,
-          isPinned: false,
-          hostReply: null,
-          createdAt: new Date().toISOString()
-        };
-        setMessages((prev) => [demoMsg, ...prev]);
-        setText("");
-        setSent(true);
-        setIsSubmitting(false);
-        toast.success("🎉 Question sent! Experience how fast WhisprLive delivers live Q&A.");
-        setTimeout(() => setSent(false), 3500);
-      }, 300);
+      const demoMsg = {
+        id: "demo-" + Date.now(),
+        content: cleanText,
+        upvotes: 1,
+        isAnswered: false,
+        isPinned: false,
+        hostReply: null,
+        createdAt: new Date().toISOString()
+      };
+      setMessages((prev) => [demoMsg, ...prev]);
+      toast.success("🎉 Question sent! Experience how fast WhisprLive delivers live Q&A.");
       return;
     }
 
     try {
-      const clientDeviceModel = await getClientDeviceModel();
+      const clientDeviceModel = typeof window !== "undefined" && navigator?.userAgentData?.platform
+        ? navigator.userAgentData.platform
+        : null;
+
       await API.post(`/api/rooms/public/${roomCode}/messages`, {
-        content: text.trim(),
+        content: cleanText,
         clientDeviceModel: clientDeviceModel || undefined
       });
       trackEvent("question_submitted", "PublicRoom", roomCode);
-      setText("");
-      setSent(true);
-      setTimeout(() => setSent(false), 3000);
     } catch (err) {
+      // Revert text on failure
+      setText(cleanText);
+      setSent(false);
       const msg = err.response?.data?.message || "Failed to send message.";
       if (
         msg.toLowerCase().includes("expire") ||
@@ -352,8 +398,6 @@ export default function PublicAskPage() {
       } else {
         toast.error(msg);
       }
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -505,9 +549,24 @@ export default function PublicAskPage() {
   const hasVotedActivePoll = activePoll ? Boolean(votedPollMap[activePoll.id]) : false;
 
   return (
-    <div className="public-wrap">
+    <div
+      className="public-wrap"
+      style={roomInfo?.brandColor ? { "--accent": roomInfo.brandColor } : {}}
+    >
+      {/* Live Reactions Floating Overlay */}
+      <LiveReactionsOverlay socket={socketRef.current} roomCode={roomCode} />
+
       <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: 640 }}>
-        <Brand onClick={() => navigate("/")} />
+        {roomInfo?.brandLogo ? (
+          <img
+            src={roomInfo.brandLogo}
+            alt="Event Logo"
+            style={{ maxHeight: 38, maxWidth: 160, objectFit: "contain", cursor: "pointer" }}
+            onClick={() => navigate("/")}
+          />
+        ) : (
+          <Brand onClick={() => navigate("/")} />
+        )}
         <ThemeToggle />
       </div>
       <div className="public-card">
@@ -788,19 +847,46 @@ export default function PublicAskPage() {
               </div>
             )}
 
-            {/* TAB 3: LIVE POLL & WORD CLOUD */}
+            {/* TAB 3: LIVE POLLS & QUIZZES */}
             {activeTab === "poll" && (
               activePoll ? (
                 <div className="poll-card">
                   <div className="poll-badge-row">
                     <span className="poll-type-badge">
                       <Radio size={12} style={{ color: "var(--live)" }} />
-                      {activePoll.type === "WORD_CLOUD" ? "Live Word Cloud" : "Live Multiple Choice Poll"}
+                      {activePoll.isQuiz
+                        ? "Live Audience Quiz"
+                        : activePoll.type === "WORD_CLOUD"
+                        ? "Live Word Cloud"
+                        : "Live Multiple Choice Poll"}
                     </span>
                     <span style={{ fontSize: 12, color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
                       {activePoll.totalVotes} {activePoll.totalVotes === 1 ? "response" : "responses"}
                     </span>
                   </div>
+
+                  {activePoll.isQuiz && (
+                    <div style={{
+                      padding: "8px 12px",
+                      background: activePoll.isQuizRevealed ? "rgba(16, 185, 129, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                      border: `1px solid ${activePoll.isQuizRevealed ? "rgba(16, 185, 129, 0.3)" : "rgba(245, 158, 11, 0.3)"}`,
+                      borderRadius: 8,
+                      marginBottom: 12,
+                      fontSize: 13,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: activePoll.isQuizRevealed ? "#10b981" : "#f59e0b",
+                      fontWeight: 600
+                    }}>
+                      <Trophy size={15} />
+                      <span>
+                        {activePoll.isQuizRevealed
+                          ? "Answer revealed! Check if your answer was correct below."
+                          : "Quiz in progress! Lock in your pick before the host reveals."}
+                      </span>
+                    </div>
+                  )}
 
                   <h3 className="poll-question-title">{activePoll.question}</h3>
 
@@ -808,22 +894,34 @@ export default function PublicAskPage() {
                     <div className="poll-options-grid">
                       {activePoll.options.map((opt) => {
                         const userPick = votedPollMap[activePoll.id] === opt.id;
+                        const isCorrectOption = activePoll.isQuizRevealed && opt.isCorrect;
+                        const isUserWrong = activePoll.isQuizRevealed && userPick && !opt.isCorrect;
+
                         return (
                           <button
                             key={opt.id}
                             type="button"
-                            className={`poll-opt-btn ${userPick ? "user-voted" : ""}`}
+                            className={`poll-opt-btn ${userPick ? "user-voted" : ""} ${isCorrectOption ? "is-quiz-correct" : ""} ${isUserWrong ? "is-quiz-wrong" : ""}`}
                             disabled={hasVotedActivePoll || isVoting}
                             onClick={() => handlePollVote(opt.id)}
+                            style={isCorrectOption ? { borderColor: "#10b981", background: "rgba(16, 185, 129, 0.1)" } : {}}
                           >
                             <div
                               className="poll-opt-progress-fill"
-                              style={{ width: `${opt.percentage || 0}%` }}
+                              style={{
+                                width: `${opt.percentage || 0}%`,
+                                background: isCorrectOption ? "rgba(16, 185, 129, 0.25)" : undefined
+                              }}
                             />
                             <div className="poll-opt-content">
-                              <span>
-                                {userPick && "✓ "}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                {userPick && "✓ (Your Pick) "}
                                 {opt.text}
+                                {isCorrectOption && (
+                                  <span style={{ color: "#10b981", fontWeight: 700, fontSize: 12 }}>
+                                    ✓ Correct Answer
+                                  </span>
+                                )}
                               </span>
                               <span className="poll-opt-pct">
                                 {opt.percentage || 0}%
@@ -866,8 +964,8 @@ export default function PublicAskPage() {
                               height: 52,
                               minHeight: 52,
                               borderRadius: 12,
-                              border: "1.5px solid #CBD5E1",
-                              background: "#FFFFFF",
+                              border: "1.5px solid var(--border)",
+                              background: "var(--surface-2)",
                               padding: "0 16px",
                               fontSize: 15.5,
                               color: "var(--text)",
@@ -920,6 +1018,13 @@ export default function PublicAskPage() {
               )
             )}
           </>
+        )}
+
+        {/* Live Reaction Dock for Audience Interactions */}
+        {isActive && (
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "center" }}>
+            <LiveReactionDock onSendReaction={handleSendReaction} disabled={!isActive} />
+          </div>
         )}
       </div>
     </div>

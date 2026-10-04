@@ -25,6 +25,11 @@ export default function FeedbackWidget() {
     }
   }, [isOpen]);
 
+  // Hide feedback widget on Stage Projector mode to keep presenter view clean
+  if (location.pathname.startsWith("/stage") || location.pathname.startsWith("/presenter")) {
+    return null;
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const cleanMsg = message.trim();
