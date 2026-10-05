@@ -3470,9 +3470,9 @@ export default function DashboardPage() {
             style={{ maxWidth: 760, width: "92%", maxHeight: "86vh", overflowY: "auto" }}
           >
             <div className="modal-head" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 14 }}>
-              <div>
-                <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700 }}>Session recap</h3>
-                <div className="mono" style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 4 }}>
+              <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
+                <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700, overflowWrap: "anywhere", wordBreak: "break-word" }}>Session recap</h3>
+                <div className="mono" style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 4, overflowWrap: "anywhere", wordBreak: "break-word" }}>
                   {sessionReport.room.title} · {formatFullDateTime(sessionReport.room.createdAt)} · Code: {sessionReport.room.roomCode}
                 </div>
               </div>
@@ -3481,7 +3481,7 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 10, margin: "18px 0 24px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, margin: "18px 0 24px" }}>
               {[
                 [sessionReport.summary.responseCount, "Responses"],
                 [sessionReport.summary.answeredCount, "Answered"],
@@ -3491,35 +3491,35 @@ export default function DashboardPage() {
               ].map(([value, label]) => (
                 <div key={label} style={{ padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
                   <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{value}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{label}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 2 }}>{label}</div>
                 </div>
               ))}
             </div>
 
             <section style={{ marginBottom: 22 }}>
-              <h4 style={{ fontSize: 14, margin: "0 0 10px" }}>Poll results</h4>
+              <h4 style={{ fontSize: 14, margin: "0 0 10px", fontWeight: 700 }}>Poll results</h4>
               {sessionReport.polls.length === 0 ? (
                 <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>No polls were launched during this session.</p>
               ) : sessionReport.polls.map((poll, pollIndex) => (
-                <div key={`${poll.question}-${pollIndex}`} style={{ padding: "12px 0", borderTop: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, fontWeight: 600 }}>
+                <div key={`${poll.question}-${pollIndex}`} style={{ padding: "14px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere", wordBreak: "break-word" }}>
                     <span>{poll.question}</span>
-                    <span style={{ color: "var(--text-dim)", whiteSpace: "nowrap" }}>{poll.totalVotes} responses</span>
+                    <span style={{ color: "var(--text-dim)", whiteSpace: "nowrap", fontSize: 12 }}>{poll.totalVotes} responses</span>
                   </div>
                   {poll.type === "WORD_CLOUD" ? (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
                       {poll.words.length > 0 ? poll.words.map((word) => (
                         <span key={word.text} className="chip">{word.text} · {word.count}</span>
                       )) : <span style={{ color: "var(--text-dim)", fontSize: 12 }}>No words submitted.</span>}
                     </div>
                   ) : (
-                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                    <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                       {poll.options.map((option) => {
                         const percentage = poll.totalVotes ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
                         return (
-                          <div key={option.text} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5 }}>
+                          <div key={option.text} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, overflowWrap: "anywhere", wordBreak: "break-word" }}>
                             <span>{option.text}</span>
-                            <span className="mono" style={{ color: "var(--text-dim)", whiteSpace: "nowrap" }}>{option.votes} · {percentage}%</span>
+                            <span className="mono" style={{ color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{option.votes} · {percentage}%</span>
                           </div>
                         );
                       })}
@@ -3530,19 +3530,58 @@ export default function DashboardPage() {
             </section>
 
             <section>
-              <h4 style={{ fontSize: 14, margin: "0 0 10px" }}>Top questions</h4>
+              <h4 style={{ fontSize: 14, margin: "0 0 10px", fontWeight: 700 }}>Questions ({sessionReport.topQuestions?.length || 0})</h4>
               {sessionReport.canViewQuestions ? (
                 sessionReport.topQuestions.length === 0 ? (
                   <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>No questions were submitted during this session.</p>
-                ) : sessionReport.topQuestions.map((question, index) => (
-                  <div key={`${question.createdAt}-${index}`} style={{ padding: "10px 0", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{question.content}</div>
-                    <div style={{ display: "flex", gap: 12, marginTop: 4, color: "var(--text-dim)", fontSize: 11.5 }}>
-                      <span>{question.upvotes} upvotes</span>
-                      <span>{question.isAnswered ? "Answered" : "Unanswered"}</span>
-                    </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {sessionReport.topQuestions.map((question, index) => (
+                      <div
+                        key={`${question.createdAt}-${index}`}
+                        style={{
+                          padding: "12px 14px",
+                          background: "var(--surface-2)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 14,
+                            lineHeight: 1.55,
+                            color: "var(--text)",
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                            whiteSpace: "pre-wrap"
+                          }}
+                        >
+                          {question.content}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingTop: 6, borderTop: "1px solid var(--border-soft, var(--border))" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)" }}>
+                            👍 {question.upvotes || 0} {question.upvotes === 1 ? "upvote" : "upvotes"}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                              background: question.isAnswered ? "rgba(16, 185, 129, 0.12)" : "rgba(148, 163, 184, 0.12)",
+                              color: question.isAnswered ? "#10B981" : "var(--text-dim)"
+                            }}
+                          >
+                            {question.isAnswered ? "✓ Answered" : "Unanswered"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))
+                )
               ) : (
                 <div style={{ padding: 14, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
                   <p style={{ color: "var(--text-dim)", fontSize: 13, margin: "0 0 10px" }}>Unlock question details and report export with a Room Pass or Host plan.</p>

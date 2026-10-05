@@ -743,12 +743,49 @@ export default function PublicAskPage() {
                   </div>
                 )
               ) : (
-                <div className="empty-feed" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "40px 20px" }}>
-                  <Clock size={36} style={{ color: "var(--text-faint)", marginBottom: 12 }} />
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Session Ended</h3>
-                  <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
-                    This room is now closed and is no longer accepting new submissions.
+                <div className="session-ended-card" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "36px 24px", textAlign: "center" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(16, 185, 129, 0.12)", color: "#10B981", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+                    <CheckCircle2 size={28} />
+                  </div>
+                  <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Session Concluded</h3>
+                  <p style={{ color: "var(--text-dim)", fontSize: 14, maxWidth: 380, margin: "0 auto 20px", lineHeight: 1.5 }}>
+                    Thank you for participating! This live room is closed and no longer accepting submissions.
                   </p>
+
+                  <div style={{
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "20px 16px",
+                    textAlign: "center"
+                  }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--accent)", fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
+                      <Sparkles size={16} />
+                      <span>Host your own event with WhisprLive</span>
+                    </div>
+                    <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 16px", lineHeight: 1.45 }}>
+                      Run anonymous Q&As, live emoji reactions, audience quizzes, and word clouds for free.
+                    </p>
+                    <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => {
+                          trackEvent("ended_card_host_click", "PublicAskPage", roomCode);
+                          navigate("/auth?mode=register&ref=attendee_ended");
+                        }}
+                      >
+                        <Sparkles size={13} /> Create Free Room
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => navigate("/")}
+                      >
+                        Explore Features
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )
             )}
@@ -1027,6 +1064,26 @@ export default function PublicAskPage() {
           </div>
         )}
       </div>
+
+      {/* Viral Attendee-to-Host Conversion Banner */}
+      <aside className="public-viral-footer" aria-label="Create your own room">
+        <div className="public-viral-left">
+          <span className="public-viral-tag">⚡ Free Tool</span>
+          <span className="public-viral-text">
+            Hosting your next meeting, retro, or lecture?
+          </span>
+        </div>
+        <button
+          type="button"
+          className="public-viral-btn"
+          onClick={() => {
+            trackEvent("attendee_footer_viral_click", "PublicAskPage", roomCode);
+            navigate("/auth?mode=register&ref=public_footer");
+          }}
+        >
+          <Sparkles size={13} /> Create Your Free Room
+        </button>
+      </aside>
     </div>
   );
 }
