@@ -7,6 +7,7 @@ import {
 import QRCode from "qrcode";
 import io from "socket.io-client";
 import API from "../api/axios";
+import { useTheme } from "../context/ThemeContext";
 import LiveReactionsOverlay from "../components/LiveReactionsOverlay";
 import WordCloudVisualizer from "../components/WordCloudVisualizer";
 
@@ -17,7 +18,7 @@ async function generateWatermarkedQr(targetUrl, brandLogo) {
     const rawQr = await QRCode.toDataURL(targetUrl, {
       errorCorrectionLevel: "H",
       margin: 1.5,
-      width: 440,
+      width: 360,
       color: { dark: "#000000", light: "#00000000" }
     });
 
@@ -50,23 +51,23 @@ async function generateWatermarkedQr(targetUrl, brandLogo) {
     if (!qrImg) return rawQr;
 
     const canvas = document.createElement("canvas");
-    canvas.width = 440;
-    canvas.height = 440;
+    canvas.width = 360;
+    canvas.height = 360;
     const ctx = canvas.getContext("2d");
     if (!ctx) return rawQr;
 
     // 1. Fill clean white base
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, 440, 440);
+    ctx.fillRect(0, 0, 360, 360);
 
     // 2. High-contrast QR matrix
-    ctx.drawImage(qrImg, 0, 0, 440, 440);
+    ctx.drawImage(qrImg, 0, 0, 360, 360);
 
     // 3. Center branded logo badge (High-error-correction safe)
     if (logoImg && logoImg.width && logoImg.height) {
-      const badgeSize = 88;
-      const bx = (440 - badgeSize) / 2;
-      const by = (440 - badgeSize) / 2;
+      const badgeSize = 72;
+      const bx = (360 - badgeSize) / 2;
+      const by = (360 - badgeSize) / 2;
 
       ctx.save();
       ctx.fillStyle = "#FFFFFF";
@@ -77,18 +78,18 @@ async function generateWatermarkedQr(targetUrl, brandLogo) {
 
       ctx.beginPath();
       if (ctx.roundRect) {
-        ctx.roundRect(bx, by, badgeSize, badgeSize, 14);
+        ctx.roundRect(bx, by, badgeSize, badgeSize, 12);
       } else {
         ctx.rect(bx, by, badgeSize, badgeSize);
       }
       ctx.fill();
 
       ctx.shadowColor = "transparent";
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2;
       ctx.strokeStyle = "#E2E8F0";
       ctx.stroke();
 
-      const pad = 10;
+      const pad = 8;
       const innerSize = badgeSize - pad * 2;
       const aspect = logoImg.width / logoImg.height;
       let lw = innerSize;
@@ -114,6 +115,7 @@ async function generateWatermarkedQr(targetUrl, brandLogo) {
 export default function StageProjectorPage() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
+  const { theme, isDark, toggleTheme } = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -125,7 +127,12 @@ export default function StageProjectorPage() {
   const [spotlightMessageId, setSpotlightMessageId] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [stageTheme, setStageTheme] = useState("dark"); // "dark" | "light" | "midnight"
+  const [stageTheme, setStageTheme] = useState(() => (isDark ? "dark" : "light"));
+
+  // Keep stage theme synced with active app theme
+  useEffect(() => {
+    setStageTheme(isDark ? "dark" : "light");
+  }, [isDark, theme]);
 
   const socketRef = useRef(null);
 
@@ -140,9 +147,6 @@ export default function StageProjectorPage() {
         const validMessages = (data.messages || []).filter((m) => !m.aiFlagged && m.status !== "rejected");
         setMessages(validMessages);
         setActivePoll(data.activePoll || null);
-        if (data.room.stageTheme) {
-          setStageTheme(data.room.stageTheme);
-        }
 
         // Auto-select tab based on active activity
         if (data.activePoll && data.activePoll.isActive) {
@@ -347,7 +351,7 @@ export default function StageProjectorPage() {
 
   if (loading) {
     return (
-      <div className="stage-page-container stage-theme-dark stage-loading-screen">
+      <div className={`stage-page-container stage-theme-${stageTheme} stage-loading-screen`}>
         <div className="stage-spinner" />
         <h2>Initializing Live Stage Projector...</h2>
         <p>Connecting to {roomCode}...</p>
@@ -357,7 +361,7 @@ export default function StageProjectorPage() {
 
   if (error) {
     return (
-      <div className="stage-page-container stage-theme-dark stage-loading-screen">
+      <div className={`stage-page-container stage-theme-${stageTheme} stage-loading-screen`}>
         <div className="stage-error-icon">⚠️</div>
         <h2>Stage Screen Unavailable</h2>
         <p>{error}</p>
@@ -421,7 +425,7 @@ export default function StageProjectorPage() {
 
           <button
             className="stage-icon-btn"
-            onClick={() => setStageTheme((t) => (t === "light" ? "dark" : "light"))}
+            onClick={toggleTheme}
             title={stageTheme === "light" ? "Switch to Dark Theme" : "Switch to Light Theme"}
           >
             {stageTheme === "light" ? <Moon size={16} /> : <Sun size={16} />}
@@ -689,6 +693,9 @@ export default function StageProjectorPage() {
                 whisprlive.live/ask/<strong>{joinSlug}</strong>
               </div>
               <span className="stage-qr-subtext">No app install · 100% Free & Anonymous</span>
+              <div className="stage-qr-host-plug">
+                <span>⚡ Host your own room free at <strong>whisprlive.live</strong></span>
+              </div>
             </div>
           </div>
         </aside>
