@@ -306,7 +306,7 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
                   <Check size={14} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Custom Vanity URL:</strong> /ask/your-event</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
-                  <Check size={14} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>AI Auto-Moderation:</strong> Safety filter</span>
+                  <Check size={14} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Safety Controls:</strong> Fast rule-based filters</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
                   <Check size={14} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Team Seats:</strong> Up to 3 co-host seats</span>
@@ -388,6 +388,9 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
                   <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Custom Branding:</strong> Event logo &amp; colors</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
+                  <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>AI Multilingual Moderation:</strong> Abusive flagging in all languages</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
                   <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>AI Clustering:</strong> Question deduplication</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
@@ -398,9 +401,6 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
                   <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Executive Reports:</strong> Branded PDF export</span>
-                </li>
-                <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
-                  <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Dedicated SLA:</strong> 1 year archive &amp; support</span>
                 </li>
               </ul>
             </div>
