@@ -1572,8 +1572,8 @@ app.post("/api/rooms/public/:roomId/messages", messageSubmissionLimiter, async (
         let finalAiReason = aiFlagReason;
         let finalAiCategory = aiCategory;
 
-        // If not already flagged by fast local rules, run Cloud Gemini 1.5 Flash Deep Check
-        if (!finalAiFlagged && (limits.canAiModeration || Boolean(process.env.GEMINI_API_KEY))) {
+        // If not already flagged by fast local rules, run Cloud AI Deep Check (Studio Plan Only)
+        if (!finalAiFlagged && limits.canAiModeration && Boolean(process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY)) {
           try {
             const deepCheck = await checkToxicity(content.trim());
             if (deepCheck && deepCheck.isFlagged) {

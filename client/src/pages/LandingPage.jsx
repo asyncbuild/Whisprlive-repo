@@ -28,8 +28,8 @@ const FAQ_ITEMS = [
     answer: "Yes! Hosts can launch multiple-choice polls, real-time Word Clouds, and Live Quizzes with countdown timers and synchronized answer reveals. You can also save poll templates to your Poll Library to reuse across multiple events.",
   },
   {
-    question: "How does AI topic clustering and auto-moderation work?",
-    answer: "On Host and Studio plans, WhisprLive includes automated AI toxicity filtering to keep discussions civil. Studio plans additionally offer AI Topic Clustering to automatically group similar audience questions and AI Executive Summaries with audience sentiment breakdowns.",
+    question: "How does AI multilingual abusive flagging and topic clustering work?",
+    answer: "Exclusive to the Studio plan, WhisprLive includes Groq-powered AI Multilingual Abusive Flagging to automatically detect profanity, harassment, and toxic language across all languages and dialects. Studio plans also provide AI Semantic Topic Clustering to group questions and AI Executive Sentiment Summaries.",
   },
   {
     question: "What payment options are available for 24-hour Event Passes and plans?",
@@ -768,7 +768,7 @@ export default function LandingPage() {
                     <li><Check size={14} /> <span><strong>Unlimited Rooms:</strong> 60m sessions each</span></li>
                     <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 1,000 questions/room</span></li>
                     <li><Check size={14} /> <span><strong>Custom Vanity URL:</strong> /ask/your-event</span></li>
-                    <li><Check size={14} /> <span><strong>AI Auto-Moderation:</strong> Toxicity filter</span></li>
+                    <li><Check size={14} /> <span><strong>Safety Controls:</strong> Fast rule-based filters</span></li>
                     <li><Check size={14} /> <span><strong>Team Seats:</strong> Up to 3 co-hosts/mods</span></li>
                     <li><Check size={14} /> <span><strong>Data Exports:</strong> Structured CSV &amp; JSON</span></li>
                     <li><Check size={14} /> <span><strong>Full Interactivity:</strong> Quizzes, clouds &amp; polls</span></li>
@@ -811,11 +811,11 @@ export default function LandingPage() {
                     <li><Check size={14} /> <span><strong>Extended Sessions:</strong> Unlimited 120m</span></li>
                     <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 2,500 questions/room</span></li>
                     <li><Check size={14} /> <span><strong>Custom Event Logo:</strong> Stamped on QR &amp; Stage</span></li>
+                    <li><Check size={14} /> <span><strong>AI Multilingual Moderation:</strong> Abusive flagging in all languages</span></li>
                     <li><Check size={14} /> <span><strong>AI Topic Clustering:</strong> Deduplication</span></li>
                     <li><Check size={14} /> <span><strong>AI Executive Summary:</strong> Sentiment recap</span></li>
                     <li><Check size={14} /> <span><strong>Unlimited Seats:</strong> Co-hosts &amp; moderators</span></li>
                     <li><Check size={14} /> <span><strong>Executive Reports:</strong> Branded PDF export</span></li>
-                    <li><Check size={14} /> <span><strong>Dedicated SLA:</strong> 1 year archive &amp; support</span></li>
                   </ul>
                 </div>
                 <button

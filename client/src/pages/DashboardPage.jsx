@@ -2635,11 +2635,53 @@ export default function DashboardPage() {
                             : "LIVE MESSAGES"}
                       </span>
                     </div>
-                    {!isSessionScheduled && (
-                      <span className="mono" style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
-                        {answeredCount}/{messages.length} answered
-                      </span>
-                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      {currentUser?.plan === "STUDIO" ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "3px 10px",
+                            borderRadius: 999,
+                            background: "rgba(99, 102, 241, 0.12)",
+                            color: "var(--accent)",
+                            border: "1px solid rgba(99, 102, 241, 0.3)"
+                          }}
+                          title="Groq AI automatically flags abusive and toxic messages in all languages and hides them from stage/public feeds"
+                        >
+                          <Sparkles size={11} /> Studio AI Abusive Flagging Active
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowUpgradeModal(true)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: "3px 9px",
+                            borderRadius: 999,
+                            background: "var(--surface-2)",
+                            color: "var(--text-dim)",
+                            border: "1px solid var(--border)",
+                            cursor: "pointer"
+                          }}
+                          title="Upgrade to Studio plan to unlock Groq AI Multilingual Abusive Flagging"
+                        >
+                          <Lock size={10} /> AI Abusive Flagging (Studio)
+                        </button>
+                      )}
+                      {!isSessionScheduled && (
+                        <span className="mono" style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+                          {answeredCount}/{messages.length} answered
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {isSessionScheduled ? (

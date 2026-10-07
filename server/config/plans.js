@@ -46,7 +46,7 @@ export const PLAN_LIMITS = {
     canQuiz: true,
     canCustomSlug: true,
     canCustomBranding: false,
-    canAiModeration: true,
+    canAiModeration: false,
     canAiClustering: false,
     canAiSummary: false,
     stageWatermark: false,
