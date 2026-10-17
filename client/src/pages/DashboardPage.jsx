@@ -2180,33 +2180,54 @@ export default function DashboardPage() {
               </div>
 
               {/* Custom Vanity URL Slug (Host & Studio plans) */}
-              <div className="new-session-slug-row" style={{ marginTop: 16, padding: "14px 16px", background: "var(--surface-2)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="new-session-slug-row">
+                <div className="new-session-slug-header">
+                  <label className="new-session-slug-label">
                     <Sparkles size={14} style={{ color: "var(--accent)" }} /> Custom Vanity URL Slug (Optional)
                   </label>
                   {(!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS") && (
                     <span
                       onClick={openUpgradeModal}
-                      style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "2px 8px", borderRadius: 999, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                      className="new-session-slug-badge"
                     >
                       <Lock size={10} /> Host & Studio Plans
                     </span>
                   )}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, color: "var(--text-faint)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+                <div className="new-session-slug-group">
+                  <span className="new-session-slug-prefix">
                     whisprlive.live/ask/
                   </span>
-                  <input
-                    type="text"
-                    placeholder="e.g. keynote-qna"
-                    value={customSlug}
-                    onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ""))}
-                    disabled={!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS"}
-                    style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 13.5, background: (!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS") ? "var(--surface-3)" : "var(--surface)" }}
-                  />
+                  <div className="new-session-slug-input-wrapper">
+                    <input
+                      type="text"
+                      className="new-session-slug-input"
+                      placeholder="e.g. keynote-qna"
+                      value={customSlug}
+                      onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ""))}
+                      disabled={!currentUser?.plan || currentUser?.plan === "SOLO" || currentUser?.plan === "ROOM_PASS"}
+                    />
+                    {customSlug && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomSlug("")}
+                        className="new-session-slug-clear-btn"
+                        title="Clear custom slug"
+                        aria-label="Clear custom slug"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {customSlug.trim() && (
+                  <div className="new-session-slug-preview">
+                    <span>Audience link:</span>
+                    <span className="new-session-slug-preview-url">
+                      whisprlive.live/ask/{customSlug.trim()}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Audience Feed Visibility Setting - Full Width */}
