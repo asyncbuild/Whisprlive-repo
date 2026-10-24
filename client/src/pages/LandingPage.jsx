@@ -13,6 +13,7 @@ import ThemeToggle from "../components/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
+import RollingPrice from "../components/RollingPrice";
 
 const FAQ_ITEMS = [
   {
@@ -754,15 +755,20 @@ export default function LandingPage() {
                   <div className="price-plan" style={{ color: "var(--accent)" }}>Host Plan</div>
                   <div className="price-amount-wrap">
                     <span className="price-amount">
-                      {pricingBillingCycle === "YEARLY" 
-                        ? (geoCurrency.isIndia ? "₹665/mo" : "$8.25/mo") 
-                        : (geoCurrency.isIndia ? "₹799/mo" : "$12/mo")}
+                      <RollingPrice
+                        currency={geoCurrency.symbol}
+                        amount={
+                          pricingBillingCycle === "YEARLY" 
+                            ? (geoCurrency.isIndia ? "665" : "8.25") 
+                            : (geoCurrency.isIndia ? "799" : "12")
+                        }
+                        period="/mo"
+                        cycle={pricingBillingCycle}
+                      />
                     </span>
                   </div>
                   <p className="price-subtitle">
-                    {pricingBillingCycle === "YEARLY" 
-                      ? (geoCurrency.isIndia ? "365 days access · 2 mos free (Save 20%)" : "365 days access · 2 mos free (Save 20%)") 
-                      : "30 days full access · No auto-debit"}
+                    Unlimited rooms &amp; hosting · No auto-debit
                   </p>
                   <ul className="price-list">
                     <li><Check size={14} /> <span><strong>Unlimited Rooms:</strong> 60m sessions each</span></li>
@@ -782,10 +788,8 @@ export default function LandingPage() {
                 >
                   {loadingPlan === "HOST" ? (
                     <><Loader2 size={14} className="spin" /> Processing...</>
-                  ) : pricingBillingCycle === "YEARLY" ? (
-                    `Upgrade Yearly (${geoCurrency.isIndia ? "₹7,990/yr" : "$99/yr"})`
                   ) : (
-                    `Upgrade to Host (${geoCurrency.isIndia ? "₹799/mo" : "$12/mo"})`
+                    "Upgrade to Host"
                   )}
                 </button>
               </div>
@@ -797,15 +801,20 @@ export default function LandingPage() {
                   <div className="price-plan" style={{ color: "var(--accent)" }}>Studio Plan</div>
                   <div className="price-amount-wrap">
                     <span className="price-amount">
-                      {pricingBillingCycle === "YEARLY" 
-                        ? (geoCurrency.isIndia ? "₹1,249/mo" : "$16.50/mo") 
-                        : (geoCurrency.isIndia ? "₹1,499/mo" : "$24/mo")}
+                      <RollingPrice
+                        currency={geoCurrency.symbol}
+                        amount={
+                          pricingBillingCycle === "YEARLY" 
+                            ? (geoCurrency.isIndia ? "1,249" : "16.50") 
+                            : (geoCurrency.isIndia ? "1,499" : "24")
+                        }
+                        period="/mo"
+                        cycle={pricingBillingCycle}
+                      />
                     </span>
                   </div>
                   <p className="price-subtitle">
-                    {pricingBillingCycle === "YEARLY" 
-                      ? (geoCurrency.isIndia ? "365 days access · 2 mos free (Save 20%)" : "365 days access · 2 mos free (Save 20%)") 
-                      : "30 days full access · No auto-debit"}
+                    Full AI suite, custom branding &amp; scale · No auto-debit
                   </p>
                   <ul className="price-list">
                     <li><Check size={14} /> <span><strong>Extended Sessions:</strong> Unlimited 120m</span></li>
@@ -825,10 +834,8 @@ export default function LandingPage() {
                 >
                   {loadingPlan === "STUDIO" ? (
                     <><Loader2 size={14} className="spin" /> Processing...</>
-                  ) : pricingBillingCycle === "YEARLY" ? (
-                    `Get Studio Yearly (${geoCurrency.isIndia ? "₹14,990/yr" : "$199/yr"})`
                   ) : (
-                    `Get Studio Plan (${geoCurrency.isIndia ? "₹1,499/mo" : "$24/mo"})`
+                    "Upgrade to Studio"
                   )}
                 </button>
               </div>

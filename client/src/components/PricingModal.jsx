@@ -3,6 +3,7 @@ import { Check, Sparkles, Zap, Shield, Crown, X, Loader2 } from "lucide-react";
 import API from "../api/axios";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
+import RollingPrice from "./RollingPrice";
 
 export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSuccess }) {
   const [billingCycle, setBillingCycle] = useState("YEARLY"); // "MONTHLY" | "YEARLY"
@@ -287,10 +288,12 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
               </div>
               <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Host Plan</h3>
               <div style={{ margin: "14px 0 4px", display: "flex", alignItems: "baseline", gap: 6, minHeight: 38 }}>
-                <span style={{ fontSize: 28, fontWeight: 800, color: "var(--text)" }}>{prices.HOST.effectiveMonthly}</span>
+                <span style={{ fontSize: 28, fontWeight: 800, color: "var(--text)" }}>
+                  <RollingPrice value={prices.HOST.effectiveMonthly} cycle={billingCycle} />
+                </span>
               </div>
               <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 16px", minHeight: 34, display: "flex", alignItems: "center" }}>
-                {isYearly ? "365 days access · 2 mos free (Save 20%)" : "30 days full access · No auto-debit"}
+                Unlimited rooms & hosting · No auto-debit
               </p>
 
               <div style={{ height: 1, background: "var(--border)", margin: "14px 0" }} />
@@ -334,10 +337,8 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
                 <><Loader2 size={14} className="spin" /> Processing...</>
               ) : currentUser?.plan === "HOST" ? (
                 "Current Active Plan"
-              ) : isYearly ? (
-                `Upgrade Yearly (${prices.HOST.formatted}/yr)`
               ) : (
-                `Upgrade to Host (${prices.HOST.formatted}/mo)`
+                "Upgrade to Host"
               )}
             </button>
           </div>
@@ -369,10 +370,12 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
               </div>
               <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Studio Plan</h3>
               <div style={{ margin: "14px 0 4px", display: "flex", alignItems: "baseline", gap: 6, minHeight: 38 }}>
-                <span style={{ fontSize: 28, fontWeight: 800, color: "var(--text)" }}>{prices.STUDIO.effectiveMonthly}</span>
+                <span style={{ fontSize: 28, fontWeight: 800, color: "var(--text)" }}>
+                  <RollingPrice value={prices.STUDIO.effectiveMonthly} cycle={billingCycle} />
+                </span>
               </div>
               <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 16px", minHeight: 34, display: "flex", alignItems: "center" }}>
-                {isYearly ? "365 days access · 2 mos free (Save 20%)" : "30 days full access · No auto-debit"}
+                Full AI suite, custom branding & scale · No auto-debit
               </p>
 
               <div style={{ height: 1, background: "var(--border)", margin: "14px 0" }} />
@@ -416,10 +419,8 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
                 <><Loader2 size={14} className="spin" /> Processing...</>
               ) : currentUser?.plan === "STUDIO" ? (
                 "Current Active Plan"
-              ) : isYearly ? (
-                `Get Studio Yearly (${prices.STUDIO.formatted}/yr)`
               ) : (
-                `Get Studio Plan (${prices.STUDIO.formatted}/mo)`
+                "Upgrade to Studio"
               )}
             </button>
           </div>
