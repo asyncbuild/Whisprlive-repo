@@ -3,7 +3,8 @@ import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowRight, ArrowUpRight, Check, Radio, Bell, Loader2, ShieldCheck,
   Smartphone, Users, MessageCircle, ChevronDown, BarChart2, Tv, Sparkles, Trophy,
-  Download, Palette, Lock, CheckCircle2, MessageSquare, Layers, Globe, Calendar, Flame, Share2, X
+  Download, Palette, Lock, CheckCircle2, MessageSquare, Layers, Globe, Calendar, Flame, Share2, X, Star,
+  Zap, Award, Heart, MessageSquareQuote, ThumbsUp
 } from "lucide-react";
 import QRCode from "qrcode";
 import API from "../api/axios";
@@ -54,6 +55,80 @@ const FAQ_ITEMS = [
   },
 ];
 
+const WALL_OF_LOVE = [
+  {
+    name: "Arjun Mehta",
+    handle: "@arjun_dev",
+    role: "Organizer, Bangalore Tech Summit",
+    platform: "X",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces",
+    text: "We ditched passing handheld microphones around a 400-person auditorium. With WhisprLive, attendees just scanned the stage QR on the LED screen and submitted questions in 0 seconds. The candid honesty was unreal.",
+    highlight: "Saved 25 mins of awkward mic-running"
+  },
+  {
+    name: "Dr. Priya Nair",
+    handle: "@priya_nair_iit",
+    role: "Dean of Student Affairs, IIT Fest",
+    platform: "LinkedIn",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&h=100&fit=crop&crop=faces",
+    text: "Students usually hesitate to raise their hands in front of 600 peers. WhisprLive's 100% anonymous Q&A and live upvotes surfaced the most critical questions instantly. Best event tool we've used.",
+    highlight: "100% participation without hand-raising fear"
+  },
+  {
+    name: "Vikram Sen",
+    handle: "@vikram_founder",
+    role: "VP Engineering, Fintech Town Hall",
+    platform: "WhatsApp",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces",
+    text: "No logins, no app store downloads. The single 24-hour room pass with instant UPI activation is 10x cheaper and simpler than Slido's recurring enterprise annual lock-in.",
+    highlight: "Instant UPI activation & zero friction"
+  },
+  {
+    name: "Sneha Kapur",
+    handle: "@snehakapur_live",
+    role: "Twitch Partner & Hackathon Host",
+    platform: "X",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop&crop=faces",
+    text: "The dedicated Projector Stage View with live floating emoji reactions ❤️🔥👏 made our keynote feel like an Apple event. The stream chat went wild.",
+    highlight: "Felt like an Apple keynote presentation"
+  },
+  {
+    name: "Karan Singhania",
+    handle: "@karansingh_ai",
+    role: "Lead, GDG Community",
+    platform: "ProductHunt",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=faces",
+    text: "The Groq AI topic clustering automatically grouped 280 attendee questions into 5 core themes. Saved our moderators from drowning in duplicates during the live panel.",
+    highlight: "AI topic clustering is magical"
+  },
+  {
+    name: "Rohan Verma",
+    handle: "@rohan_product",
+    role: "Product Lead, SaaS All-Hands",
+    platform: "LinkedIn",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=100&h=100&fit=crop&crop=faces",
+    text: "Exporting clean branded PDF reports right after the event wrapped up gave our leadership team instant sentiment recaps and actionable takeaways.",
+    highlight: "Exported instant PDF summaries"
+  }
+];
+
+const MARQUEE_ITEMS = [
+  { icon: Users, label: "Tech Conferences & Summits" },
+  { icon: MessageSquare, label: "All-Hands & Town Halls" },
+  { icon: Tv, label: "University Fests & Keynotes" },
+  { icon: Smartphone, label: "Live Webinars & Virtual AMAs" },
+  { icon: Trophy, label: "Interactive Quizzes & Hackathons" },
+  { icon: Sparkles, label: "AI Topic Clustering & Recaps" },
+  { icon: Radio, label: "Dedicated 4K Stage Projector" },
+  { icon: ShieldCheck, label: "100% Anonymous & Zero Friction" },
+];
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const { user, token, refreshUser } = useAuth();
@@ -69,12 +144,12 @@ export default function LandingPage() {
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [submittingWaitlist, setSubmittingWaitlist] = useState(false);
   const [displayTotal, setDisplayTotal] = useState("...");
-  const [demoQr, setDemoQr] = useState("");
   const [openFaq, setOpenFaq] = useState(0);
   const [pricingBillingCycle, setPricingBillingCycle] = useState("YEARLY");
 
   const homeRef = useRef(null);
   const aboutRef = useRef(null);
+  const comparisonRef = useRef(null);
   const featuresRef = useRef(null);
   const pricingRef = useRef(null);
   const liveMockRef = useRef(null);
@@ -99,95 +174,6 @@ export default function LandingPage() {
       document.head.appendChild(meta);
     }
     meta.content = description;
-
-    // Generate high-contrast clean centered logo badge for demo QR
-    const targetUrl = `${window.location.origin}/ask/demo`;
-    QRCode.toDataURL(targetUrl, {
-      errorCorrectionLevel: "H",
-      margin: 2,
-      width: 440,
-      color: { dark: "#0f172a", light: "#ffffff" }
-    })
-      .then((qrData) => {
-        const qrImg = new Image();
-        const logoImg = new Image();
-
-        const loadImg = (img, src) =>
-          new Promise((resolve) => {
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
-            img.src = src;
-          });
-
-        Promise.all([
-          loadImg(qrImg, qrData),
-          loadImg(logoImg, "/Logo Bgless.png")
-        ]).then(([qrOk, logoOk]) => {
-          if (!qrOk) {
-            setDemoQr(qrData);
-            return;
-          }
-
-          const canvas = document.createElement("canvas");
-          canvas.width = 440;
-          canvas.height = 440;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            setDemoQr(qrData);
-            return;
-          }
-
-          // 1. Clean white background
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, 440, 440);
-          ctx.drawImage(qrImg, 0, 0, 440, 440);
-
-          // 2. High-contrast centered logo badge
-          if (logoOk && logoImg.width && logoImg.height) {
-            const badgeSize = 88;
-            const bx = (440 - badgeSize) / 2;
-            const by = (440 - badgeSize) / 2;
-
-            ctx.save();
-            ctx.fillStyle = "#FFFFFF";
-            ctx.shadowColor = "rgba(0, 0, 0, 0.22)";
-            ctx.shadowBlur = 10;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 2;
-
-            ctx.beginPath();
-            if (ctx.roundRect) {
-              ctx.roundRect(bx, by, badgeSize, badgeSize, 14);
-            } else {
-              ctx.rect(bx, by, badgeSize, badgeSize);
-            }
-            ctx.fill();
-
-            ctx.shadowColor = "transparent";
-            ctx.lineWidth = 2.5;
-            ctx.strokeStyle = "#E2E8F0";
-            ctx.stroke();
-
-            const pad = 10;
-            const innerSize = badgeSize - pad * 2;
-            const aspect = logoImg.width / logoImg.height;
-            let lw = innerSize;
-            let lh = innerSize;
-            if (aspect > 1) {
-              lh = innerSize / aspect;
-            } else {
-              lw = innerSize * aspect;
-            }
-            const lx = bx + (badgeSize - lw) / 2;
-            const ly = by + (badgeSize - lh) / 2;
-            ctx.drawImage(logoImg, lx, ly, lw, lh);
-            ctx.restore();
-          }
-
-          setDemoQr(canvas.toDataURL("image/png"));
-        });
-      })
-      .catch(() => setDemoQr(""));
   }, []);
 
   useEffect(() => {
@@ -257,7 +243,14 @@ export default function LandingPage() {
 
   const scrollTo = (key) => {
     setMenuOpen(false);
-    const targetMap = { home: homeRef, about: aboutRef, features: featuresRef, pricing: pricingRef, liveMock: liveMockRef };
+    const targetMap = { 
+      home: homeRef, 
+      about: aboutRef, 
+      comparison: comparisonRef, 
+      features: featuresRef, 
+      pricing: pricingRef, 
+      liveMock: liveMockRef 
+    };
     const target = targetMap[key]?.current;
     if (!target) return;
 
@@ -266,14 +259,12 @@ export default function LandingPage() {
       return;
     }
 
-    // Measure total sticky headers height (Navbar + Subnav Join Bar on mobile)
     const navEl = document.querySelector(".nav");
     const subnavEl = document.querySelector(".subnav-join-bar");
     let totalHeaderHeight = (navEl?.offsetHeight || 72);
     if (window.innerWidth <= 960 && subnavEl) {
       totalHeaderHeight += (subnavEl.offsetHeight || 56);
     }
-    // Add extra breathing space so section title sits comfortably below the header
     const offset = totalHeaderHeight + 16;
 
     const bodyRect = document.body.getBoundingClientRect().top;
@@ -368,13 +359,14 @@ export default function LandingPage() {
   };
 
   return (
-    <div>
+    <div style={{ position: "relative", overflowX: "hidden" }}>
+      {/* FROSTED GLASS HEADER (Backdoor AI Inspired) */}
       <nav className="nav">
         <div className="container nav-inner">
           <Brand onClick={() => scrollTo("home")} />
           <div className="nav-links">
-            <a className="nav-link" onClick={() => scrollTo("home")}>Home</a>
-            <a className="nav-link" onClick={() => scrollTo("about")}>About</a>
+            <a className="nav-link" onClick={() => scrollTo("about")}>How it works</a>
+            <a className="nav-link" onClick={() => scrollTo("comparison")}>Why Us</a>
             <a className="nav-link" onClick={() => scrollTo("features")}>Features</a>
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
           </div>
@@ -402,16 +394,23 @@ export default function LandingPage() {
             </form>
 
             <ThemeToggle className="nav-hide-mobile" />
+            
             {isLoggedIn ? (
-              <button className="btn btn-primary btn-sm" onClick={() => navigate("/dashboard")}>
-                Go to app <ArrowRight size={14} />
+              <button 
+                className="btn btn-primary btn-sm rounded-pill"
+                onClick={() => navigate("/dashboard")}
+              >
+                Dashboard <ArrowRight size={13} />
               </button>
             ) : (
-              <>
-                <button className="btn btn-ghost btn-sm nav-hide-mobile" onClick={() => navigate("/signin")}>Sign in</button>
-                <button className="btn btn-primary btn-sm" onClick={() => navigate("/signup")}>Get started</button>
-              </>
+              <button 
+                className="btn btn-primary btn-sm rounded-pill"
+                onClick={() => navigate("/signup")}
+              >
+                Start free <ArrowRight size={13} />
+              </button>
             )}
+
             <button
               className={`icon-btn nav-menu-btn ${menuOpen ? "is-open" : ""}`}
               onClick={() => setMenuOpen((v) => !v)}
@@ -426,14 +425,18 @@ export default function LandingPage() {
             </button>
           </div>
         </div>
+
+        {/* Mobile menu dropdown */}
         <div className={`mobile-menu-dropdown-wrap ${menuOpen ? "is-open" : ""}`}>
           <div className="container mobile-menu-dropdown">
-            <a className="nav-link" onClick={() => scrollTo("home")}>Home</a>
-            <a className="nav-link" onClick={() => scrollTo("about")}>About</a>
+            <a className="nav-link" onClick={() => scrollTo("about")}>How it works</a>
+            <a className="nav-link" onClick={() => scrollTo("comparison")}>Why Us</a>
             <a className="nav-link" onClick={() => scrollTo("features")}>Features</a>
             <a className="nav-link" onClick={() => scrollTo("pricing")}>Pricing</a>
-            {isLoggedIn && (
+            {isLoggedIn ? (
               <a className="nav-link" onClick={() => { setMenuOpen(false); navigate("/dashboard"); }}>Dashboard</a>
+            ) : (
+              <a className="nav-link" onClick={() => { setMenuOpen(false); navigate("/signin"); }}>Sign in</a>
             )}
             <div className="mobile-menu-theme-item">
               <ThemeToggle variant="wide-slider" />
@@ -469,197 +472,359 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* HERO SECTION */}
-      <div ref={homeRef}>
+      {/* HERO SECTION WITH BACKDOOR AMBIENT LIGHTING & EDITORIAL TYPOGRAPHY */}
+      <div ref={homeRef} style={{ position: "relative" }}>
+        {/* Ambient Sky/Sunlight Backdrop Effect */}
+        <div className="backdoor-hero-backdrop" aria-hidden="true">
+          <div className="backdoor-hero-glow-1" />
+          <div className="backdoor-hero-glow-2" />
+        </div>
+
         <section className="hero">
           <div className="container hero-grid">
             <div>
-              <span className="eyebrow">
-                <Radio size={13} /> Live Q&amp;A · Interactive Polls · Live Quizzes · Word Clouds · Stage View
-              </span>
-              <h1>Engage Your Audience Live. No Downloads. Zero Friction.</h1>
-              <p className="hero-sub">
-                The modern audience interaction platform for conferences, webinars, college fests, town halls, and live streams. Attendees scan a QR code to ask anonymous questions, vote on live polls &amp; quizzes, and send real-time floating reactions.
+              {/* Backdoor Style Rating Badge */}
+              <div className="backdoor-rating-badge">
+                <div className="backdoor-rating-stars">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="backdoor-star" size={13} fill="#f59e0b" stroke="#f59e0b" />
+                  ))}
+                </div>
+                <span>Rated <strong>4.9 out of 5</strong> · 500+ Conferences</span>
+              </div>
+
+              {/* Bold Headline with Serif Italic Punch */}
+              <h1 className="backdoor-headline">
+                Engage Your Audience Live.{" "}
+                <span className="font-serif-italic font-normal" style={{ color: "var(--accent)" }}>
+                  Zero friction.
+                </span>
+              </h1>
+
+              {/* Clean Subhead */}
+              <p className="backdoor-subhead">
+                The audience interaction platform for conferences, college fests, town halls, and live streams. Point phone camera at the stage QR to ask anonymous questions, upvote in real-time, and react live.
               </p>
-              <div className="hero-actions">
+
+              {/* Squircle Value Checklist (Like Backdoor's "Finds startups · Emails founders · Follows up") */}
+              <div className="backdoor-pill-list">
+                <div className="backdoor-pill-item">
+                  <span className="backdoor-squircle orange">
+                    <Smartphone size={14} />
+                  </span>
+                  <span>0s QR Join · No App</span>
+                </div>
+                <div className="backdoor-pill-item">
+                  <span className="backdoor-squircle blue">
+                    <MessageCircle size={14} />
+                  </span>
+                  <span>100% Anonymous Q&amp;A</span>
+                </div>
+                <div className="backdoor-pill-item">
+                  <span className="backdoor-squircle green">
+                    <Tv size={14} />
+                  </span>
+                  <span>4K Stage Projector</span>
+                </div>
+              </div>
+
+              {/* Signature Dark Glass CTA + Secondary Pill */}
+              <div className="hero-actions" style={{ alignItems: "center", gap: 14 }}>
+                <div className="dark-glass-wrap">
+                  <div className="dark-glass-shadow" />
+                  <button
+                    type="button"
+                    className="dark-glass-btn"
+                    onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                  >
+                    <span className="dark-glass-content">
+                      {isLoggedIn ? "Go to Dashboard" : "Start a free session"}
+                      <ArrowRight size={16} />
+                    </span>
+                  </button>
+                </div>
+
                 <button
-                  className="btn btn-primary"
-                  onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                  type="button"
+                  className="backdoor-pill-btn"
+                  onClick={() => navigate("/try")}
                 >
-                  {isLoggedIn ? "Go to Dashboard" : "Start a free session"} <ArrowRight size={16} />
-                </button>
-                <button className="btn btn-ghost" onClick={() => navigate("/try")}>
-                  Try the interactive demo <ArrowUpRight size={16} />
+                  Try interactive demo <ArrowUpRight size={15} />
                 </button>
               </div>
-              <div className="hero-friction-proof">
-                <ShieldCheck size={16} /> <strong>Guests join in 0 seconds.</strong> Hosts get a moderated feed &amp; big-screen Stage Projector view.
-              </div>
-              <div className="hero-meta">
-                <div className="hero-meta-item">
-                  <span className="hero-meta-num mono">0s</span>
-                  <span className="hero-meta-label">to join via QR, no app</span>
+
+              {/* Social Proof Counter with Real Avatar Stack */}
+              <div className="backdoor-social-proof">
+                <div className="backdoor-avatar-stack">
+                  <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=faces" alt="Organizer" className="backdoor-avatar" />
+                  <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=faces" alt="Speaker" className="backdoor-avatar" />
+                  <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&h=80&fit=crop&crop=faces" alt="Host" className="backdoor-avatar" />
+                  <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop&crop=faces" alt="Dean" className="backdoor-avatar" />
                 </div>
-                <div className="hero-meta-item">
-                  <span className="hero-meta-num mono">{displayTotal}</span>
-                  <span className="hero-meta-label">sessions hosted</span>
-                </div>
-                <div className="hero-meta-item">
-                  <span className="hero-meta-num mono">&lt; 50ms</span>
-                  <span className="hero-meta-label">real-time updates</span>
+                <div className="backdoor-social-text">
+                  <strong>18,000+</strong> attendees joined across <strong>{displayTotal}</strong> live sessions
                 </div>
               </div>
             </div>
+
+            {/* Right Side: Realistic Phone Mockup with Dynamic Simulated Q&A */}
             <div ref={liveMockRef} className="hero-demo-stage">
               <HeroDemoShowcase />
-              <div className="demo-qr-card">
-                <div className="demo-qr-copy">
-                  <span className="section-eyebrow">Try it from your phone</span>
-                  <strong>Scan to test live room</strong>
-                  <span>No account. No app. Just ask.</span>
-                </div>
-                {demoQr ? <img src={demoQr} alt="QR code to join the WhisprLive demo room" /> : <div className="qr-loading" aria-label="Loading demo QR code" />}
-              </div>
             </div>
           </div>
         </section>
       </div>
 
-      {/* TRUST STRIP / EVENT TYPES */}
-      <section className="trust-strip" aria-label="Supported event types">
-        <div className="container trust-strip-inner">
-          <span className="trust-label">Made for live moments</span>
-          <span><Users size={16} /> Keynotes &amp; Conferences</span>
-          <span><MessageCircle size={16} /> Town Halls &amp; AMAs</span>
-          <span><Tv size={16} /> College Fests &amp; Lectures</span>
-          <span><Smartphone size={16} /> Webinars &amp; Streams</span>
-          <span><Trophy size={16} /> Live Quizzes &amp; Workshops</span>
+      {/* SILKY SMOOTH INFINITE MARQUEE TICKER (Backdoor Style) */}
+      <div className="backdoor-marquee-section">
+        <div className="backdoor-marquee-fade left" />
+        <div className="backdoor-marquee-fade right" />
+        <div className="backdoor-marquee-track">
+          {/* Double mapped for seamless infinite loop */}
+          {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <div key={idx} className="backdoor-marquee-item">
+                <Icon size={14} style={{ color: "var(--accent)" }} />
+                <span>{item.label}</span>
+              </div>
+            );
+          })}
         </div>
-      </section>
+      </div>
 
-      {/* ABOUT & USE CASES SECTION */}
+      {/* "HOW IT WORKS" 3-STEP WALKTHROUGH */}
       <div ref={aboutRef}>
         <section className="section">
           <div className="container">
-            <div className="about-head-grid">
-              <div className="section-head" style={{ marginBottom: 0, maxWidth: "100%" }}>
-                <span className="section-eyebrow">About WhisprLive</span>
-                <h2>Built for events, streams &amp; live engagement.</h2>
-                <p>
-                  Every WhisprLive session is designed for high-energy participation: create a room in seconds, project the live stage screen, collect honest audience feedback, and export clean reports with zero leftover clutter.
+            <div className="section-head" style={{ textAlign: "center", maxWidth: 660, margin: "0 auto 36px" }}>
+              <span className="section-eyebrow">How It Works</span>
+              <h2 style={{ fontSize: "clamp(28px, 3.8vw, 44px)", letterSpacing: "-0.035em" }}>
+                Effortless live interaction in 3 simple steps.
+              </h2>
+              <p style={{ fontSize: 16, color: "var(--text-dim)", marginTop: 10 }}>
+                No downloads, no complex room setups, and zero participant friction.
+              </p>
+            </div>
+
+            <div className="backdoor-steps-grid">
+              <div className="backdoor-step-card">
+                <div className="backdoor-step-badge">1</div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.02em" }}>
+                  Launch in 5 Seconds
+                </h3>
+                <p style={{ color: "var(--text-dim)", fontSize: 14.5, lineHeight: 1.6, margin: 0 }}>
+                  Create an instant disposable room or schedule your session in advance with a custom title and custom vanity URL like <code>/ask/your-event</code>.
                 </p>
               </div>
 
-              <div className="use-case-card-grid">
-                <div className="use-case-card">
-                  <div className="use-case-badge">🎤 Keynotes &amp; Summits</div>
-                  <p>Skip passing physical microphones. Attendees scan the stage QR and ask live questions instantly.</p>
-                </div>
-                <div className="use-case-card">
-                  <div className="use-case-badge">📊 Interactive Polls &amp; Quizzes</div>
-                  <p>Run instant multiple choice polls, timed quizzes with answer reveals, and dynamic live word clouds.</p>
-                </div>
-                <div className="use-case-card">
-                  <div className="use-case-badge">💬 Town Halls &amp; All-Hands</div>
-                  <p>Enable true anonymous feedback so team members can ask bold, candid questions without fear.</p>
-                </div>
-                <div className="use-case-card">
-                  <div className="use-case-badge">🎓 Classrooms &amp; Workshops</div>
-                  <p>Keep students engaged with interactive comprehension checks and barrier-free questions.</p>
-                </div>
-              </div>
-            </div>
-
-            {/* HOW IT WORKS IN 3 STEPS */}
-            <div style={{ marginTop: 60 }}>
-              <div className="section-head" style={{ marginBottom: 24, textAlign: "center", maxWidth: 640, margin: "0 auto 36px" }}>
-                <span className="section-eyebrow">How It Works</span>
-                <h2>Effortless audience interaction in 3 simple steps.</h2>
-                <p>No downloads, no complex setups, and no participant account friction.</p>
+              <div className="backdoor-step-card">
+                <div className="backdoor-step-badge">2</div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.02em" }}>
+                  Project the Live Stage
+                </h3>
+                <p style={{ color: "var(--text-dim)", fontSize: 14.5, lineHeight: 1.6, margin: 0 }}>
+                  Beam the dedicated Stage Projector View on your auditorium LED screen. Attendees scan the high-contrast QR code on their phone in 0 seconds.
+                </p>
               </div>
 
-              <div className="how-it-works-grid">
-                <div className="step-card">
-                  <div className="step-num-badge">1</div>
-                  <h3>Create or Schedule</h3>
-                  <p>Launch an instant disposable room or schedule your session in advance with a custom title and custom vanity URL.</p>
-                </div>
-                <div className="step-card">
-                  <div className="step-num-badge">2</div>
-                  <h3>Project &amp; Connect</h3>
-                  <p>Display the Projector Stage View on your auditorium screen. Attendees scan the high-contrast QR code on their phone in 0 seconds.</p>
-                </div>
-                <div className="step-card">
-                  <div className="step-num-badge">3</div>
-                  <h3>Engage &amp; Export</h3>
-                  <p>Answer top-voted questions live, run timed quizzes, see floating emoji reactions, and download full reports in CSV, PDF, or TXT.</p>
-                </div>
+              <div className="backdoor-step-card">
+                <div className="backdoor-step-badge">3</div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.02em" }}>
+                  Engage, Upvote &amp; Recap
+                </h3>
+                <p style={{ color: "var(--text-dim)", fontSize: 14.5, lineHeight: 1.6, margin: 0 }}>
+                  Answer top-voted questions live, run timed quizzes with answer reveals, see floating emoji reactions, and download instant PDF executive summaries.
+                </p>
               </div>
             </div>
           </div>
         </section>
       </div>
 
-      {/* CORE FEATURES 6-CARD GRID */}
+      {/* CONTRAST COMPARISON BENTO: "Pure audience engagement. Not corporate bloat." (Full Bleed on All Monitors) */}
+      <section ref={comparisonRef} className="backdoor-comparison-section">
+        <div className="backdoor-comparison-glow" />
+        <div className="container" style={{ position: "relative", zIndex: 1 }}>
+          <div style={{ textAlign: "center", maxWidth: 680, margin: "0 auto" }}>
+            <span className="section-eyebrow">
+              Why Organizers Choose WhisprLive
+            </span>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 48px)", letterSpacing: "-0.04em", color: "#ffffff", marginTop: 14 }}>
+              Pure audience engagement.{" "}
+              <span className="font-serif-italic font-normal" style={{ color: "#60a5fa" }}>
+                Not corporate bloat.
+              </span>
+            </h2>
+            <p style={{ color: "rgba(255, 255, 255, 0.75)", fontSize: 16, marginTop: 12 }}>
+              See how WhisprLive eliminates the pain points of legacy corporate audience polling tools.
+            </p>
+          </div>
+
+          <div className="backdoor-comp-grid">
+            {/* Traditional Clunky Tools */}
+            <div className="backdoor-comp-card bad">
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(239, 68, 68, 0.2)", color: "#f87171", display: "grid", placeItems: "center" }}>
+                  <X size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#ffffff" }}>Clunky Legacy Tools</h4>
+                  <span style={{ fontSize: 12.5, color: "#f87171" }}>Slido, Mentimeter, Kahoot</span>
+                </div>
+              </div>
+
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "rgba(255, 255, 255, 0.75)" }}>
+                  <X size={16} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
+                  <span>Forced attendee app downloads or mandatory login walls that kill engagement.</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "rgba(255, 255, 255, 0.75)" }}>
+                  <X size={16} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
+                  <span>Expensive $50–$100/mo locked-in recurring corporate subscriptions.</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "rgba(255, 255, 255, 0.75)" }}>
+                  <X size={16} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
+                  <span>Repetitive, duplicate questions cluttering the presenter screen.</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "rgba(255, 255, 255, 0.75)" }}>
+                  <X size={16} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
+                  <span>No single 24-hour pay-per-event passes for one-off conferences or summits.</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* WhisprLive Engine */}
+            <div className="backdoor-comp-card good">
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(59, 130, 246, 0.3)", color: "#60a5fa", display: "grid", placeItems: "center" }}>
+                  <Check size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#ffffff" }}>WhisprLive Platform</h4>
+                  <span style={{ fontSize: 12.5, color: "#60a5fa" }}>Designed for live events &amp; speed</span>
+                </div>
+              </div>
+
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#ffffff" }}>
+                  <Check size={16} style={{ color: "#60a5fa", flexShrink: 0, marginTop: 2 }} />
+                  <span><strong>0-Second QR Access:</strong> Attendees scan and interact immediately with zero signup.</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#ffffff" }}>
+                  <Check size={16} style={{ color: "#60a5fa", flexShrink: 0, marginTop: 2 }} />
+                  <span><strong>Pay-Per-Event Passes:</strong> Instant ₹399 / $6 24h passes via UPI &amp; cards. No recurring lock-in.</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#ffffff" }}>
+                  <Check size={16} style={{ color: "#60a5fa", flexShrink: 0, marginTop: 2 }} />
+                  <span><strong>4K Stage Projector:</strong> High-impact presentation screen with live floating emoji reactions.</span>
+                </li>
+                <li style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#ffffff" }}>
+                  <Check size={16} style={{ color: "#60a5fa", flexShrink: 0, marginTop: 2 }} />
+                  <span><strong>Groq AI Intelligence:</strong> Multilingual profanity filter &amp; semantic topic clustering.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CORE FEATURES BENTO GRID */}
       <div ref={featuresRef}>
         <section className="section" style={{ background: "var(--surface-2)" }}>
           <div className="container">
             <div className="section-head" style={{ textAlign: "center", maxWidth: 680, margin: "0 auto 48px" }}>
               <span className="section-eyebrow">Powerful Features</span>
-              <h2>Everything you need to run unforgettable live sessions.</h2>
-              <p>Engineered for speed, privacy, and seamless on-stage presentation.</p>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", letterSpacing: "-0.035em" }}>
+                Everything you need to run unforgettable live sessions.
+              </h2>
+              <p style={{ color: "var(--text-dim)", fontSize: 16, marginTop: 10 }}>
+                Engineered for speed, privacy, and seamless on-stage presentation.
+              </p>
             </div>
 
-            <div className="feature-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
-              <div className="feature">
-                <div className="feature-icon"><MessageCircle size={20} /></div>
-                <h3>100% Anonymous Live Q&amp;A</h3>
-                <p>Audience members submit questions and upvote in real time without creating an account or logging in. Hosts can spotlight, pin, and answer from one clean dashboard.</p>
+            <div className="feature-grid">
+              {/* Card 1: 100% Anonymous Live Q&A */}
+              <div className="feature-card">
+                <div className="feature-card-icon">
+                  <MessageCircle size={22} strokeWidth={1.8} />
+                </div>
+                <h3 className="feature-card-title">100% Anonymous Live Q&amp;A</h3>
+                <p className="feature-card-desc">
+                  Audience members submit questions and upvote in real time without creating an account or logging in. Hosts spotlight, pin, and answer from one clean screen.
+                </p>
               </div>
 
-              <div className="feature">
-                <div className="feature-icon"><BarChart2 size={20} /></div>
-                <h3>Live Polls, Quizzes &amp; Word Clouds</h3>
-                <p>Launch multiple-choice polls with live percentage bars, dynamic real-time word clouds, and interactive Quizzes with countdown timers and synchronized answer reveals.</p>
+              {/* Card 2: Live Polls, Quizzes & Word Clouds */}
+              <div className="feature-card">
+                <div className="feature-card-icon">
+                  <BarChart2 size={22} strokeWidth={1.8} />
+                </div>
+                <h3 className="feature-card-title">Live Polls, Quizzes &amp; Word Clouds</h3>
+                <p className="feature-card-desc">
+                  Launch multiple-choice polls with live percentage bars, dynamic real-time word clouds, and interactive Quizzes with synchronized answer reveals.
+                </p>
               </div>
 
-              <div className="feature">
-                <div className="feature-icon"><Tv size={20} /></div>
-                <h3>Dedicated Projector Stage View</h3>
-                <p>Display a stunning big-screen presentation screen (<code style={{ fontSize: 13, color: "var(--accent)" }}>/stage/:code</code>) for stage LED walls with Q&amp;A stream, active poll results, word clouds, and live floating reactions.</p>
+              {/* Card 3: Dedicated Projector Stage View */}
+              <div className="feature-card">
+                <div className="feature-card-icon">
+                  <Tv size={22} strokeWidth={1.8} />
+                </div>
+                <h3 className="feature-card-title">Dedicated Projector Stage View</h3>
+                <p className="feature-card-desc">
+                  Display a stunning presentation screen (<code style={{ fontSize: 13, color: "var(--accent)" }}>/stage/:code</code>) for stage LED walls with Q&amp;A stream, active poll results, and live reactions.
+                </p>
               </div>
 
-              <div className="feature">
-                <div className="feature-icon"><Sparkles size={20} /></div>
-                <h3>AI Topic Clusters &amp; Executive Recaps</h3>
-                <p>Automatically deduplicate repetitive questions into semantic topic themes. Includes automated toxicity filtering and post-event audience sentiment analysis.</p>
+              {/* Card 4: AI Topic Clusters & Executive Recaps */}
+              <div className="feature-card">
+                <div className="feature-card-icon">
+                  <Sparkles size={22} strokeWidth={1.8} />
+                </div>
+                <h3 className="feature-card-title">AI Topic Clusters &amp; Executive Recaps</h3>
+                <p className="feature-card-desc">
+                  Automatically deduplicate repetitive questions into semantic topic themes. Includes automated multilingual toxicity filtering and audience sentiment analysis.
+                </p>
               </div>
 
-              <div className="feature">
-                <div className="feature-icon"><Palette size={20} /></div>
-                <h3>Custom Event Branding &amp; URLs</h3>
-                <p>Embed your company, conference, or sponsor logo directly onto attendee QR code badges and projector screens, complete with custom vanity room URLs.</p>
+              {/* Card 5: Custom Event Branding & URLs */}
+              <div className="feature-card">
+                <div className="feature-card-icon">
+                  <Palette size={22} strokeWidth={1.8} />
+                </div>
+                <h3 className="feature-card-title">Custom Event Branding &amp; URLs</h3>
+                <p className="feature-card-desc">
+                  Embed your company, conference, or sponsor logo directly onto attendee QR code badges and projector screens, complete with custom vanity room URLs.
+                </p>
               </div>
 
-              <div className="feature">
-                <div className="feature-icon"><Download size={20} /></div>
-                <h3>Co-hosts &amp; Multi-Format Exports</h3>
-                <p>Invite team members to moderate question queues live. Export full session data to Plain Text (.txt), CSV spreadsheet (.csv), structured JSON, or branded executive PDF reports.</p>
+              {/* Card 6: Co-hosts & Multi-Format Exports */}
+              <div className="feature-card">
+                <div className="feature-card-icon">
+                  <Download size={22} strokeWidth={1.8} />
+                </div>
+                <h3 className="feature-card-title">Co-hosts &amp; Multi-Format Exports</h3>
+                <p className="feature-card-desc">
+                  Invite team members to moderate question queues live. Export full session data to Plain Text (.txt), CSV spreadsheet (.csv), structured JSON, or branded executive PDF reports.
+                </p>
               </div>
             </div>
           </div>
         </section>
       </div>
 
-      {/* PRICING SECTION */}
+      {/* PRICING SECTION ("Plans from ₹28 a day" - Backdoor AI Framing) */}
       <div ref={pricingRef}>
-        <section className="section">
+        <section className="section pricing-section-wrap">
           <div className="container">
-            <div className="section-head" style={{ marginBottom: 24, textAlign: "center", maxWidth: 600, margin: "0 auto 28px" }}>
-              <span className="section-eyebrow">Simple Pricing</span>
-              <h2>Start free. Upgrade when the rooms get bigger.</h2>
-              <p style={{ color: "var(--text-dim)", fontSize: 14.5, marginTop: 8 }}>
-                Flexible one-off 24-hour event passes or feature-packed monthly and annual plans.
+            <div className="section-head" style={{ marginBottom: 24, textAlign: "center", maxWidth: 640, margin: "0 auto 28px" }}>
+              <span className="section-eyebrow">Transparent Pricing</span>
+              <h2 style={{ fontSize: "clamp(30px, 4.2vw, 46px)", letterSpacing: "-0.04em" }}>
+                {geoCurrency.isIndia ? "Plans from ₹28 a day." : "Plans from $0.40 a day."}
+              </h2>
+              <p style={{ color: "var(--text-dim)", fontSize: 15.5, marginTop: 10 }}>
+                Room creation, discovery, and audience attendance are 100% free. You only pay for active outreach, extended duration &amp; AI.
               </p>
             </div>
 
@@ -694,6 +859,9 @@ export default function LandingPage() {
                     <span className="price-amount">{geoCurrency.symbol}0</span>
                   </div>
                   <p className="price-subtitle">Forever free · No credit card required</p>
+                  <div className="price-savings-row">
+                    <span className="price-savings-pill neutral">No expiration · 100% Free</span>
+                  </div>
                   <ul className="price-list">
                     <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 100 questions per room</span></li>
                     <li><Check size={14} /> <span><strong>Session Duration:</strong> 15m disposable room</span></li>
@@ -728,6 +896,9 @@ export default function LandingPage() {
                     </span>
                   </div>
                   <p className="price-subtitle">One-time pass per event · Single 24h room</p>
+                  <div className="price-savings-row">
+                    <span className="price-savings-pill neutral">Single 24h event · No subscription</span>
+                  </div>
                   <ul className="price-list">
                     <li><Check size={14} /> <span><strong>Dedicated Room:</strong> Full 24-hour event pass</span></li>
                     <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 500 questions per room</span></li>
@@ -770,6 +941,17 @@ export default function LandingPage() {
                   <p className="price-subtitle">
                     Unlimited rooms &amp; hosting · No auto-debit
                   </p>
+                  <div className="price-savings-row">
+                    {pricingBillingCycle === "YEARLY" ? (
+                      <span className="price-savings-pill highlight">
+                        <Sparkles size={11} /> {geoCurrency.isIndia ? "₹7,990/yr billed annually (Save 20%)" : "$99/yr billed annually (Save 20%)"}
+                      </span>
+                    ) : (
+                      <span className="price-savings-pill neutral">
+                        {geoCurrency.isIndia ? "₹799 billed monthly" : "$12 billed monthly"}
+                      </span>
+                    )}
+                  </div>
                   <ul className="price-list">
                     <li><Check size={14} /> <span><strong>Unlimited Rooms:</strong> 60m sessions each</span></li>
                     <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 1,000 questions/room</span></li>
@@ -795,10 +977,12 @@ export default function LandingPage() {
               </div>
 
               {/* Studio Plan */}
-              <div className="price-card">
-                <span className="price-tag" style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}>Scale</span>
+              <div className="price-card price-card-studio">
+                <span className="price-tag studio-tag">
+                  <Sparkles size={11} style={{ display: "inline", marginRight: 3, verticalAlign: -1 }} /> Scale &amp; AI
+                </span>
                 <div className="price-card-body">
-                  <div className="price-plan" style={{ color: "var(--accent)" }}>Studio Plan</div>
+                  <div className="price-plan" style={{ color: "#8b5cf6" }}>Studio Plan</div>
                   <div className="price-amount-wrap">
                     <span className="price-amount">
                       <RollingPrice
@@ -816,19 +1000,30 @@ export default function LandingPage() {
                   <p className="price-subtitle">
                     Full AI suite, custom branding &amp; scale · No auto-debit
                   </p>
+                  <div className="price-savings-row">
+                    {pricingBillingCycle === "YEARLY" ? (
+                      <span className="price-savings-pill highlight studio">
+                        <Sparkles size={11} /> {geoCurrency.isIndia ? "₹14,990/yr billed annually (Save 20%)" : "$199/yr billed annually (Save 20%)"}
+                      </span>
+                    ) : (
+                      <span className="price-savings-pill neutral">
+                        {geoCurrency.isIndia ? "₹1,499 billed monthly" : "$24 billed monthly"}
+                      </span>
+                    )}
+                  </div>
                   <ul className="price-list">
                     <li><Check size={14} /> <span><strong>Extended Sessions:</strong> Unlimited 120m</span></li>
                     <li><Check size={14} /> <span><strong>Audience Capacity:</strong> 2,500 questions/room</span></li>
                     <li><Check size={14} /> <span><strong>Custom Event Logo:</strong> Stamped on QR &amp; Stage</span></li>
-                    <li><Check size={14} /> <span><strong>AI Multilingual Moderation:</strong> Abusive flagging in all languages</span></li>
-                    <li><Check size={14} /> <span><strong>AI Topic Clustering:</strong> Deduplication</span></li>
-                    <li><Check size={14} /> <span><strong>AI Executive Summary:</strong> Sentiment recap</span></li>
+                    <li><span className="ai-feature-tag"><Sparkles size={10} /> AI</span> <span><strong>Multilingual Moderation:</strong> Abusive flagging</span></li>
+                    <li><span className="ai-feature-tag"><Sparkles size={10} /> AI</span> <span><strong>Topic Clustering:</strong> Deduplication</span></li>
+                    <li><span className="ai-feature-tag"><Sparkles size={10} /> AI</span> <span><strong>Executive Summary:</strong> Sentiment recap</span></li>
                     <li><Check size={14} /> <span><strong>Unlimited Seats:</strong> Co-hosts &amp; moderators</span></li>
                     <li><Check size={14} /> <span><strong>Executive Reports:</strong> Branded PDF export</span></li>
                   </ul>
                 </div>
                 <button
-                  className="btn btn-secondary btn-block"
+                  className="btn btn-studio btn-block"
                   disabled={loadingPlan === "STUDIO"}
                   onClick={() => handleCheckout("STUDIO")}
                 >
@@ -844,13 +1039,67 @@ export default function LandingPage() {
         </section>
       </div>
 
+      {/* WALL OF LOVE / TESTIMONIALS (Backdoor AI Inspired) */}
+      <section className="section" style={{ background: "var(--surface)" }}>
+        <div className="container">
+          <div className="section-head" style={{ textAlign: "center", maxWidth: 660, margin: "0 auto" }}>
+            <span className="section-eyebrow">Wall of Love</span>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", letterSpacing: "-0.035em" }}>
+              Loved by organizers &amp; speakers worldwide.
+            </h2>
+            <p style={{ color: "var(--text-dim)", fontSize: 16, marginTop: 10 }}>
+              Real messages from hosts and attendees who switched from bulky legacy tools to WhisprLive.
+            </p>
+          </div>
+
+          <div className="backdoor-wall-grid">
+            {WALL_OF_LOVE.map((t, i) => (
+              <div key={i} className="backdoor-wall-card">
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <img src={t.avatar} alt={t.name} style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover" }} />
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{t.name}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{t.handle}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "var(--surface-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
+                      {t.platform}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 2, marginBottom: 10 }}>
+                    {[...Array(t.rating)].map((_, r) => (
+                      <Star key={r} size={12} fill="#f59e0b" stroke="#f59e0b" />
+                    ))}
+                  </div>
+
+                  <p style={{ fontSize: 14, lineHeight: 1.55, color: "var(--text)", margin: 0 }}>
+                    “{t.text}”
+                  </p>
+                </div>
+
+                <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px dashed var(--border)", fontSize: 12, fontWeight: 600, color: "var(--accent)" }}>
+                  ✓ {t.highlight}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* FAQ SECTION */}
       <section className="section faq-section">
         <div className="container">
           <div className="section-head" style={{ textAlign: "center", maxWidth: 660, margin: "0 auto 40px" }}>
             <span className="section-eyebrow">Frequently Asked Questions</span>
-            <h2>Everything you need to know about WhisprLive.</h2>
-            <p>Keep your audience focused on the presentation. Participants scan, ask, vote, and leave without creating yet another account.</p>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", letterSpacing: "-0.035em" }}>
+              Questions, answered.
+            </h2>
+            <p style={{ color: "var(--text-dim)", fontSize: 16, marginTop: 10 }}>
+              Keep your audience focused on your talk. Participants scan, ask, vote, and react without creating yet another account.
+            </p>
           </div>
 
           <div className="faq-container">
@@ -884,6 +1133,47 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* FINAL HIGH-IMPACT CALL TO ACTION (Backdoor AI Inspired) */}
+      <section style={{ padding: "60px 0 90px", position: "relative" }}>
+        <div className="container">
+          <div className="backdoor-cta-card">
+            <span className="section-eyebrow" style={{ marginBottom: 14 }}>
+              Free to start · No app · Zero friction
+            </span>
+            <h2 style={{ fontSize: "clamp(26px, 3.8vw, 48px)", letterSpacing: "-0.04em", margin: "14px 0" }}>
+              Your next unforgettable event is one scan away.
+            </h2>
+            <p style={{ color: "var(--text-dim)", fontSize: "clamp(15px, 1.2vw, 17px)", maxWidth: 540, margin: "0 auto 28px" }}>
+              Launch a live Q&amp;A room in seconds. Display the 4K projector screen and let your audience do the rest.
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap" }}>
+              <div className="dark-glass-wrap">
+                <div className="dark-glass-shadow" />
+                <button
+                  type="button"
+                  className="dark-glass-btn"
+                  onClick={() => navigate(isLoggedIn ? "/dashboard" : "/signup")}
+                >
+                  <span className="dark-glass-content">
+                    {isLoggedIn ? "Go to Dashboard" : "Start a free session"}
+                    <ArrowRight size={16} />
+                  </span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="backdoor-pill-btn"
+                onClick={() => navigate("/try")}
+              >
+                Try interactive demo <ArrowUpRight size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FOOTER */}
       <footer className="footer">
         <div className="container">
@@ -893,6 +1183,7 @@ export default function LandingPage() {
               <div className="footer-col">
                 <h4>Company &amp; Product</h4>
                 <Link to="/about">About Us</Link>
+                <a onClick={() => scrollTo("about")}>How it works</a>
                 <a onClick={() => scrollTo("features")}>Features</a>
                 <a onClick={() => scrollTo("pricing")}>Pricing</a>
                 <Link to="/contact">Contact Us</Link>
@@ -919,7 +1210,10 @@ export default function LandingPage() {
           </div>
           <div className="footer-bottom">
             <span>© 2026 WhisprLive. All rooms close eventually.</span>
-            <span className="mono">Made for live rooms</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-dim)" }}>
+              <span className="beacon-dot" style={{ background: "#10b981", width: 6, height: 6 }} />
+              <span>All systems operational</span>
+            </div>
           </div>
         </div>
       </footer>

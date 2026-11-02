@@ -151,15 +151,15 @@ export default function HeroDemoShowcase() {
     const step = DEMO_STEPS[currentStepIndex].id;
 
     if (step === "dashboard") {
-      setCursorPos({ x: 78, y: 44, visible: true, active: false });
-      const t1 = setTimeout(() => setCursorPos({ x: 78, y: 44, visible: true, active: true }), 1300);
+      setCursorPos({ x: 80, y: 36, visible: true, active: false });
+      const t1 = setTimeout(() => setCursorPos({ x: 80, y: 36, visible: true, active: true }), 1300);
       const t2 = setTimeout(() => setCursorPos({ x: 50, y: 50, visible: false, active: false }), 2400);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     }
 
     if (step === "audience-join") {
-      setCursorPos({ x: 50, y: 82, visible: true, active: false });
-      const t1 = setTimeout(() => setCursorPos({ x: 50, y: 82, visible: true, active: true }), 1500);
+      setCursorPos({ x: 50, y: 92, visible: true, active: false });
+      const t1 = setTimeout(() => setCursorPos({ x: 50, y: 92, visible: true, active: true }), 1500);
       const t2 = setTimeout(() => setCursorPos({ x: 50, y: 50, visible: false, active: false }), 2600);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     }
@@ -182,12 +182,12 @@ export default function HeroDemoShowcase() {
       }, 30);
 
       const t1 = setTimeout(() => {
-        setCursorPos({ x: 86, y: 52, visible: true, active: true });
+        setCursorPos({ x: 86, y: 44, visible: true, active: true });
         setSentQuestion(true);
       }, 1900);
 
       const t2 = setTimeout(() => {
-        setCursorPos({ x: 86, y: 78, visible: true, active: true });
+        setCursorPos({ x: 86, y: 72, visible: true, active: true });
         setIsUpvoted(true);
         setUpvoteCount(85);
       }, 3400);
@@ -204,9 +204,9 @@ export default function HeroDemoShowcase() {
 
     if (step === "live-poll") {
       setSelectedPollOpt(null);
-      setCursorPos({ x: 50, y: 46, visible: true, active: false });
+      setCursorPos({ x: 50, y: 33, visible: true, active: false });
       const t1 = setTimeout(() => {
-        setCursorPos({ x: 50, y: 46, visible: true, active: true });
+        setCursorPos({ x: 50, y: 33, visible: true, active: true });
         setSelectedPollOpt("csv");
       }, 1300);
       const t2 = setTimeout(() => setCursorPos({ x: 50, y: 50, visible: false, active: false }), 2600);
@@ -215,9 +215,9 @@ export default function HeroDemoShowcase() {
 
     if (step === "spotlight") {
       setIsPinned(false);
-      setCursorPos({ x: 88, y: 64, visible: true, active: false });
+      setCursorPos({ x: 88, y: 82, visible: true, active: false });
       const t1 = setTimeout(() => {
-        setCursorPos({ x: 88, y: 64, visible: true, active: true });
+        setCursorPos({ x: 88, y: 82, visible: true, active: true });
         setIsPinned(true);
       }, 1400);
       const t2 = setTimeout(() => setCursorPos({ x: 50, y: 50, visible: false, active: false }), 2700);
@@ -229,36 +229,6 @@ export default function HeroDemoShowcase() {
 
   return (
     <div className="demo-showcase-container">
-      {/* Top Feature Selector Underline Tabs */}
-      <div className="demo-tabs-nav">
-        {DEMO_STEPS.map((step, idx) => {
-          const Icon = step.icon;
-          const isActive = idx === currentStepIndex;
-          return (
-            <button
-              key={step.id}
-              type="button"
-              className={`demo-tab ${isActive ? "active" : ""}`}
-              onClick={() => {
-                setCurrentStepIndex(idx);
-                setStepProgress(0);
-              }}
-            >
-              <Icon size={13} className="demo-tab-icon" />
-              <span className="demo-tab-text">{step.label}</span>
-              {isActive && (
-                <span className="demo-tab-underline">
-                  <span
-                    className="demo-tab-progress"
-                    style={{ width: `${stepProgress}%` }}
-                  />
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Realistic Smartphone Shell */}
       <div className="demo-phone-wrapper">
         <div className="demo-phone-bezel">
@@ -398,6 +368,22 @@ export default function HeroDemoShowcase() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Live Question Bubble 2 (Real Live Arrival) */}
+                      <div className="bubble" style={{ padding: "7px 10px", marginTop: 6, background: "var(--surface-2)" }}>
+                        <div className="bubble-top" style={{ marginBottom: 3 }}>
+                          <div className="bubble-meta">
+                            <span className="bubble-avatar" style={{ width: 15, height: 15, fontSize: 7.5, background: "#8B5CF6", color: "#fff" }}>A</span>
+                            <span style={{ fontSize: 9.5 }}>Guest 72 · 1m ago</span>
+                          </div>
+                          <span className="vote-btn" style={{ padding: "2px 6px", fontSize: 9 }}>
+                            <ThumbsUp size={8.5} /> 38
+                          </span>
+                        </div>
+                        <div className="bubble-text" style={{ fontSize: 10.5, lineHeight: 1.35 }}>
+                          Can attendees ask questions without downloading any app?
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -407,10 +393,10 @@ export default function HeroDemoShowcase() {
                   SCENE 2: AUDIENCE JOIN VIA QR (Exact Match to PublicAskPage.jsx)
                   ------------------------------------------------------------------ */}
               {activeStep.id === "audience-join" && (
-                <div className="real-demo-screen public-screen">
+                <div className="real-demo-screen public-screen" style={{ height: "100%", padding: "14px 14px" }}>
                   <div className="public-card" style={{ padding: "16px 14px", margin: 0, height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                     <div style={{ textAlign: "center" }}>
-                      <span className="eyebrow" style={{ fontSize: 10, padding: "3px 9px", marginBottom: 8 }}>
+                      <span className="eyebrow" style={{ fontSize: 10, padding: "3px 9px", marginBottom: 6, display: "inline-flex" }}>
                         <Radio size={10} /> Live Room Active
                       </span>
                       <h2 style={{ fontSize: 16, fontWeight: 800, margin: "4px 0 2px", fontFamily: "var(--font-display)" }}>
@@ -428,40 +414,48 @@ export default function HeroDemoShowcase() {
                     {/* QR Code Graphic Frame with Real Scannable Static QR */}
                     <div
                       className="branded-scanner-card"
-                      style={{ maxWidth: 160, padding: "8px", margin: "8px auto", cursor: "pointer", transition: "transform 0.2s ease, box-shadow 0.2s ease" }}
+                      style={{ maxWidth: 170, padding: "10px", margin: "8px auto", cursor: "pointer", transition: "transform 0.2s ease, box-shadow 0.2s ease" }}
                       onClick={() => navigate("/try")}
                       title="Click to try WhisprLive"
                     >
-                      <div className="branded-scanner-viewport" style={{ width: 124, height: 124, padding: 4, background: "#FFFFFF", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                        <div className="scanner-corner corner-tl" style={{ width: 10, height: 10 }} />
-                        <div className="scanner-corner corner-tr" style={{ width: 10, height: 10 }} />
-                        <div className="scanner-corner corner-bl" style={{ width: 10, height: 10 }} />
-                        <div className="scanner-corner corner-br" style={{ width: 10, height: 10 }} />
+                      <div className="branded-scanner-viewport" style={{ width: 132, height: 132, padding: 5, background: "#FFFFFF", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                        <div className="scanner-corner corner-tl" style={{ width: 12, height: 12 }} />
+                        <div className="scanner-corner corner-tr" style={{ width: 12, height: 12 }} />
+                        <div className="scanner-corner corner-bl" style={{ width: 12, height: 12 }} />
+                        <div className="scanner-corner corner-br" style={{ width: 12, height: 12 }} />
                         {staticQrUrl ? (
                           <img
                             src={staticQrUrl}
                             alt="Scan to try WhisprLive"
-                            style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 4 }}
+                            style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
                           />
                         ) : (
                           <div className="qr-matrix-mock" />
                         )}
                       </div>
-                      <div className="scanner-hud-footer" style={{ marginTop: 4 }}>
+                      <div className="scanner-hud-footer" style={{ marginTop: 6 }}>
                         <span className="scanner-target-hint" style={{ fontSize: 9.5 }}>
-                          <QrCode size={10} /> Scan to try WhisprLive
+                          <QrCode size={10} /> Point phone camera to join
                         </span>
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-block btn-sm"
-                      style={{ padding: "9px", fontSize: 12, borderRadius: 999 }}
-                      onClick={() => navigate("/try")}
-                    >
-                      Join Room Instantly <ChevronRight size={13} />
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "center", gap: 10, fontSize: 9.5, color: "var(--text-dim)" }}>
+                        <span>✓ No app download</span>
+                        <span>✓ Anonymous</span>
+                        <span>✓ Free</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-block btn-sm"
+                        style={{ padding: "10px", fontSize: 12.5, borderRadius: 999 }}
+                        onClick={() => navigate("/try")}
+                      >
+                        Join Room Instantly <ChevronRight size={13} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -517,18 +511,35 @@ export default function HeroDemoShowcase() {
                       </div>
                     )}
 
-                    <div className="bubble" style={{ padding: "8px 10px", marginTop: "auto" }}>
-                      <div className="bubble-top" style={{ marginBottom: 3 }}>
-                        <div className="bubble-meta">
-                          <span className="bubble-avatar" style={{ width: 16, height: 16, fontSize: 8.5 }}>G</span>
-                          <span style={{ fontSize: 10 }}>You (Guest 88) · Just now</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: "auto" }}>
+                      <div className="bubble" style={{ padding: "8px 10px" }}>
+                        <div className="bubble-top" style={{ marginBottom: 3 }}>
+                          <div className="bubble-meta">
+                            <span className="bubble-avatar" style={{ width: 16, height: 16, fontSize: 8.5 }}>G</span>
+                            <span style={{ fontSize: 10 }}>You (Guest 88) · Just now</span>
+                          </div>
+                          <span className={`vote-btn ${isUpvoted ? "voted" : ""}`} style={{ padding: "2px 6px", fontSize: 9.5 }}>
+                            <ThumbsUp size={9.5} /> {upvoteCount}
+                          </span>
                         </div>
-                        <span className={`vote-btn ${isUpvoted ? "voted" : ""}`} style={{ padding: "2px 6px", fontSize: 9.5 }}>
-                          <ThumbsUp size={9.5} /> {upvoteCount}
-                        </span>
+                        <div className="bubble-text" style={{ fontSize: 11, lineHeight: 1.35 }}>
+                          {typedQuestion || "How does WhisprLive scale with 1,000+ people?"}
+                        </div>
                       </div>
-                      <div className="bubble-text" style={{ fontSize: 11, lineHeight: 1.35 }}>
-                        {typedQuestion || "How does WhisprLive scale with 1,000+ people?"}
+
+                      <div className="bubble" style={{ padding: "7px 10px", opacity: 0.88, background: "var(--surface-2)" }}>
+                        <div className="bubble-top" style={{ marginBottom: 2 }}>
+                          <div className="bubble-meta">
+                            <span className="bubble-avatar" style={{ width: 15, height: 15, fontSize: 7.5, background: "#059669", color: "#fff" }}>T</span>
+                            <span style={{ fontSize: 9.5 }}>Guest 42 · 3m ago</span>
+                          </div>
+                          <span className="vote-btn" style={{ padding: "2px 5px", fontSize: 9 }}>
+                            <ThumbsUp size={8.5} /> 54
+                          </span>
+                        </div>
+                        <div className="bubble-text" style={{ fontSize: 10.5, lineHeight: 1.3 }}>
+                          Can we export all upvoted questions to CSV after?
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -591,6 +602,16 @@ export default function HeroDemoShowcase() {
                           <div style={{ height: "100%", width: "8%", background: "var(--text-faint)", borderRadius: 999 }} />
                         </div>
                       </div>
+
+                      <div className="poll-opt-card" style={{ padding: "8px 10px", border: "1px solid var(--border)", background: "var(--surface-2)", borderRadius: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, fontWeight: 600, marginBottom: 4 }}>
+                          <span style={{ color: "var(--text)" }}>Live Audience Spotlight</span>
+                          <span style={{ color: "var(--text-dim)" }}>18% (26)</span>
+                        </div>
+                        <div style={{ height: 6, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: "18%", background: "linear-gradient(90deg, #10B981 0%, #34D399 100%)", borderRadius: 999 }} />
+                        </div>
+                      </div>
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--success)", fontWeight: 600, marginTop: "auto", paddingTop: 4 }}>
@@ -604,7 +625,7 @@ export default function HeroDemoShowcase() {
                   SCENE 5: HOST QUESTION SPOTLIGHT & WORD CLOUD
                   ------------------------------------------------------------------ */}
               {activeStep.id === "spotlight" && (
-                <div className="real-demo-screen">
+                <div className="real-demo-screen" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
                   <div className="real-dash-top" style={{ paddingBottom: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <span className="live-dot" />
@@ -615,9 +636,9 @@ export default function HeroDemoShowcase() {
                     </span>
                   </div>
 
-                  <div className="real-dash-content">
+                  <div className="real-dash-content" style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-between" }}>
                     {/* Word Cloud Visualizer Box */}
-                    <div className="mini-cloud-stage" style={{ height: 115, marginBottom: 8 }}>
+                    <div className="mini-cloud-stage" style={{ height: 160, marginBottom: 8 }}>
                       <span className="cloud-tag tag-giant tag-primary">Real-time</span>
                       <span className="cloud-tag tag-huge tag-cyan">Fast</span>
                       <span className="cloud-tag tag-large tag-indigo">Anonymous</span>
@@ -625,6 +646,8 @@ export default function HeroDemoShowcase() {
                       <span className="cloud-tag tag-small tag-emerald">Interactive</span>
                       <span className="cloud-tag tag-large tag-rose">Engaging</span>
                       <span className="cloud-tag tag-medium tag-amber">No App</span>
+                      <span className="cloud-tag tag-small tag-cyan">Live Q&amp;A</span>
+                      <span className="cloud-tag tag-medium tag-emerald">Zero Friction</span>
                     </div>
 
                     {/* Spotlight Question Card */}
@@ -635,7 +658,8 @@ export default function HeroDemoShowcase() {
                         borderLeft: isPinned ? "4px solid #F59E0B" : "1px solid var(--border)",
                         background: isPinned ? "rgba(245, 158, 11, 0.08)" : "var(--surface)",
                         boxShadow: isPinned ? "0 4px 16px rgba(245, 158, 11, 0.18)" : undefined,
-                        transition: "all 0.3s ease"
+                        transition: "all 0.3s ease",
+                        marginTop: "auto"
                       }}
                     >
                       <div className="bubble-top" style={{ marginBottom: 3 }}>
@@ -651,6 +675,12 @@ export default function HeroDemoShowcase() {
                       <div className="bubble-text" style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.35 }}>
                         Can speakers highlight questions on stage in real time?
                       </div>
+                    </div>
+
+                    {/* Host Projector Action Strip */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, paddingTop: 6, borderTop: "1px solid var(--border)", fontSize: 9.5, color: "var(--text-dim)" }}>
+                      <span>Status: <strong style={{ color: "var(--success)" }}>Active 🟢</strong></span>
+                      <span style={{ color: "var(--accent)", fontWeight: 600 }}>Next Question →</span>
                     </div>
                   </div>
                 </div>
@@ -677,6 +707,35 @@ export default function HeroDemoShowcase() {
             <div className="home-indicator" />
           </div>
         </div>
+      </div>
+
+      {/* Sleek Minimalist Stage Indicator Pills (Apple / Backdoor Style below Phone) */}
+      <div className="demo-stage-pills" role="tablist" aria-label="Feature preview stages">
+        {DEMO_STEPS.map((step, idx) => {
+          const isActive = idx === currentStepIndex;
+          return (
+            <button
+              key={step.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={`demo-stage-pill ${isActive ? "active" : ""}`}
+              onClick={() => {
+                setCurrentStepIndex(idx);
+                setStepProgress(0);
+              }}
+              title={step.label}
+              aria-label={`Jump to ${step.label} demo`}
+            >
+              {isActive && (
+                <span
+                  className="demo-pill-fill"
+                  style={{ width: `${stepProgress}%` }}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

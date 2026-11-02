@@ -391,13 +391,13 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
                   <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Custom Branding:</strong> Event logo &amp; colors</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
-                  <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>AI Multilingual Moderation:</strong> Abusive flagging in all languages</span>
+                  <span className="ai-feature-tag"><Sparkles size={10} /> AI</span> <span><strong style={{ color: "var(--text)" }}>Multilingual Moderation:</strong> Abusive flagging</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
-                  <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>AI Clustering:</strong> Question deduplication</span>
+                  <span className="ai-feature-tag"><Sparkles size={10} /> AI</span> <span><strong style={{ color: "var(--text)" }}>Topic Clustering:</strong> Deduplication</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
-                  <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>AI Executive Recap:</strong> Sentiment recap</span>
+                  <span className="ai-feature-tag"><Sparkles size={10} /> AI</span> <span><strong style={{ color: "var(--text)" }}>Executive Recap:</strong> Sentiment recap</span>
                 </li>
                 <li style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
                   <Check size={14} style={{ color: "var(--success)", flexShrink: 0, marginTop: 2 }} /> <span><strong style={{ color: "var(--text)" }}>Unlimited Seats:</strong> Co-hosts &amp; moderators</span>
@@ -410,7 +410,7 @@ export default function PricingModal({ isOpen, onClose, currentUser, onPaymentSu
 
             <button
               type="button"
-              className="btn btn-secondary btn-block"
+              className="btn btn-studio btn-block"
               style={{ marginTop: "auto", width: "100%", height: 44, fontWeight: 700 }}
               disabled={loadingPlan === "STUDIO" || currentUser?.plan === "STUDIO"}
               onClick={() => handleCheckout("STUDIO")}
