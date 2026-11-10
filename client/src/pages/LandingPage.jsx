@@ -15,6 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useGeoCurrency } from "../utils/geoCurrency";
 import RollingPrice from "../components/RollingPrice";
+import BrandOutro from "../components/BrandOutro";
 
 const FAQ_ITEMS = [
   {
@@ -1173,6 +1174,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* BRAND OUTRO SIGNATURE (Cinematic Hanging Mascot & 3D Typography) */}
+      <BrandOutro />
 
       {/* FOOTER */}
       <footer className="footer">
