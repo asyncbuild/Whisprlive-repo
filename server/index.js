@@ -28,6 +28,7 @@ import { Resend } from "resend"
 import { fastCheckLocal, checkToxicity, clusterQuestions, generateSessionSummary } from "./services/aiService.js";
 import { validateImageBuffer, checkImageSafety } from "./utils/imageValidator.js";
 import { generateSessionPdfReport } from "./utils/pdfReport.js";
+import { sendWelcomeEmail, sendPlanPurchaseEmail, sendSignupOtpEmail } from "./services/emailService.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
@@ -169,114 +170,11 @@ app.post("/api/auth/send-signup-otp", authLimiter, async (req, res) => {
       attempts: 0
     });
 
-    if (resend) {
-      try {
-        await resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL || "WhisprLive <onboarding@resend.dev>",
-          to: cleanEmail,
-          subject: `${otp} is your WhisprLive verification code`,
-          html: `
-            <div style="background-color: #F1F5F9; padding: 48px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1E293B;">
-              <div style="max-width: 520px; margin: 0 auto; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.08);">
-                
-                <!-- Top Colorful Brand Accent Line -->
-                <div style="height: 5px; background: linear-gradient(90deg, #2563EB 0%, #38BDF8 50%, #FF5A36 100%);"></div>
-
-                <!-- Header Section -->
-                <div style="padding: 36px 36px 20px; text-align: center;">
-                  <div style="display: inline-block; margin-bottom: 8px;">
-                    <span style="font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: #0F172A;">
-                      Whispr<span style="color: #2563EB;">Live</span>
-                    </span>
-                  </div>
-                  <p style="margin: 0; font-size: 13px; color: #64748B; font-weight: 500; letter-spacing: 0.01em;">
-                    Frictionless Live Audience Engagement
-                  </p>
-                </div>
-
-                <!-- Divider -->
-                <div style="height: 1px; background-color: #F1F5F9; margin: 0 36px;"></div>
-
-                <!-- Body Content -->
-                <div style="padding: 32px 36px;">
-                  <h1 style="margin: 0 0 10px 0; font-size: 21px; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; text-align: center;">
-                    Verify Your Email Address
-                  </h1>
-                  <p style="margin: 0 0 28px 0; font-size: 14.5px; color: #475569; line-height: 1.6; text-align: center;">
-                    Hi <strong style="color: #0F172A;">${cleanUsername}</strong>, welcome to WhisprLive! Enter the 6-digit verification code below to activate your account and start hosting live sessions:
-                  </p>
-
-                  <!-- OTP Code Card -->
-                  <div style="background: linear-gradient(145deg, #F8FAFC 0%, #EFF6FF 100%); border: 1px solid #DBEAFE; border-radius: 16px; padding: 28px 20px; text-align: center; margin: 0 0 28px 0; box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.8);">
-                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #2563EB; margin-bottom: 12px;">
-                      One-Time Verification Code
-                    </div>
-                    
-                    <div style="display: inline-block; font-family: 'JetBrains Mono', SFMono-Regular, Consolas, Monaco, monospace; font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #1E3A8A; background: #FFFFFF; padding: 12px 24px; border-radius: 12px; border: 1px solid #BFDBFE; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08); margin-left: 10px;">
-                      ${otp}
-                    </div>
-
-                    <div style="margin-top: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: #64748B; font-weight: 500;">
-                      <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background-color: #10B981; margin-right: 6px;"></span>
-                      Code expires in <strong style="color: #334155; margin-left: 4px;">10 minutes</strong>
-                    </div>
-                  </div>
-
-                  <!-- Feature Highlights Box -->
-                  <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
-                    <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
-                      What you can do with WhisprLive:
-                    </div>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #475569;">
-                      <tr>
-                        <td style="padding: 4px 0; vertical-align: top; width: 24px;">🚀</td>
-                        <td style="padding: 4px 0;"><strong>Create Live Rooms</strong> with instant branded QR codes</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 4px 0; vertical-align: top; width: 24px;">💬</td>
-                        <td style="padding: 4px 0;"><strong>100% Anonymous Q&A</strong> with live crowd upvoting</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 4px 0; vertical-align: top; width: 24px;">📊</td>
-                        <td style="padding: 4px 0;"><strong>Interactive Polls</strong> and real-time word clouds</td>
-                      </tr>
-                    </table>
-                  </div>
-
-                  <!-- Security Callout -->
-                  <div style="border-left: 3px solid #F59E0B; background-color: #FFFBEB; border-radius: 0 8px 8px 0; padding: 12px 16px; margin-bottom: 24px;">
-                    <p style="margin: 0; font-size: 12.5px; color: #92400E; line-height: 1.5;">
-                      <strong>Security Tip:</strong> Never share this code with anyone. WhisprLive will never ask for your verification code.
-                    </p>
-                  </div>
-
-                  <p style="margin: 0; font-size: 12px; color: #94A3B8; line-height: 1.5; text-align: center;">
-                    If you didn't attempt to create a WhisprLive account, you can safely disregard this email.
-                  </p>
-                </div>
-
-                <!-- Footer Section -->
-                <div style="padding: 24px 36px; background-color: #F8FAFC; border-top: 1px solid #E2E8F0; text-align: center;">
-                  <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #475569;">
-                    WhisprLive · The Frictionless Live Audience Engagement Platform
-                  </p>
-                  <p style="margin: 0; font-size: 11px; color: #94A3B8;">
-                    © ${new Date().getFullYear()} WhisprLive. All rights reserved.
-                  </p>
-                </div>
-
-              </div>
-            </div>
-          `
-        });
-      } catch (emailErr) {
-        console.error("Resend send error:", emailErr);
-        return res.status(500).json({ message: "Failed to send verification email. Please check your email address or try again." });
-      }
-    } else {
-      console.log(`\n======================================================`);
-      console.log(`[DEV MODE AUTH OTP] Email: ${cleanEmail} | OTP Code: ${otp}`);
-      console.log(`======================================================\n`);
+    try {
+      await sendSignupOtpEmail({ email: cleanEmail, username: cleanUsername, otp });
+    } catch (emailErr) {
+      console.error("sendSignupOtpEmail error:", emailErr);
+      return res.status(500).json({ message: "Failed to send verification email. Please check your email address or try again." });
     }
 
     res.json({ message: "Verification code sent to your email", email: cleanEmail });
@@ -351,6 +249,11 @@ app.post("/api/auth/verify-signup-otp", authLimiter, async (req, res) => {
           createdAt: true
         }
       });
+
+      // Send Welcome Email asynchronously (non-blocking)
+      sendWelcomeEmail({ email: user.email, username: user.username }).catch((err) =>
+        console.error("Failed to send welcome email:", err)
+      );
     }
 
     signupOtpStore.delete(cleanEmail);
@@ -403,8 +306,14 @@ app.post("/signup", authLimiter, async (req, res) => {
         username: true,
         createdAt: true
       }
-    })
-    res.status(201).json({ message: "User created successfully", user: newUser, isNewUser: true })
+    });
+
+    // Send Welcome Email asynchronously
+    sendWelcomeEmail({ email: newUser.email, username: newUser.username }).catch((err) =>
+      console.error("Failed to send welcome email on direct signup:", err)
+    );
+
+    res.status(201).json({ message: "User created successfully", user: newUser, isNewUser: true });
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: "Internal Server Error" })
@@ -529,7 +438,12 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
           plan: "SOLO"
         },
         select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true },
-      })
+      });
+
+      // Send Welcome Email asynchronously
+      sendWelcomeEmail({ email: user.email, username: user.username }).catch((err) =>
+        console.error("Failed to send welcome email on Google signup:", err)
+      );
     } else {
       user = await reconcileUserPlan(user);
     }
@@ -682,6 +596,19 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
       };
     }
 
+    // Fetch payment details from Razorpay to get confirmed amount & currency
+    let paidAmount = 0;
+    let paymentCurrency = "INR";
+    try {
+      const paymentInfo = await razorpay.payments.fetch(razorpay_payment_id);
+      if (paymentInfo) {
+        paidAmount = paymentInfo.amount || 0;
+        paymentCurrency = paymentInfo.currency || "INR";
+      }
+    } catch (fetchErr) {
+      console.warn("Could not fetch payment details from Razorpay:", fetchErr.message);
+    }
+
     // Atomically record the payment and update user subscription/passes
     const [paymentRecord, updatedUser] = await prisma.$transaction([
       prisma.payment.create({
@@ -689,7 +616,8 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
           userId: req.user.id,
           razorpayOrderId: razorpay_order_id,
           razorpayPaymentId: razorpay_payment_id,
-          plan: targetPlan
+          plan: targetPlan,
+          amount: paidAmount
         }
       }),
       prisma.user.update({
@@ -698,6 +626,20 @@ app.post("/api/payments/razorpay/verify", verifyToken, async (req, res) => {
         select: { id: true, email: true, username: true, plan: true, planExpiresAt: true, roomPasses: true }
       })
     ]);
+
+    // Send plan purchase confirmation email asynchronously
+    sendPlanPurchaseEmail({
+      email: updatedUser.email,
+      username: updatedUser.username,
+      planType: targetPlan,
+      billingCycle,
+      amount: paidAmount,
+      currency: paymentCurrency,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      planExpiresAt: updatedUser.planExpiresAt,
+      roomPasses: updatedUser.roomPasses
+    }).catch((emailErr) => console.error("Failed to send purchase confirmation email:", emailErr));
 
     res.json({
       message: targetPlan === "ROOM_PASS" 
